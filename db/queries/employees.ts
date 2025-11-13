@@ -44,7 +44,7 @@ export async function getAllEmployees() {
 	return await db.query.employees.findMany();
 }
 
-export async function getEmployeeById(id: string) {
+export async function getEmployeeByClerkId(id: string) {
 	return await db.query.employees.findFirst({
 		where: eq(employees.id, id),
 	});
