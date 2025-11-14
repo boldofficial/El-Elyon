@@ -1,12 +1,11 @@
 import {db} from '../index';
 import {employees, roles, shifts, residentLogs, auditLogs, ispAccessLogs, ispAcknowledgments, complianceAlerts, residents, guardians, kiosks, users, hrFiles, hrFileLogs} from '../schema';
 import {eq, and, or, isNull} from 'drizzle-orm';
-import {logAudit} from './audit';
 import {generateToken, generatePassword} from '@/lib/utils';
 import {getClerkUser, createClerkUser, updateClerkMetadata, deleteClerkUser} from '@/lib/clerk';
 import {sendInviteEmail, sendWelcomeEmailWithCredentials} from '@/lib/emails';
 import {auth} from '@clerk/nextjs/server';
-import {getUserRoleDoc, requireAdmin} from '@/lib/db-helpers';
+import {getUserRoleDoc, requireAdminAccess, logAudit} from '@/lib/db-helpers'; // Import from db-helpers
 
 // Mutation: Accept invite by token (public for invite acceptance)
 export async function acceptInvite(token: string) {
@@ -116,7 +115,7 @@ export async function createEmployee(args: {
 	locations: string[];
 	assignedDeviceId?: string;
 }, adminClerkUserId: string) {
-	await requireAdmin(adminClerkUserId);
+	await requireAdminAccess(adminClerkUserId);
 
 	// Check if employee with this email already exists
 	const existingEmployee = await db.query.employees.findFirst({
@@ -226,7 +225,7 @@ export async function updateEmployee(args: {
 	locations: string[];
 	assignedDeviceId?: string;
 }, clerkUserId: string) {
-	await requireAdmin(clerkUserId);
+	await requireAdminAccess(clerkUserId);
 
 	const employee = await db.query.employees.findFirst({
 		where: eq(employees.id, args.employeeId),
@@ -275,9 +274,63 @@ export async function updateEmployee(args: {
 	return {success: true};
 }
 
+// Mutation: Generate invite link for an employee (admin only)
+export async function generateInviteLink(employeeId: string, adminClerkUserId: string) {
+	await requireAdminAccess(adminClerkUserId);
+
+	const employee = await db.query.employees.findFirst({
+		where: eq(employees.id, employeeId),
+	});
+	if (!employee) throw new Error('Employee not found');
+
+	// Generate a new token and expiry (24h from now)
+	const token = generateToken();
+	const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+
+	await db.update(employees).set({
+		inviteToken: token,
+		inviteExpiresAt: expiresAt,
+		inviteResent: new Date(),
+		hasAcceptedInvite: false,
+		inviteBounced: false,
+	}).where(eq(employees.id, employeeId));
+
+	await logAudit({
+		clerkUserId: adminClerkUserId,
+		event: 'generate_invite_link',
+		details: `employeeId=${employeeId}`,
+		deviceId: 'system',
+		location: '',
+	});
+
+	// Send invite email
+	try {
+		await sendInviteEmail({
+			employeeId: employee.id,
+			email: employee.email || employee.workEmail || '',
+			inviteToken: token,
+		});
+		console.log(
+			'📧 Sent invite email for employee:',
+			employee.id,
+			'with token:',
+			token
+		);
+	} catch (error) {
+		console.error('❌ Failed to send invite email:', error);
+		// Don't throw here, still return the token so admin can manually share
+	}
+
+	// Build invite URL - use process.env.NEXT_PUBLIC_SITE_URL in production
+	const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001';
+	const inviteUrl = `${baseUrl}/?invite=${token}`;
+
+	return {token, expiresAt, url: inviteUrl};
+}
+
 // Mutation: Delete employee with cascade (admin only)
 export async function deleteEmployee(employeeId: string, clerkUserId: string) {
-	await requireAdmin(clerkUserId);
+	await requireAdminAccess(clerkUserId);
 
 	const employee = await db.query.employees.findFirst({
 		where: eq(employees.id, employeeId),
