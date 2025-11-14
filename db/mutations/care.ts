@@ -74,6 +74,36 @@ export async function generateSelfieUploadUrl() {
 	};
 }
 
+// Mutation: Acknowledge ISP
+export async function acknowledgeIsp(clerkUserId: string, residentId: string, ispId: string) {
+	await requireCareAccess(clerkUserId);
+
+	const ispRecord = await db.query.isp.findFirst({
+		where: and(eq(isp.id, ispId), eq(isp.published, true)),
+	});
+
+	if (!ispRecord) {
+		throw new Error('ISP not found or not published');
+	}
+
+	await db.insert(ispAcknowledgments).values({
+		residentId: residentId,
+		clerkUserId,
+		ispId: ispId,
+		acknowledgedAt: new Date(),
+		acknowledgedIsp: ispId, // This seems redundant, but keeping for consistency with Convex
+	});
+
+	await logAudit({
+		clerkUserId,
+		event: 'acknowledge_isp',
+		details: `residentId=${residentId},ispId=${ispId}`,
+		deviceId: 'system',
+		location: '',
+	});
+	return true;
+}
+
 // Mutation: Clock in
 export async function clockIn(clerkUserId: string, location: string, selfieStorageId?: string) {
 	const userRole = await requireCareAccess(clerkUserId);
@@ -122,4 +152,41 @@ export async function clockIn(clerkUserId: string, location: string, selfieStora
 		location: '',
 	});
 	return newShift.id;
+}
+
+// Mutation: Clock out
+export async function clockOut(clerkUserId: string, selfieStorageId?: string) {
+	await requireCareAccess(clerkUserId);
+
+	const currentShift = await db.query.shifts.findFirst({
+		where: and(
+			eq(shifts.clerkUserId, clerkUserId),
+			isNull(shifts.clockOutTime)
+		),
+		orderBy: (shifts, {desc}) => [desc(shifts.clockInTime)],
+	});
+
+	if (!currentShift) {
+		throw new Error('No active shift found');
+	}
+
+	await db.update(shifts).set({
+		clockOutTime: new Date(),
+		clockOutSelfie: selfieStorageId,
+	}).where(eq(shifts.id, currentShift.id));
+
+	const duration = Date.now() - currentShift.clockInTime.getTime();
+	await logAudit({
+		clerkUserId,
+		event: 'clock_out',
+		details: `location=${currentShift.location},selfie=${selfieStorageId ? 'yes' : 'no'}`,
+		deviceId: 'system',
+		location: '',
+	});
+
+	return {
+		shiftId: currentShift.id,
+		duration,
+		location: currentShift.location,
+	};
 }
