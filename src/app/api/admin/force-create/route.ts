@@ -3,11 +3,8 @@
 // ====================================
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
-import {
-	getEmployeeByClerkId,
-	createEmployee,
-	updateEmployee,
-} from '@/db/queries/employees';
+import {getEmployeeByClerkId} from '@/db/queries/employees';
+import {createEmployee, updateEmployee} from '@/db/mutations/employees';
 import {getRoleByClerkId, createRole, updateRole} from '@/db/queries/roles';
 import {getClerkUser} from '@/lib/clerk';
 
@@ -37,25 +34,29 @@ export async function POST() {
 
 		if (existingEmployee) {
 			console.log('📝 Updating existing employee to admin');
-			await updateEmployee(userId, {
-				role: 'admin',
-				assignedDeviceId: undefined,
-				updatedAt: new Date(),
-			});
+			await updateEmployee(
+				{
+					employeeId: existingEmployee.id,
+					name: existingEmployee.name || 'Admin User', // Provide fallback for name
+					email: existingEmployee.email || 'admin@example.com', // Provide fallback for email
+					role: 'admin',
+					locations: existingEmployee.locations || [],
+					assignedDeviceId: undefined,
+				},
+				userId
+			);
 		} else {
 			console.log('📝 Creating new employee record as admin');
-			await createEmployee({
-				name: name || email || 'Admin User',
-				workEmail: email || 'admin@example.com',
-				email: email || 'admin@example.com',
-				clerkUserId: userId,
-				role: 'admin',
-				locations: [],
-				employmentStatus: 'active',
-				assignedDeviceId: undefined,
-				createdAt: new Date(),
-				onboardedAt: new Date(),
-			});
+			await createEmployee(
+				{
+					name: name || email || 'Admin User',
+					email: email || 'admin@example.com',
+					role: 'admin',
+					locations: [],
+					assignedDeviceId: undefined,
+				},
+				userId
+			);
 		}
 
 		// Create or update role

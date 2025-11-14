@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {clockOut} from '@/db/mutations/care';
+import {cleanupOrphanedUsers} from '@/db/mutations/cleanup';
 
 export async function POST(req: NextRequest) {
 	try {
@@ -9,12 +9,10 @@ export async function POST(req: NextRequest) {
 			return new NextResponse('Unauthorized', {status: 401});
 		}
 
-		const {selfieStorageId} = await req.json();
-
-		const result = await clockOut(userId, selfieStorageId);
+		const result = await cleanupOrphanedUsers(userId);
 		return NextResponse.json(result, {status: 200});
 	} catch (error: any) {
-		console.error('Error clocking out:', error);
+		console.error('Error cleaning up orphaned users:', error);
 		return new NextResponse(error.message, {status: 500});
 	}
 }

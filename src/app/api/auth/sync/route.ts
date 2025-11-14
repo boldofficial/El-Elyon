@@ -1,12 +1,9 @@
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {getClerkUser} from '@/lib/clerk';
-import {getUserByClerkId, createUser, updateUser} from '@/db/queries/users';
-import {
-	getEmployeeByClerkId,
-	createEmployee,
-	updateEmployee,
-} from '@/db/queries/employees';
+import {getUserByClerkId, createUser, updateUser} from '@/db/queries/users'; // User mutations are currently in queries/users.ts
+import {getEmployeeByClerkId} from '@/db/queries/employees';
+import {createEmployee, updateEmployee} from '@/db/mutations/employees';
 import {
 	getRoleByClerkId,
 	createRole,
@@ -64,28 +61,28 @@ export async function POST() {
 		// Create or update employee
 		const existingEmployee = await getEmployeeByClerkId(userId);
 		if (existingEmployee) {
-			await updateEmployee(userId, {
-				name,
-				email,
-				workEmail: email,
-				role: finalRole,
-				locations,
-				assignedDeviceId,
-				updatedAt: new Date(),
-			});
+			await updateEmployee(
+				{
+					employeeId: existingEmployee.id,
+					name,
+					email,
+					role: (finalRole as 'admin' | 'supervisor' | 'staff'),
+					locations,
+					assignedDeviceId: assignedDeviceId || undefined,
+				},
+				userId
+			);
 		} else {
-			await createEmployee({
-				name,
-				workEmail: email,
-				email,
-				clerkUserId: userId,
-				role: finalRole,
-				locations,
-				employmentStatus: 'active',
-				assignedDeviceId,
-				createdAt: new Date(),
-				onboardedAt: new Date(),
-			});
+			await createEmployee(
+				{
+					name,
+					email,
+					role: (finalRole as 'admin' | 'supervisor' | 'staff'),
+					locations,
+					assignedDeviceId: assignedDeviceId || undefined,
+				},
+				userId
+			);
 		}
 
 		// Create or update role

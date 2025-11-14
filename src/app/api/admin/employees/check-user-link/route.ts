@@ -1,10 +1,10 @@
-import {NextRequest, NextResponse} from 'next/server';
+import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {checkUserEmployeeLink} from '@/db/queries/employees';
 import {logAudit} from '@/db/mutations/audit';
 
 // GET /api/admin/employees/check-user-link - Check if authenticated user needs to be linked to employee
-export async function GET(req: NextRequest) {
+export async function GET() {
 	try {
 		const {userId} = await auth();
 		if (!userId) {

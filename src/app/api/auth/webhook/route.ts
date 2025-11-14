@@ -6,13 +6,13 @@ import {
 	updateUser,
 	deleteUser,
 	getUserByClerkId,
-} from '@/db/queries/users';
+} from '@/db/queries/users'; // User mutations are currently in queries/users.ts
 import {
 	createEmployee,
 	updateEmployee,
 	deleteEmployee,
-	getEmployeeByClerkId,
-} from '@/db/queries/employees';
+} from '@/db/mutations/employees';
+import {getEmployeeByClerkId} from '@/db/queries/employees';
 import {
 	createRole,
 	updateRole,
@@ -136,31 +136,31 @@ async function handleUserCreated(userData: any) {
 
 	if (existingEmployee) {
 		console.log('ℹ️  Employee already exists, updating');
-		await updateEmployee(clerkUserId, {
-			name,
-			email,
-			workEmail: email,
-			role: finalRole,
-			locations: metadata.locations || [],
-			assignedDeviceId: metadata.assignedDeviceId,
-			updatedAt: new Date(),
-		});
+		await updateEmployee(
+			{
+				employeeId: existingEmployee.id, // Use existingEmployee.id
+				name,
+				email,
+				role: (finalRole as 'admin' | 'supervisor' | 'staff'), // Cast to expected type
+				locations: metadata.locations || [],
+				assignedDeviceId: metadata.assignedDeviceId || undefined, // Convert null to undefined
+			},
+			clerkUserId // Pass clerkUserId as the second argument
+		);
 	} else {
 		console.log(
 			`${isFirstUser ? '🎖️  Creating first admin' : '👤 Creating employee'}`
 		);
-		await createEmployee({
-			name,
-			workEmail: email,
-			email,
-			clerkUserId,
-			role: finalRole,
-			locations: metadata.locations || [],
-			employmentStatus: 'active',
-			assignedDeviceId: metadata.assignedDeviceId,
-			createdAt: new Date(),
-			onboardedAt: new Date(),
-		});
+		await createEmployee(
+			{
+				name,
+				email,
+				role: (finalRole as 'admin' | 'supervisor' | 'staff'), // Cast to expected type
+				locations: metadata.locations || [],
+				assignedDeviceId: metadata.assignedDeviceId || undefined, // Convert null to undefined
+			},
+			clerkUserId // Pass clerkUserId as the second argument (adminClerkUserId)
+		);
 		console.log('✅ Employee created');
 	}
 
@@ -205,21 +205,19 @@ async function handleUserUpdated(userData: any) {
 
 	// Update employee
 	const employee = await getEmployeeByClerkId(clerkUserId);
-	if (employee) {
-		const updates: any = {
-			name,
-			email,
-			workEmail: email,
-			updatedAt: new Date(),
-		};
-
-		if (metadata.role) updates.role = metadata.role;
-		if (metadata.locations) updates.locations = metadata.locations;
-		if (metadata.assignedDeviceId)
-			updates.assignedDeviceId = metadata.assignedDeviceId;
-
-		await updateEmployee(clerkUserId, updates);
-	}
+		if (employee) {
+			await updateEmployee(
+				{
+					employeeId: employee.id,
+					name,
+					email,
+					role: (metadata.role as 'admin' | 'supervisor' | 'staff') || (employee.role as 'admin' | 'supervisor' | 'staff') || 'staff',
+					locations: metadata.locations || employee.locations || [],
+					assignedDeviceId: metadata.assignedDeviceId || employee.assignedDeviceId || undefined,
+				},
+				clerkUserId
+			);
+		}
 
 	// Update role
 	const role = await getRoleByClerkId(clerkUserId);
@@ -238,8 +236,13 @@ async function handleUserDeleted(userData: any) {
 
 	console.log('🗑️  Deleting user:', clerkUserId);
 
+	// Get employee to retrieve employeeId before deletion
+	const employee = await getEmployeeByClerkId(clerkUserId);
+
 	await deleteUser(clerkUserId);
-	await deleteEmployee(clerkUserId);
+	if (employee) {
+		await deleteEmployee(employee.id, clerkUserId); // Pass employeeId and clerkUserId
+	}
 	await deleteRole(clerkUserId);
 
 	console.log('✅ User deleted');

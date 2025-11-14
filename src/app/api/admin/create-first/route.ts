@@ -5,7 +5,8 @@ import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {checkForAdmins} from '@/db/queries/roles';
 import {getUserByClerkId, createUser} from '@/db/queries/users';
-import {getEmployeeByClerkId, createEmployee} from '@/db/queries/employees';
+import {getEmployeeByClerkId} from '@/db/queries/employees';
+import {createEmployee} from '@/db/mutations/employees';
 import {createRole} from '@/db/queries/roles';
 import {getClerkUser} from '@/lib/clerk';
 
@@ -45,18 +46,16 @@ export async function POST() {
 		// Create employee record if it doesn't exist
 		if (!employee) {
 			console.log('📝 Creating employee record for first admin');
-			await createEmployee({
-				name: name || email || 'Admin User',
-				workEmail: email || 'admin@example.com',
-				email: email || 'admin@example.com',
-				clerkUserId: userId,
-				role: 'admin',
-				locations: [],
-				employmentStatus: 'active',
-				assignedDeviceId: undefined,
-				createdAt: new Date(),
-				onboardedAt: new Date(),
-			});
+			await createEmployee(
+				{
+					name: name || email || 'Admin User',
+					email: email || 'admin@example.com',
+					role: 'admin',
+					locations: [],
+					assignedDeviceId: undefined,
+				},
+				userId // Pass userId as the second argument (adminClerkUserId)
+			);
 		}
 
 		// Create admin role

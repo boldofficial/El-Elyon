@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {clockOut} from '@/db/mutations/care';
+import {resendGuardianLink} from '@/db/mutations/compliance';
 
 export async function POST(req: NextRequest) {
 	try {
@@ -9,12 +9,16 @@ export async function POST(req: NextRequest) {
 			return new NextResponse('Unauthorized', {status: 401});
 		}
 
-		const {selfieStorageId} = await req.json();
+		const {linkId} = await req.json();
 
-		const result = await clockOut(userId, selfieStorageId);
+		if (!linkId) {
+			return new NextResponse('linkId is required', {status: 400});
+		}
+
+		const result = await resendGuardianLink(userId, linkId);
 		return NextResponse.json(result, {status: 200});
 	} catch (error: any) {
-		console.error('Error clocking out:', error);
+		console.error('Error resending guardian link:', error);
 		return new NextResponse(error.message, {status: 500});
 	}
 }

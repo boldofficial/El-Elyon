@@ -1,10 +1,10 @@
-import {NextRequest, NextResponse} from 'next/server';
+import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {getAvailableLocations} from '@/db/queries/employees';
 import {logAudit} from '@/db/mutations/audit';
 
-// GET /api/admin/employees/available-locations - Get available locations (accessible to care staff and admins)
-export async function GET(req: NextRequest) {
+// GET /api/admin/employees/available-locations - Get available locations (accessible to care staff)
+export async function GET() {
 	try {
 		const {userId} = await auth();
 		if (!userId) {
