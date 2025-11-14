@@ -4,9 +4,11 @@ import {useUser} from '@clerk/nextjs';
 import {useEffect, useState} from 'react';
 import {useRouter} from 'next/navigation';
 import {Toaster, toast} from 'sonner';
-import {SignInForm} from '@/components/auth/SignInForm';
+
+
+
 import KioskSession from '@/components/kiosk/KioskSession';
-import GuardianChecklistPublic from '@/components/guardians/GuardianChecklistPublic';
+import GuardianChecklistPublic from '@/components/GuardianChecklistPublic';
 import AccessControl from '@/components/shared/AccessControl';
 import AdminPortal from '@/components/admin/AdminPortal';
 import CarePortal from '@/components/care/CarePortal';
