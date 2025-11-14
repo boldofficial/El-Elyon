@@ -65,6 +65,49 @@ export async function updateClerkMetadata(
 	});
 }
 
+export async function updateClerkUser(
+	userId: string,
+	args: {
+		email?: string;
+		firstName?: string;
+		lastName?: string;
+	}
+) {
+	try {
+		const client = await clerkClient();
+		const updateData: any = {};
+
+		if (args.email) {
+			updateData.emailAddress = [args.email];
+		}
+		if (args.firstName !== undefined) {
+			updateData.firstName = args.firstName;
+		}
+		if (args.lastName !== undefined) {
+			updateData.lastName = args.lastName;
+		}
+
+		const user = await client.users.updateUser(userId, updateData);
+
+		return {
+			success: true,
+			email: user.emailAddresses[0]?.emailAddress,
+			name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+		};
+	} catch (error: any) {
+		console.error('Error updating Clerk user:', error);
+		if (error.errors) {
+			const errorMessages = error.errors
+				.map((e: any) => e.longMessage || e.message)
+				.join(', ');
+			throw new Error(`Failed to update Clerk user: ${errorMessages}`);
+		}
+		throw new Error(
+			`Failed to update Clerk user: ${error instanceof Error ? error.message : String(error)}`
+		);
+	}
+}
+
 export async function deleteClerkUser(clerkUserId: string) {
 	const client = await clerkClient();
 	await client.users.deleteUser(clerkUserId);

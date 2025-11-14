@@ -1,12 +1,29 @@
 import {db} from '../db/index';
-import {roles} from '../db/schema';
+import {roles, auditLogs} from '../db/schema'; // Import auditLogs schema
 import {eq} from 'drizzle-orm';
-import {logAudit} from '@/db/mutations/audit';
 
 // Helper: Get user role doc (Drizzle version)
 export async function getUserRoleDoc(clerkUserId: string) {
 	return await db.query.roles.findFirst({
 		where: eq(roles.clerkUserId, clerkUserId),
+	});
+}
+
+// Helper: Audit (for mutations only)
+export async function logAudit(args: {
+	clerkUserId: string | null;
+	event: string;
+	details?: string;
+	deviceId: string;
+	location: string;
+}) {
+	await db.insert(auditLogs).values({
+		clerkUserId: args.clerkUserId,
+		event: args.event,
+		timestamp: new Date(),
+		deviceId: args.deviceId,
+		location: args.location,
+		details: args.details,
 	});
 }
 
@@ -26,6 +43,22 @@ export async function requireCareAccess(clerkUserId: string) {
 			location: '',
 		});
 		throw new Error('Care access required');
+	}
+	return userRole;
+}
+
+// Helper: Check admin access
+export async function requireAdminAccess(clerkUserId: string) {
+	const userRole = await getUserRoleDoc(clerkUserId);
+	if (!userRole || userRole.role !== 'admin') {
+		await logAudit({
+			clerkUserId: clerkUserId,
+			event: 'access_denied',
+			details: 'admin_access_required',
+			deviceId: 'system',
+			location: '',
+		});
+		throw new Error('Admin access required');
 	}
 	return userRole;
 }
