@@ -32,7 +32,6 @@ The project adheres to a clear separation of concerns, organizing files into log
     *   **Queries (`db/queries/`):**
         *   Contains functions responsible for reading data from the database (e.g., `getUserByClerkId`, `listEmployees`).
         *   These functions should primarily focus on data retrieval.
-    *   **Note on `db/queries/users.ts`:** Currently, `createUser`, `updateUser`, and `deleteUser` are located here. While this deviates from the `db/mutations` pattern, it's an existing structure. For new user-related mutations, prefer creating a `db/mutations/users.ts` file.
 
 ---
 
