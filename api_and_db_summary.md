@@ -28,6 +28,9 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `src/app/api/admin/employees/invite-details/route.ts`
 *   `src/app/api/admin/employees/invite-link/route.ts`
 *   `src/app/api/admin/employees/link-user/route.ts`
+*   `src/app/api/admin/employees/onboard/route.ts`
+*   `src/app/api/admin/employees/invite-link/[id]/route.ts`
+*   `src/app/api/admin/employees/send-invite-email/route.ts`
 *   `src/app/api/admin/force-create/route.ts`
 *   `src/app/api/admin/has-admin/route.ts`
 *   `src/app/api/admin/kiosks/list/route.ts`
@@ -45,6 +48,9 @@ This document provides a comprehensive list of API routes, library files, and da
 
 ### Device Management
 *   `src/app/api/devices/check/route.ts`
+
+### Uploads
+*   `src/app/api/uploads/fire-evac-url/route.ts`
 
 ### Email Operations
 *   `src/app/api/emails/send-welcome-email/route.ts`
@@ -67,6 +73,12 @@ This document provides a comprehensive list of API routes, library files, and da
 
 ### Resident Management
 *   `src/app/api/residents/route.ts`
+*   `src/app/api/people/route.ts`
+*   `src/app/api/people/[id]/route.ts`
+
+### Guardian Management
+*   `src/app/api/guardians/route.ts`
+*   `src/app/api/guardians/[id]/route.ts`
 
 ### Application Settings
 *   `src/app/api/settings/app/route.ts`
@@ -107,6 +119,10 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `db/mutations/cleanup.ts`
 *   `db/mutations/compliance.ts`
 *   `db/mutations/employees.ts`
+*   `db/mutations/users.ts`
+*   `db/mutations/people.ts`
+*   `db/mutations/guardians.ts`
+*   `db/mutations/roles.ts`
 
 ### Queries
 *   `db/queries/care.ts`
@@ -114,3 +130,4 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `db/queries/employees.ts`
 *   `db/queries/roles.ts`
 *   `db/queries/users.ts`
+*   `db/queries/people.ts`
