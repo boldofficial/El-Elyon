@@ -35,12 +35,17 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `src/app/api/admin/has-admin/route.ts`
 *   `src/app/api/admin/kiosks/list/route.ts`
 *   `src/app/api/admin/kiosks/seed/route.ts`
+*   `src/app/api/admin/kiosks/route.ts`
+*   `src/app/api/admin/kiosks/[id]/route.ts`
 *   `src/app/api/admin/locations/route.ts`
 *   `src/app/api/admin/locations/create/route.ts`
 *   `src/app/api/admin/locations/delete/route.ts`
 *   `src/app/api/admin/locations/sync/route.ts`
 *   `src/app/api/admin/locations/update/route.ts`
+*   `src/app/api/admin/locations/summary/route.ts`
 *   `src/app/api/admin/logs/recent/route.ts`
+*   `src/app/api/admin/users-with-roles/route.ts`
+*   `src/app/api/admin/users/[id]/role/route.ts`
 
 ### Authentication
 *   `src/app/api/auth/sync/route.ts`
@@ -83,6 +88,12 @@ This document provides a comprehensive list of API routes, library files, and da
 ### Application Settings
 *   `src/app/api/settings/app/route.ts`
 
+### Audit Logs
+*   `src/app/api/admin/audit-logs/route.ts`
+*   `src/app/api/admin/audit-logs/actors/route.ts`
+*   `src/app/api/admin/audit-logs/actions/route.ts`
+*   `src/app/api/admin/audit-logs/locations/route.ts`
+
 ### Shift Management
 *   `src/app/api/shifts/clock-in/route.ts`
 *   `src/app/api/shifts/clock-out/route.ts`
@@ -123,6 +134,8 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `db/mutations/people.ts`
 *   `db/mutations/guardians.ts`
 *   `db/mutations/roles.ts`
+*   `db/mutations/config.ts`
+*   `db/mutations/kiosks.ts`
 
 ### Queries
 *   `db/queries/care.ts`
