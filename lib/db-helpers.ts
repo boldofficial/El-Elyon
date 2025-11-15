@@ -47,6 +47,22 @@ export async function requireCareAccess(clerkUserId: string) {
 	return userRole;
 }
 
+// Helper: Check supervisor access
+export async function requireSupervisorAccess(clerkUserId: string) {
+	const userRole = await getUserRoleDoc(clerkUserId);
+	if (!userRole || !['admin', 'supervisor'].includes(userRole.role || '')) {
+		await logAudit({
+			clerkUserId: clerkUserId,
+			event: 'access_denied',
+			details: 'supervisor_access_required',
+			deviceId: 'system',
+			location: '',
+		});
+		throw new Error('Supervisor access required');
+	}
+	return userRole;
+}
+
 // Helper: Check admin access
 export async function requireAdminAccess(clerkUserId: string) {
 	const userRole = await getUserRoleDoc(clerkUserId);

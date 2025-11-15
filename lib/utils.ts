@@ -25,3 +25,16 @@ export function generatePassword(length = 12) {
 	}
 	return password;
 }
+
+// Helper: Generate neutral resident ID for PHI-free display
+export function generateNeutralId(residentId: string): string {
+	let hash = 0;
+	for (let i = 0; i < residentId.length; i++) {
+		const char = residentId.charCodeAt(i);
+		hash = (hash << 5) - hash + char;
+		hash = hash & hash;
+	}
+	return Math.abs(hash % 9999)
+		.toString()
+		.padStart(4, '0');
+}

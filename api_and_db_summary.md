@@ -47,6 +47,15 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `src/app/api/admin/users-with-roles/route.ts`
 *   `src/app/api/admin/users/[id]/role/route.ts`
 
+### Supervisor Operations
+*   `src/app/api/supervisor/team-members/route.ts`
+*   `src/app/api/supervisor/time-exceptions/route.ts`
+*   `src/app/api/supervisor/time-exceptions/[id]/approve/route.ts`
+*   `src/app/api/supervisor/time-exceptions/[id]/deny/route.ts`
+*   `src/app/api/supervisor/isps/route.ts`
+*   `src/app/api/supervisor/isp-acknowledgments/route.ts`
+*   `src/app/api/supervisor/isps/[id]/publish/route.ts`
+
 ### Authentication
 *   `src/app/api/auth/sync/route.ts`
 *   `src/app/api/auth/webhook/route.ts`
@@ -136,6 +145,7 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `db/mutations/roles.ts`
 *   `db/mutations/config.ts`
 *   `db/mutations/kiosks.ts`
+*   `db/mutations/isp.ts`
 
 ### Queries
 *   `db/queries/care.ts`
@@ -144,3 +154,4 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `db/queries/roles.ts`
 *   `db/queries/users.ts`
 *   `db/queries/people.ts`
+*   `db/queries/isp.ts`
