@@ -46,6 +46,10 @@ This document provides a comprehensive list of API routes, library files, and da
 ### Device Management
 *   `src/app/api/devices/check/route.ts`
 
+### Email Operations
+*   `src/app/api/emails/send-welcome-email/route.ts`
+*   `src/app/api/emails/send-password-change-confirmation/route.ts`
+
 ### Guardian Checklists
 *   `src/app/api/guardian-checklists/acknowledge/route.ts`
 *   `src/app/api/guardian-checklists/by-token/route.ts`
