@@ -3,7 +3,7 @@
 import {useState, useEffect} from 'react';
 import {toast} from 'sonner';
 import {useRouter} from 'next/navigation';
-
+import Link from 'next/link';
 interface InviteInfo {
 	valid: boolean;
 	message?: string;
@@ -102,12 +102,15 @@ export default function EmployeeInviteAcceptance({token}: {token: string}) {
 						<div className="mb-4 text-5xl">❌</div>
 						<h1 className="text-2xl font-bold mb-4">Invalid Invite</h1>
 						<p className="text-gray-600 mb-6">{inviteInfo.message}</p>
-						<a
+						<Link
 							href="/"
-							className="inline-block px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+							legacyBehavior
+							passHref
 						>
-							Go to Sign In
-						</a>
+							<a className="inline-block px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+								Go to Sign In
+							</a>
+						</Link>
 					</div>
 				</div>
 			</div>

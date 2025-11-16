@@ -264,8 +264,8 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">ISP Files</h2>
-          <p className="text-gray-600">Individual Service Plans for resident</p>
+          <h2 className="text-2xl font-bold text-gray-900">ISP Files for {residentName}</h2>
+          <p className="text-gray-600">Individual Service Plans</p>
         </div>
         <div className="flex items-center space-x-3">
           <button

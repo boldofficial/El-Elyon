@@ -245,7 +245,7 @@ export default function InviteAcceptance({ token }: { token: string }) {
             </span>
             <br />
             <span className="text-sm text-gray-500">
-              After signing in, you'll be automatically redirected to complete your setup.
+              After signing in, you&apos;ll be automatically redirected to complete your setup.
             </span>
           </p>
           <div className="mb-4 p-4 bg-green-50 rounded-lg">

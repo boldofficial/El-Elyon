@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import ResidentsWorkspace from "./ResidentsWorkspace";
-import GuardiansWorkspace from "./GuardiansWorkspace";
+import ResidentsWorkspace from "../care/ResidentsWorkspace";
+import GuardiansWorkspace from "../guardian/GuardiansWorkspace";
 import EmployeeWorkspace from "./EmployeeWorkspace";
 
 export default function PeopleWorkspace() {

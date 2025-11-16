@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import KioskManagement from "./KioskManagement";
+import KioskManagement from "../kiosk/KioskManagement";
 import SystemSettings from "./SystemSettings";
 import SecuritySettings from "./SecuritySettings";
-import ComplianceSettings from "./ComplianceSettings";
+import ComplianceSettings from "../compliance/ComplianceSettings";
 
 const SETTINGS_SECTIONS = [
   {

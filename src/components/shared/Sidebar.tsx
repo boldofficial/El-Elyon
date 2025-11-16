@@ -1,5 +1,6 @@
 import React from 'react';
-import {SignOutButton} from '../SignOutButton';
+import Image from 'next/image';
+import {SignOutButton} from '../auth/SignOutButton';
 
 const NAV_SECTIONS = [
 	{
@@ -57,9 +58,11 @@ export default function Sidebar({
 		<aside className="w-64 bg-white border-r min-h-screen flex flex-col">
 			<div className="h-16 flex items-center justify-center border-b px-4">
 				{/* Replace the src below with your logo image path */}
-				<img
+				<Image
 					src="/logo.png"
 					alt="Admin Portal Logo"
+					width={40}
+					height={40}
 					className="h-10 w-auto"
 					onError={(e) => {
 						// Fallback to text if logo image doesn't exist

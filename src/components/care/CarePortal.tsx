@@ -6,8 +6,9 @@ import CareShiftWorkspace from './CareShiftWorkspace';
 import CareResidentsWorkspace from './CareResidentsWorkspace';
 import CareLogsWorkspace from './CareLogsWorkspace';
 import CareProfileWorkspace from './CareProfileWorkspace';
-import SupervisorTeamWorkspace from './SupervisorTeamWorkspace';
-import SupervisorComplianceWorkspace from './SupervisorComplianceWorkspace';
+import SupervisorComplianceWorkspace from '../supervisor/SupervisorComplianceWorkspace';
+import SupervisorTeamWorkspace from '../supervisor/SupervisorTeamWorkspace';
+
 
 export default function CarePortal() {
 	const [activeView, setActiveView] = useState('shift');

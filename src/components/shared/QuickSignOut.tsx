@@ -1,5 +1,5 @@
 import React from "react";
-import { SignOutButton } from "../SignOutButton";
+import { SignOutButton } from "../auth/SignOutButton";
 
 export default function QuickSignOut() {
   return (

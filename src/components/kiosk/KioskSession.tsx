@@ -2,19 +2,33 @@
 
 import React, {useState, useEffect} from 'react';
 import {useUser} from '@clerk/nextjs';
-import SelfieCapture from './SelfieCapture';
-import AutoLock from './AutoLock';
-import QuickSignOut from './QuickSignOut';
-import LocationBanner from './LocationBanner';
-import ResidentCase from './ResidentCase';
+import SelfieCapture from '../shared/SelfieCapture';
+import AutoLock from '../shared/AutoLock';
+import QuickSignOut from '../shared/QuickSignOut';
+import LocationBanner from '../admin/LocationBanner';
+import ResidentCase from '../care/ResidentCase';
 import KioskPairingScreen from './KioskPairingScreen';
 
 export default function KioskSession() {
 	const [locked, setLocked] = useState(false);
 	const [selfie, setSelfie] = useState<string | null>(null);
 	const [selfieError, setSelfieError] = useState<string | null>(null);
-	const [deviceId, setDeviceId] = useState<string | null>(null);
-	const [isPaired, setIsPaired] = useState(false);
+	const [deviceId, setDeviceId] = useState<string | null>(() => {
+		if (typeof window !== 'undefined') {
+			const storedDeviceId = localStorage.getItem('kioskDeviceId');
+			if (storedDeviceId) {
+				console.log('Found stored device ID:', storedDeviceId);
+				return storedDeviceId;
+			}
+		}
+		return null;
+	});
+	const [isPaired, setIsPaired] = useState(() => {
+		if (typeof window !== 'undefined') {
+			return !!localStorage.getItem('kioskDeviceId');
+		}
+		return false;
+	});
 	const [kiosk, setKiosk] = useState<any>(null);
 	const [config, setConfig] = useState<any>(null);
 	const [userRole, setUserRole] = useState<any>(null);
@@ -26,15 +40,6 @@ export default function KioskSession() {
 
 	const {user: clerkUser} = useUser();
 
-	// Check for existing pairing on mount
-	useEffect(() => {
-		const storedDeviceId = localStorage.getItem('kioskDeviceId');
-		if (storedDeviceId) {
-			console.log('Found stored device ID:', storedDeviceId);
-			setDeviceId(storedDeviceId);
-			setIsPaired(true);
-		}
-	}, []);
 
 	// Fetch kiosk data, config, user role, and residents
 	useEffect(() => {
