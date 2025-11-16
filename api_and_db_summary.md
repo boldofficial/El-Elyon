@@ -12,7 +12,14 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `src/app/api/access/session/route.ts`
 
 ### Admin Operations
+*   `src/app/api/admin/audit-logs/route.ts`
+*   `src/app/api/admin/audit-logs/actions/route.ts`
+*   `src/app/api/admin/audit-logs/actors/route.ts`
+*   `src/app/api/admin/audit-logs/locations/route.ts`
+*   `src/app/api/admin/cleanup/run/route.ts`
+*   `src/app/api/admin/cleanup/scan/route.ts`
 *   `src/app/api/admin/cleanup-orphaned-users/route.ts`
+*   `src/app/api/admin/compliance/alert-schedule/route.ts`
 *   `src/app/api/admin/compliance/export-list/route.ts`
 *   `src/app/api/admin/compliance/resend-guardian-link/route.ts`
 *   `src/app/api/admin/compliance/send-reminders/route.ts`
@@ -27,34 +34,25 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `src/app/api/admin/employees/has-admin/route.ts`
 *   `src/app/api/admin/employees/invite-details/route.ts`
 *   `src/app/api/admin/employees/invite-link/route.ts`
+*   `src/app/api/admin/employees/invite-link/[id]/route.ts`
 *   `src/app/api/admin/employees/link-user/route.ts`
 *   `src/app/api/admin/employees/onboard/route.ts`
-*   `src/app/api/admin/employees/invite-link/[id]/route.ts`
 *   `src/app/api/admin/employees/send-invite-email/route.ts`
 *   `src/app/api/admin/force-create/route.ts`
 *   `src/app/api/admin/has-admin/route.ts`
-*   `src/app/api/admin/kiosks/list/route.ts`
-*   `src/app/api/admin/kiosks/seed/route.ts`
 *   `src/app/api/admin/kiosks/route.ts`
 *   `src/app/api/admin/kiosks/[id]/route.ts`
+*   `src/app/api/admin/kiosks/list/route.ts`
+*   `src/app/api/admin/kiosks/seed/route.ts`
 *   `src/app/api/admin/locations/route.ts`
 *   `src/app/api/admin/locations/create/route.ts`
 *   `src/app/api/admin/locations/delete/route.ts`
+*   `src/app/api/admin/locations/summary/route.ts`
 *   `src/app/api/admin/locations/sync/route.ts`
 *   `src/app/api/admin/locations/update/route.ts`
-*   `src/app/api/admin/locations/summary/route.ts`
 *   `src/app/api/admin/logs/recent/route.ts`
-*   `src/app/api/admin/users-with-roles/route.ts`
 *   `src/app/api/admin/users/[id]/role/route.ts`
-
-### Supervisor Operations
-*   `src/app/api/supervisor/team-members/route.ts`
-*   `src/app/api/supervisor/time-exceptions/route.ts`
-*   `src/app/api/supervisor/time-exceptions/[id]/approve/route.ts`
-*   `src/app/api/supervisor/time-exceptions/[id]/deny/route.ts`
-*   `src/app/api/supervisor/isps/route.ts`
-*   `src/app/api/supervisor/isp-acknowledgments/route.ts`
-*   `src/app/api/supervisor/isps/[id]/publish/route.ts`
+*   `src/app/api/admin/users-with-roles/route.ts`
 
 ### Authentication
 *   `src/app/api/auth/sync/route.ts`
@@ -63,17 +61,18 @@ This document provides a comprehensive list of API routes, library files, and da
 ### Device Management
 *   `src/app/api/devices/check/route.ts`
 
-### Uploads
-*   `src/app/api/uploads/fire-evac-url/route.ts`
-
 ### Email Operations
-*   `src/app/api/emails/send-welcome-email/route.ts`
 *   `src/app/api/emails/send-password-change-confirmation/route.ts`
+*   `src/app/api/emails/send-welcome-email/route.ts`
 
 ### Guardian Checklists
 *   `src/app/api/guardian-checklists/acknowledge/route.ts`
 *   `src/app/api/guardian-checklists/by-token/route.ts`
 *   `src/app/api/guardian-checklists/submit/route.ts`
+
+### Guardian Management
+*   `src/app/api/guardians/route.ts`
+*   `src/app/api/guardians/[id]/route.ts`
 
 ### Internal Compliance
 *   `src/app/api/internal/compliance/generate-alerts/route.ts`
@@ -83,31 +82,36 @@ This document provides a comprehensive list of API routes, library files, and da
 
 ### Kiosk Operations
 *   `src/app/api/kiosk/by-device/route.ts`
+*   `src/app/api/kiosk/complete-pairing/route.ts`
 *   `src/app/api/kiosk/update-last-seen/route.ts`
 
-### Resident Management
-*   `src/app/api/residents/route.ts`
+### People Management
 *   `src/app/api/people/route.ts`
 *   `src/app/api/people/[id]/route.ts`
 
-### Guardian Management
-*   `src/app/api/guardians/route.ts`
-*   `src/app/api/guardians/[id]/route.ts`
+### Resident Management
+*   `src/app/api/residents/route.ts`
 
 ### Application Settings
 *   `src/app/api/settings/app/route.ts`
-
-### Audit Logs
-*   `src/app/api/admin/audit-logs/route.ts`
-*   `src/app/api/admin/audit-logs/actors/route.ts`
-*   `src/app/api/admin/audit-logs/actions/route.ts`
-*   `src/app/api/admin/audit-logs/locations/route.ts`
 
 ### Shift Management
 *   `src/app/api/shifts/clock-in/route.ts`
 *   `src/app/api/shifts/clock-out/route.ts`
 *   `src/app/api/shifts/current/route.ts`
 *   `src/app/api/shifts/generate-selfie-upload-url/route.ts`
+
+### Supervisor Operations
+*   `src/app/api/supervisor/isp-acknowledgments/route.ts`
+*   `src/app/api/supervisor/isps/route.ts`
+*   `src/app/api/supervisor/isps/[id]/publish/route.ts`
+*   `src/app/api/supervisor/team-members/route.ts`
+*   `src/app/api/supervisor/time-exceptions/route.ts`
+*   `src/app/api/supervisor/time-exceptions/[id]/approve/route.ts`
+*   `src/app/api/supervisor/time-exceptions/[id]/deny/route.ts`
+
+### Uploads
+*   `src/app/api/uploads/fire-evac-url/route.ts`
 
 ### User Management
 *   `src/app/api/users/current/route.ts`
