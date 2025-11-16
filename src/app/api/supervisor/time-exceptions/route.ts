@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireSupervisorAccess} from '../../../../../../lib/db-helpers';
+import {requireSupervisorAccess} from '@/lib/db-helpers';
 
 export async function GET() {
     const {userId} = await auth();

@@ -8,11 +8,12 @@ import {Toaster, toast} from 'sonner';
 
 
 import KioskSession from '@/components/kiosk/KioskSession';
-import GuardianChecklistPublic from '@/components/GuardianChecklistPublic';
+import GuardianChecklistPublic from '@/components/guardian/GuardianChecklistPublic';
 import AccessControl from '@/components/shared/AccessControl';
 import AdminPortal from '@/components/admin/AdminPortal';
 import CarePortal from '@/components/care/CarePortal';
 import PendingPage from '@/components/shared/PendingPage';
+import { SignInForm }  from '@/components/auth/SignInForm';
 
 export default function HomePage() {
 	const {isLoaded, isSignedIn, user} = useUser();

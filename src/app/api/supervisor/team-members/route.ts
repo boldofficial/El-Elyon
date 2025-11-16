@@ -1,8 +1,8 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireSupervisorAccess} from '../../../../../../lib/db-helpers';
-import {db} from '../../../../../../db/index';
-import {roles, employees, shifts} from '../../../../../../db/schema'; // Include shifts for future clock-in status
+import {requireSupervisorAccess} from '@/lib/db-helpers';
+import {db} from '@/db/index';
+import {roles, employees, shifts} from '@/db/schema'; // Include shifts for future clock-in status
 import {eq, InferSelectModel} from 'drizzle-orm';
 
 type RoleSelect = InferSelectModel<typeof roles>;
