@@ -1,22 +1,50 @@
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
-import { useState } from "react";
 
 export default function FirstAdminSetup() {
-  const hasAdmin = useQuery(api.admin.hasAdminUser);
-  const createFirstAdmin = useMutation(api.admin.createFirstAdmin);
+  const [hasAdmin, setHasAdmin] = useState<boolean | undefined>(undefined);
   const [isCreating, setIsCreating] = useState(false);
+
+  const checkAdminStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/has-admin');
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      const data = await res.json();
+      setHasAdmin(data.hasAdmin);
+    } catch (error: any) {
+      console.error('Error checking admin status:', error);
+      toast.error(error.message || 'Failed to check admin status.');
+      setHasAdmin(true); // Assume admin exists to prevent bootstrap issues
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkAdminStatus();
+  }, [checkAdminStatus]);
 
   const handleCreateAdmin = async () => {
     setIsCreating(true);
     try {
-      await createFirstAdmin({});
+      const res = await fetch('/api/admin/create-first', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}), // No specific body needed for this API
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to create admin account.');
+      }
+
       toast.success("Admin account created successfully!");
       // Reload to update the UI
       window.location.reload();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create admin");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create admin");
     } finally {
       setIsCreating(false);
     }

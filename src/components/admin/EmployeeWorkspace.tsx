@@ -1,40 +1,50 @@
-/* eslint-disable @typescript-eslint/no-misused-promises */
-import {useMutation, useQuery, useAction} from 'convex/react';
-import {api} from '../../convex/_generated/api';
-import {useState} from 'react';
-import {Id} from '../../convex/_generated/dataModel';
+'use client';
+
+import React, {useState, useEffect, useCallback} from 'react';
 import {toast} from 'sonner';
 
-export default function EmployeeWorkspace() {
-	const userRole = useQuery(api.settings.getUserRole);
-	const employees =
-		useQuery(
-			api.employees.listEmployees,
-			userRole?.role === 'admin' ? {} : 'skip'
-		) || [];
-	const availableLocations =
-		useQuery(api.employees.getAvailableLocations) || [];
-	const devices = useQuery(api.devices.listDevices, {}) || []; // ✅ Get available devices
+// Define interfaces for data structures
+interface Employee {
+	id: string;
+	name: string;
+	email: string;
+	role: 'admin' | 'supervisor' | 'staff';
+	locations: string[];
+	assignedDeviceId?: string;
+	clerkUserId?: string;
+	workEmail?: string; // API might return workEmail instead of email
+}
 
-	const [selectedEmployee, setSelectedEmployee] =
-		useState<Id<'employees'> | null>(null);
+interface Device {
+	id: string; // Internal ID
+	deviceId: string; // The actual device ID string
+	deviceName: string;
+	location: string;
+	isActive: boolean;
+}
+
+interface UserRole {
+	role: 'admin' | 'supervisor' | 'staff' | 'kiosk' | null;
+}
+
+export default function EmployeeWorkspace() {
+	const [userRole, setUserRole] = useState<UserRole | null>(null);
+	const [employees, setEmployees] = useState<Employee[]>([]);
+	const [availableLocations, setAvailableLocations] = useState<string[]>([]);
+	const [devices, setDevices] = useState<Device[]>([]);
+	const [loading, setLoading] = useState(true);
+
+	const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
 	const [showAddForm, setShowAddForm] = useState(false);
 	const [showEditForm, setShowEditForm] = useState(false);
-	const [deletingId, setDeletingId] = useState<Id<'employees'> | null>(null);
-	// const [activeTab, setActiveTab] = useState<
-	//   'directory' | 'activities' | 'logs'
-	// >('directory');
-
-	const createEmployee = useAction(api.employees.createEmployee);
-	const deleteEmployee = useMutation(api.employees.deleteEmployee);
-	const updateEmployee = useMutation(api.employees.updateEmployee);
+	const [deletingId, setDeletingId] = useState<string | null>(null);
 
 	const [newEmployeeForm, setNewEmployeeForm] = useState({
 		name: '',
 		email: '',
 		role: 'staff' as 'admin' | 'supervisor' | 'staff',
 		locations: [] as string[],
-		assignedDeviceId: undefined as string | undefined, // ✅ Add device field
+		assignedDeviceId: undefined as string | undefined,
 	});
 
 	const [editEmployeeForm, setEditEmployeeForm] = useState({
@@ -42,8 +52,44 @@ export default function EmployeeWorkspace() {
 		email: '',
 		role: 'staff' as 'admin' | 'supervisor' | 'staff',
 		locations: [] as string[],
-		assignedDeviceId: undefined as string | undefined, // ✅ Add device field
+		assignedDeviceId: undefined as string | undefined,
 	});
+
+	const fetchAllData = useCallback(async () => {
+		setLoading(true);
+		try {
+			const [
+				userRoleRes,
+				employeesRes,
+				availableLocationsRes,
+				devicesRes,
+			] = await Promise.all([
+				fetch('/api/users/role'),
+				fetch('/api/admin/employees'),
+				fetch('/api/admin/employees/available-locations'),
+				fetch('/api/admin/kiosks/list'),
+			]);
+
+			const userRoleData: UserRole = await userRoleRes.json();
+			const employeesData: Employee[] = await employeesRes.json();
+			const availableLocationsData: string[] = await availableLocationsRes.json();
+			const devicesData: Device[] = await devicesRes.json();
+
+			setUserRole(userRoleData);
+			setEmployees(employeesData);
+			setAvailableLocations(availableLocationsData);
+			setDevices(devicesData);
+		} catch (error) {
+			console.error('Error fetching data:', error);
+			toast.error('Failed to load employee data.');
+		} finally {
+			setLoading(false);
+		}
+	}, []);
+
+	useEffect(() => {
+		void fetchAllData();
+	}, [fetchAllData]);
 
 	async function handleAddEmployee(e: React.FormEvent) {
 		e.preventDefault();
@@ -52,20 +98,27 @@ export default function EmployeeWorkspace() {
 			return;
 		}
 
-		// if (newEmployeeForm.locations.length === 0) {
-		// 	toast.error('Please select at least one location');
-		// 	return;
-		// }
-
 		try {
-			const result = await createEmployee({
-				name: newEmployeeForm.name.trim(),
-				email: newEmployeeForm.email.trim(),
-				role: newEmployeeForm.role,
-				locations: newEmployeeForm.locations,
-				assignedDeviceId: newEmployeeForm.assignedDeviceId,
+			const res = await fetch('/api/admin/employees', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					name: newEmployeeForm.name.trim(),
+					email: newEmployeeForm.email.trim(),
+					role: newEmployeeForm.role,
+					locations: newEmployeeForm.locations,
+					assignedDeviceId: newEmployeeForm.assignedDeviceId || null, // Ensure null for optional
+				}),
 			});
 
+			if (!res.ok) {
+				const errorData = await res.json();
+				throw new Error(errorData.error || 'Failed to create employee');
+			}
+
+			const result = await res.json(); // Assuming API returns some result, e.g., generated password
 			setNewEmployeeForm({
 				name: '',
 				email: '',
@@ -74,10 +127,10 @@ export default function EmployeeWorkspace() {
 				assignedDeviceId: undefined,
 			});
 			setShowAddForm(false);
+			await fetchAllData(); // Refresh data
 
 			toast.success('Employee account created! Credentials sent via email.');
 
-			// Show the generated password in console for admin reference (optional)
 			if (result.generatedPassword) {
 				console.log(
 					'🔑 Generated password for',
@@ -100,7 +153,7 @@ export default function EmployeeWorkspace() {
 		}));
 	};
 
-	async function handleDeleteEmployee(employeeId: Id<'employees'>) {
+	async function handleDeleteEmployee(employeeId: string) {
 		if (
 			!window.confirm(
 				'Are you sure you want to delete this employee? This will also delete their Clerk account.'
@@ -110,9 +163,18 @@ export default function EmployeeWorkspace() {
 		}
 		setDeletingId(employeeId);
 		try {
-			await deleteEmployee({employeeId});
+			const res = await fetch(`/api/admin/employees/${employeeId}`, {
+				method: 'DELETE',
+			});
+
+			if (!res.ok) {
+				const errorData = await res.json();
+				throw new Error(errorData.error || 'Failed to delete employee');
+			}
+
 			toast.success('Employee deleted.');
 			if (selectedEmployee === employeeId) setSelectedEmployee(null);
+			await fetchAllData(); // Refresh data
 		} catch (error: any) {
 			toast.error(error?.message || 'Failed to delete employee');
 		} finally {
@@ -120,10 +182,10 @@ export default function EmployeeWorkspace() {
 		}
 	}
 
-	const handleEditEmployee = (employee: any) => {
+	const handleEditEmployee = (employee: Employee) => {
 		setEditEmployeeForm({
 			name: employee.name,
-			email: employee.email || employee.workEmail,
+			email: employee.email || employee.workEmail || '',
 			role: employee.role || 'staff',
 			locations: employee.locations || [],
 			assignedDeviceId: employee.assignedDeviceId,
@@ -145,26 +207,36 @@ export default function EmployeeWorkspace() {
 		e.preventDefault();
 		if (!selectedEmployee) return;
 		try {
-			await updateEmployee({
-				employeeId: selectedEmployee,
-				name: editEmployeeForm.name,
-				email: editEmployeeForm.email,
-				role: editEmployeeForm.role,
-				locations: editEmployeeForm.locations,
-				assignedDeviceId: editEmployeeForm.assignedDeviceId,
+			const res = await fetch(`/api/admin/employees/${selectedEmployee}`, {
+				method: 'PATCH',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: JSON.stringify({
+					name: editEmployeeForm.name,
+					email: editEmployeeForm.email,
+					role: editEmployeeForm.role,
+					locations: editEmployeeForm.locations,
+					assignedDeviceId: editEmployeeForm.assignedDeviceId || null,
+				}),
 			});
+
+			if (!res.ok) {
+				const errorData = await res.json();
+				throw new Error(errorData.error || 'Failed to update employee');
+			}
+
 			setShowEditForm(false);
 			setSelectedEmployee(null);
+			await fetchAllData(); // Refresh data
 			toast.success('Employee updated successfully!');
-		} catch (error) {
-			toast.error('Failed to update employee');
+		} catch (error: any) {
+			toast.error(error.message || 'Failed to update employee');
 			console.error(error);
 		}
 	}
 
-	// const isAdmin = userRole?.role === 'admin';
-
-	function renderUserStatus(emp: any) {
+	function renderUserStatus(emp: Employee) {
 		if (emp.clerkUserId) {
 			return (
 				<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 ml-2">
@@ -185,6 +257,29 @@ export default function EmployeeWorkspace() {
 		const device = devices.find((d) => d.deviceId === deviceId);
 		return device ? device.deviceName : deviceId.substring(0, 20) + '...';
 	};
+
+	if (loading) {
+		return (
+			<div className="flex items-center justify-center py-12">
+				<div className="text-center">
+					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+					<p className="text-gray-600">Loading employees...</p>
+				</div>
+			</div>
+		);
+	}
+
+	// Only allow admin to view this workspace
+	if (userRole?.role !== 'admin') {
+		return (
+			<div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800 text-center">
+				<p className="font-medium">Access Denied</p>
+				<p className="text-sm">
+					You must be an administrator to manage employees.
+				</p>
+			</div>
+		);
+	}
 
 	return (
 		<div className="space-y-6">
@@ -214,12 +309,13 @@ export default function EmployeeWorkspace() {
 					<h3 className="text-lg font-semibold mb-4">Edit Employee</h3>
 					<form onSubmit={handleUpdateEmployee} className="space-y-4">
 						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-2">
+							<label htmlFor="edit-name" className="block text-sm font-medium text-gray-700 mb-2">
 								Name
 								<span className="text-red-500">*</span>
 							</label>
 							<input
 								type="text"
+								id="edit-name"
 								value={editEmployeeForm.name}
 								onChange={(e) =>
 									setEditEmployeeForm((prev) => ({
@@ -232,11 +328,12 @@ export default function EmployeeWorkspace() {
 							/>
 						</div>
 						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-2">
+							<label htmlFor="edit-email" className="block text-sm font-medium text-gray-700 mb-2">
 								Email <span className="text-red-500">*</span>
 							</label>
 							<input
 								type="email"
+								id="edit-email"
 								value={editEmployeeForm.email}
 								onChange={(e) =>
 									setEditEmployeeForm((prev) => ({
@@ -249,10 +346,11 @@ export default function EmployeeWorkspace() {
 							/>
 						</div>
 						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-2">
+							<label htmlFor="edit-role" className="block text-sm font-medium text-gray-700 mb-2">
 								Role
 							</label>
 							<select
+								id="edit-role"
 								value={editEmployeeForm.role}
 								onChange={(e) =>
 									setEditEmployeeForm((prev) => ({
@@ -267,10 +365,11 @@ export default function EmployeeWorkspace() {
 							</select>
 						</div>
 						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-2">
+							<label htmlFor="edit-assignedDeviceId" className="block text-sm font-medium text-gray-700 mb-2">
 								Assigned Device
 							</label>
 							<select
+								id="edit-assignedDeviceId"
 								value={editEmployeeForm.assignedDeviceId || ''}
 								onChange={(e) =>
 									setEditEmployeeForm((prev) => ({
@@ -343,11 +442,12 @@ export default function EmployeeWorkspace() {
 					<h3 className="text-lg font-semibold mb-4">Add New Employee</h3>
 					<form onSubmit={handleAddEmployee} className="space-y-4">
 						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-2">
+							<label htmlFor="add-name" className="block text-sm font-medium text-gray-700 mb-2">
 								Name <span className="text-red-500">*</span>
 							</label>
 							<input
 								type="text"
+								id="add-name"
 								value={newEmployeeForm.name}
 								onChange={(e) =>
 									setNewEmployeeForm((prev) => ({
@@ -361,11 +461,12 @@ export default function EmployeeWorkspace() {
 							/>
 						</div>
 						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-2">
+							<label htmlFor="add-email" className="block text-sm font-medium text-gray-700 mb-2">
 								Email <span className="text-red-500">*</span>
 							</label>
 							<input
 								type="email"
+								id="add-email"
 								value={newEmployeeForm.email}
 								onChange={(e) =>
 									setNewEmployeeForm((prev) => ({
@@ -379,10 +480,11 @@ export default function EmployeeWorkspace() {
 							/>
 						</div>
 						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-2">
+							<label htmlFor="add-role" className="block text-sm font-medium text-gray-700 mb-2">
 								Role
 							</label>
 							<select
+								id="add-role"
 								value={newEmployeeForm.role}
 								onChange={(e) =>
 									setNewEmployeeForm((prev) => ({
@@ -397,10 +499,11 @@ export default function EmployeeWorkspace() {
 							</select>
 						</div>
 						<div>
-							<label className="block text-sm font-medium text-gray-700 mb-2">
+							<label htmlFor="add-assignedDeviceId" className="block text-sm font-medium text-gray-700 mb-2">
 								Assigned Device
 							</label>
 							<select
+								id="add-assignedDeviceId"
 								value={newEmployeeForm.assignedDeviceId || ''}
 								onChange={(e) =>
 									setNewEmployeeForm((prev) => ({

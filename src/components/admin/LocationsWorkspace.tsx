@@ -1,20 +1,21 @@
-import React, { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { Id } from "../../convex/_generated/dataModel";
+import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 
-export default function LocationsWorkspace() {
-  const locations = useQuery(api.admin.listLocations) || [];
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [editingLocation, setEditingLocation] = useState<Id<"locations"> | null>(null);
-  const [deletingLocation, setDeletingLocation] = useState<Id<"locations"> | null>(null);
-  const [isSyncing, setIsSyncing] = useState(false);
+interface Location {
+  _id: string; // Internal ID
+  name: string;
+  address?: string;
+  capacity?: number;
+  status: "active" | "inactive";
+}
 
-  const createLocation = useMutation(api.admin.createLocation);
-  const updateLocation = useMutation(api.admin.updateLocation);
-  const deleteLocation = useMutation(api.admin.deleteLocation);
-  const syncLocations = useMutation(api.admin.syncLocationsFromStrings);
+export default function LocationsWorkspace() {
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingLocation, setEditingLocation] = useState<string | null>(null);
+  const [deletingLocation, setDeletingLocation] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const [newLocationForm, setNewLocationForm] = useState({
     name: "",
@@ -29,13 +30,48 @@ export default function LocationsWorkspace() {
     status: "active" as "active" | "inactive",
   });
 
+  const fetchLocations = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/locations');
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      const data: Location[] = await res.json();
+      setLocations(data);
+    } catch (error: any) {
+      console.error('Error fetching locations:', error);
+      toast.error('Failed to load locations.');
+      setLocations([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchLocations();
+  }, [fetchLocations]);
+
   async function handleSyncLocations() {
     setIsSyncing(true);
     try {
-      // Get all unique location names from residents, shifts, etc.
-      const locationNames: string[] = [];
-      await syncLocations({ locationNames });
+      // The API route /api/admin/locations/sync is expected to handle the logic
+      // of finding existing location strings and creating new location records.
+      const res = await fetch('/api/admin/locations/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}), // No specific body needed, backend handles logic
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to sync locations');
+      }
+
       toast.success("Locations synced successfully!");
+      await fetchLocations(); // Refresh locations list
     } catch (error: any) {
       toast.error("Failed to sync locations: " + (error.message || "Unknown error"));
     } finally {
@@ -51,20 +87,33 @@ export default function LocationsWorkspace() {
     }
 
     try {
-      await createLocation({
-        name: newLocationForm.name.trim(),
-        address: newLocationForm.address.trim() || undefined,
-        capacity: newLocationForm.capacity ? parseInt(newLocationForm.capacity) : undefined,
+      const res = await fetch('/api/admin/locations/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newLocationForm.name.trim(),
+          address: newLocationForm.address.trim() || undefined,
+          capacity: newLocationForm.capacity ? parseInt(newLocationForm.capacity) : undefined,
+        }),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to add location');
+      }
+
       setNewLocationForm({ name: "", address: "", capacity: "" });
       setShowAddForm(false);
+      await fetchLocations(); // Refresh locations list
       toast.success("Location added successfully!");
-    } catch (error) {
-      toast.error("Failed to add location");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to add location");
     }
   }
 
-  function handleEditLocation(location: any) {
+  function handleEditLocation(location: Location) {
     setEditLocationForm({
       name: location.name,
       address: location.address || "",
@@ -75,33 +124,59 @@ export default function LocationsWorkspace() {
   }
 
   async function handleUpdateLocation(e: React.FormEvent) {
-    e.preventDefault();
+    e.preventDefault(); // Keep e.preventDefault()
     if (!editingLocation) return;
 
     try {
-      await updateLocation({
-        locationId: editingLocation,
-        name: editLocationForm.name.trim(),
-        address: editLocationForm.address.trim() || undefined,
-        capacity: editLocationForm.capacity ? parseInt(editLocationForm.capacity) : undefined,
-        status: editLocationForm.status,
+      const res = await fetch(`/api/admin/locations/update`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          locationId: editingLocation,
+          name: editLocationForm.name.trim(),
+          address: editLocationForm.address.trim() || undefined,
+          capacity: editLocationForm.capacity ? parseInt(editLocationForm.capacity) : undefined,
+          status: editLocationForm.status,
+        }),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to update location');
+      }
+
       setEditingLocation(null);
+      await fetchLocations(); // Refresh locations list
       toast.success("Location updated successfully!");
-    } catch (error) {
-      toast.error("Failed to update location");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update location");
     }
   }
 
-  async function handleDeleteLocation(locationId: Id<"locations">) {
+  async function handleDeleteLocation(locationId: string) {
     if (!window.confirm("Are you sure you want to delete this location? This action cannot be undone.")) {
       return;
     }
 
     setDeletingLocation(locationId);
     try {
-      await deleteLocation({ locationId });
+      const res = await fetch(`/api/admin/locations/delete`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ locationId }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to delete location');
+      }
+
       toast.success("Location deleted successfully");
+      await fetchLocations(); // Refresh locations list
     } catch (error: any) {
       toast.error(error.message || "Failed to delete location");
     } finally {
@@ -113,6 +188,17 @@ export default function LocationsWorkspace() {
     return status === "active" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800";
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading locations...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -122,7 +208,7 @@ export default function LocationsWorkspace() {
           {locations.length === 0 && (
             <button
               className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onClick={handleSyncLocations}
+              onClick={() => void handleSyncLocations()}
               disabled={isSyncing}
             >
               {isSyncing ? "Syncing..." : "🔄 Sync Existing Locations"}
@@ -141,7 +227,7 @@ export default function LocationsWorkspace() {
       {locations.length === 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <div className="flex items-start">
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
               </svg>
@@ -153,10 +239,10 @@ export default function LocationsWorkspace() {
               <div className="mt-2 text-sm text-blue-700">
                 <p>
                   It looks like you have locations stored as strings in your residents, employees, and other tables, 
-                  but they haven't been synced to the new locations management system yet.
+                  but they haven&apos;t been synced to the new locations management system yet.
                 </p>
                 <p className="mt-2">
-                  Click the <strong>"Sync Existing Locations"</strong> button above to automatically import all 
+                  Click the <strong>&quot;Sync Existing Locations&quot;</strong> button above to automatically import all 
                   existing location strings into the locations table. This will allow you to manage them centrally 
                   with addresses, capacity, and status information.
                 </p>
@@ -170,12 +256,13 @@ export default function LocationsWorkspace() {
       {showAddForm && (
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <h3 className="text-lg font-semibold mb-4">Add New Location</h3>
-          <form onSubmit={handleAddLocation} className="space-y-4">
+          <form onSubmit={(e) => void handleAddLocation(e)} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="new-location-name" className="block text-sm font-medium text-gray-700 mb-2">
                 Location Name <span className="text-red-500">*</span>
               </label>
               <input
+                id="new-location-name"
                 type="text"
                 value={newLocationForm.name}
                 onChange={(e) => setNewLocationForm({ ...newLocationForm, name: e.target.value })}
@@ -185,8 +272,9 @@ export default function LocationsWorkspace() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
+              <label htmlFor="new-location-address" className="block text-sm font-medium text-gray-700 mb-2">Address</label>
               <input
+                id="new-location-address"
                 type="text"
                 value={newLocationForm.address}
                 onChange={(e) => setNewLocationForm({ ...newLocationForm, address: e.target.value })}
@@ -195,8 +283,9 @@ export default function LocationsWorkspace() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Capacity</label>
+              <label htmlFor="new-location-capacity" className="block text-sm font-medium text-gray-700 mb-2">Capacity</label>
               <input
+                id="new-location-capacity"
                 type="number"
                 value={newLocationForm.capacity}
                 onChange={(e) => setNewLocationForm({ ...newLocationForm, capacity: e.target.value })}
@@ -260,7 +349,7 @@ export default function LocationsWorkspace() {
                   </td>
                 </tr>
               ) : (
-                locations.map((location: any) => (
+                locations.map((location: Location) => (
                   <tr key={location._id}>
                     {editingLocation === location._id ? (
                       <>
@@ -270,6 +359,8 @@ export default function LocationsWorkspace() {
                             value={editLocationForm.name}
                             onChange={(e) => setEditLocationForm({ ...editLocationForm, name: e.target.value })}
                             className="border border-gray-300 rounded px-2 py-1 w-full"
+                            aria-label="Location Name"
+                            placeholder="Location Name"
                           />
                         </td>
                         <td className="px-6 py-4">
@@ -278,6 +369,8 @@ export default function LocationsWorkspace() {
                             value={editLocationForm.address}
                             onChange={(e) => setEditLocationForm({ ...editLocationForm, address: e.target.value })}
                             className="border border-gray-300 rounded px-2 py-1 w-full"
+                            aria-label="Address"
+                            placeholder="Address"
                           />
                         </td>
                         <td className="px-6 py-4">
@@ -287,10 +380,13 @@ export default function LocationsWorkspace() {
                             onChange={(e) => setEditLocationForm({ ...editLocationForm, capacity: e.target.value })}
                             className="border border-gray-300 rounded px-2 py-1 w-24"
                             min="1"
+                            aria-label="Capacity"
+                            placeholder="Capacity"
                           />
                         </td>
                         <td className="px-6 py-4">
                           <select
+                            aria-label="Location Status"
                             value={editLocationForm.status}
                             onChange={(e) => setEditLocationForm({ ...editLocationForm, status: e.target.value as "active" | "inactive" })}
                             className="border border-gray-300 rounded px-2 py-1"
@@ -301,12 +397,13 @@ export default function LocationsWorkspace() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           <button
-                            onClick={handleUpdateLocation}
+                            onClick={(e) => void handleUpdateLocation(e)}
                             className="text-blue-600 hover:text-blue-800 mr-3"
                           >
                             Save
                           </button>
                           <button
+                            type="button"
                             onClick={() => setEditingLocation(null)}
                             className="text-gray-600 hover:text-gray-800"
                           >
@@ -338,7 +435,7 @@ export default function LocationsWorkspace() {
                             Edit
                           </button>
                           <button
-                            onClick={() => handleDeleteLocation(location._id)}
+                            onClick={() => void handleDeleteLocation(location._id)}
                             disabled={deletingLocation === location._id}
                             className="text-red-600 hover:text-red-800 disabled:opacity-50"
                           >

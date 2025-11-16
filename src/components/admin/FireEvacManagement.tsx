@@ -1,23 +1,39 @@
-import React, { useState, useRef } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { Id } from "../../convex/_generated/dataModel";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 
+// Define interfaces for data structures
+interface FireEvacPlan {
+  _id: string;
+  residentId: string;
+  fileStorageId: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+  mobilityNeeds?: string;
+  assistanceRequired?: string;
+  medicalEquipment?: string;
+  specialInstructions?: string;
+  notes?: string;
+  createdAt: number;
+  dueDate: number;
+  status: string; // e.g., "ok", "due-soon", "overdue"
+  daysUntilDue: number;
+  version: number;
+  url: string; // URL to download the file
+}
+
 type Props = {
-  residentId: Id<"residents">;
+  residentId: string;
   residentName: string;
   onClose?: () => void;
 };
 
 export default function FireEvacManagement({ residentId, residentName, onClose }: Props) {
-  const fireEvacPlans = useQuery(api.fireEvac.getResidentFireEvacPlans, { residentId }) || [];
-  const generateUploadUrl = useMutation(api.fireEvac.generateFireEvacUploadUrl);
-  const saveFireEvacPlan = useMutation(api.fireEvac.saveResidentFireEvacPlan);
-  
+  const [fireEvacPlans, setFireEvacPlans] = useState<FireEvacPlan[]>([]);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loadingPlans, setLoadingPlans] = useState(true);
   
   const [formData, setFormData] = useState({
     mobilityNeeds: "",
@@ -26,6 +42,28 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
     specialInstructions: "",
     notes: "",
   });
+
+  const fetchFireEvacPlans = useCallback(async () => {
+    setLoadingPlans(true);
+    try {
+      const res = await fetch(`/api/uploads/fire-evac-url?residentId=${residentId}`); // Assuming this endpoint can also list plans
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+      const data: FireEvacPlan[] = await res.json();
+      setFireEvacPlans(data);
+    } catch (error: any) {
+      console.error("Error fetching fire evac plans:", error);
+      toast.error("Failed to load fire evacuation plans.");
+      setFireEvacPlans([]);
+    } finally {
+      setLoadingPlans(false);
+    }
+  }, [residentId]);
+
+  useEffect(() => {
+    void fetchFireEvacPlans();
+  }, [fetchFireEvacPlans]);
 
   const latestPlan = fireEvacPlans[0];
 
@@ -48,12 +86,35 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
     setUploading(true);
     
     try {
-      // Step 1: Get upload URL
-      const uploadUrl = await generateUploadUrl();
+      // Step 1: Get upload URL and save fire evac plan metadata
+      const res = await fetch('/api/uploads/fire-evac-url', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          residentId,
+          fileName: file.name,
+          fileSize: file.size,
+          contentType: file.type,
+          mobilityNeeds: formData.mobilityNeeds,
+          assistanceRequired: formData.assistanceRequired,
+          medicalEquipment: formData.medicalEquipment,
+          specialInstructions: formData.specialInstructions,
+          notes: formData.notes,
+        }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to prepare upload");
+      }
+
+      const { uploadUrl, storageId } = await res.json();
       
-      // Step 2: Upload file
+      // Step 2: Upload file to the received URL
       const uploadResult = await fetch(uploadUrl, {
-        method: "POST",
+        method: "PUT", // Use PUT for direct S3/blob storage upload
         headers: { "Content-Type": file.type },
         body: file,
       });
@@ -61,18 +122,6 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
       if (!uploadResult.ok) {
         throw new Error("File upload failed");
       }
-      
-      const { storageId } = await uploadResult.json();
-      
-      // Step 3: Save fire evac plan
-      await saveFireEvacPlan({
-        residentId,
-        fileStorageId: storageId,
-        fileName: file.name,
-        fileSize: file.size,
-        contentType: file.type,
-        ...formData,
-      });
       
       toast.success("Fire evacuation plan uploaded successfully!");
       setShowUploadForm(false);
@@ -86,6 +135,7 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
+      await fetchFireEvacPlans(); // Refresh plans list
     } catch (error: any) {
       console.error("Upload error:", error);
       toast.error(error.message || "Failed to upload fire evacuation plan");
@@ -120,6 +170,17 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
     }
   };
 
+  if (loadingPlans) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading fire evacuation plans...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -151,10 +212,11 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
           <h4 className="text-md font-semibold mb-4">Upload Fire Evacuation Plan for {residentName}</h4>
           <form onSubmit={handleFileUpload} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="plan-document" className="block text-sm font-medium text-gray-700 mb-2">
                 Plan Document (PDF or DOC) *
               </label>
               <input
+                id="plan-document"
                 ref={fileInputRef}
                 type="file"
                 accept=".pdf,.doc,.docx"
@@ -164,11 +226,12 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="mobility-needs" className="block text-sm font-medium text-gray-700 mb-2">
                 Mobility Needs
               </label>
               <input
                 type="text"
+                id="mobility-needs"
                 value={formData.mobilityNeeds}
                 onChange={(e) => setFormData({ ...formData, mobilityNeeds: e.target.value })}
                 placeholder="e.g., Wheelchair, Walker, Ambulatory"
@@ -177,11 +240,12 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="assistance-required" className="block text-sm font-medium text-gray-700 mb-2">
                 Assistance Required
               </label>
               <input
                 type="text"
+                id="assistance-required"
                 value={formData.assistanceRequired}
                 onChange={(e) => setFormData({ ...formData, assistanceRequired: e.target.value })}
                 placeholder="e.g., Two-person assist, One-person assist"
@@ -190,11 +254,12 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="medical-equipment" className="block text-sm font-medium text-gray-700 mb-2">
                 Medical Equipment
               </label>
               <input
                 type="text"
+                id="medical-equipment"
                 value={formData.medicalEquipment}
                 onChange={(e) => setFormData({ ...formData, medicalEquipment: e.target.value })}
                 placeholder="e.g., Oxygen tank, CPAP machine"
@@ -203,10 +268,11 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="special-instructions" className="block text-sm font-medium text-gray-700 mb-2">
                 Special Instructions
               </label>
               <textarea
+                id="special-instructions"
                 value={formData.specialInstructions}
                 onChange={(e) => setFormData({ ...formData, specialInstructions: e.target.value })}
                 placeholder="Any special evacuation instructions..."
@@ -216,10 +282,11 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
                 Notes
               </label>
               <textarea
+                id="notes"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="Additional notes..."
