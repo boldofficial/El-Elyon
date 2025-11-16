@@ -25,24 +25,76 @@ The task involves reviewing each component in `src/components/` and updating its
 
 Below is a list of all components found in `src/components/`, categorized for clarity. Each component should be reviewed and updated according to the guidelines above.
 
-### Top-Level Components
-*   `src/components/GuardianChecklistPublic.tsx`
-
 ### Admin Components
-*   `src/components/admin/AdminPortal.tsx`
+*   `src/components/admin/AdminAlertSchedule.tsx` (UPDATED)
+*   `src/components/admin/AdminDashboard.tsx` (UPDATED)
+*   `src/components/admin/AdminDeviceBadge.tsx` (UPDATED)
+*   `src/components/admin/AdminPortal.tsx` (UPDATED)
+*   `src/components/admin/BootstrapAdmin.tsx` (UPDATED)
+*   `src/components/admin/DatabaseCleanup.tsx`
+*   `src/components/admin/DataCleanupWorkspace.tsx`
+*   `src/components/admin/DeviceManagementWorkspace.tsx`
+*   `src/components/admin/EmployeeInviteAcceptance.tsx`
+*   `src/components/admin/EmployeeWorkspace.tsx`
+*   `src/components/admin/FireEvacManagement.tsx`
+*   `src/components/admin/FirstAdminSetup.tsx`
+*   `src/components/admin/ImprovedEmployeeCreation.tsx`
+*   `src/components/admin/InviteAcceptance.tsx`
+*   `src/components/admin/ISPWorkspace.tsx`
+*   `src/components/admin/LocationBanner.tsx`
+*   `src/components/admin/LocationsWorkspace.tsx`
+*   `src/components/admin/PeopleWorkspace.tsx`
+*   `src/components/admin/SecuritySettings.tsx`
+*   `src/components/admin/SettingsWorkspace.tsx`
+*   `src/components/admin/SystemSettings.tsx`
 
 ### Authentication Components
+*   `src/components/auth/AuthDiagnostic.tsx`
+*   `src/components/auth/ForgotPasswordPage.tsx`
+*   `src/components/auth/ResetPasswordPage.tsx`
 *   `src/components/auth/SignOutButton.tsx`
+*   `src/components/auth/SignInForm.tsx` (UPDATED)
 
 ### Care Components
-*   `src/components/care/CarePortal.tsx`
+*   `src/components/care/CareLogsWorkspace.tsx`
+*   `src/components/care/CarePortal.tsx` (UPDATED)
+*   `src/components/care/CareProfileWorkspace.tsx`
+*   `src/components/care/CareResidentsWorkspace.tsx`
+*   `src/components/care/CareShiftWorkspace.tsx`
+*   `src/components/care/ResidentCase.tsx`
+*   `src/components/care/ResidentOnboardingForm.tsx`
+*   `src/components/care/ResidentsWorkspace.tsx`
+
+### Compliance Components
+*   `src/components/compliance/ComplianceAlerts.tsx`
+*   `src/components/compliance/ComplianceSettings.tsx`
+*   `src/components/compliance/ComplianceWorkspace.tsx`
+
+### Guardian Components
+*   `src/components/guardian/CareShiftWorkspace.tsx`
+*   `src/components/guardian/GuardianChecklistPublic.tsx` (UPDATED)
+*   `src/components/guardian/GuardianChecklistWorkspace.tsx`
+*   `src/components/guardian/GuardianOnboardingForm.tsx`
+*   `src/components/guardian/GuardiansWorkspace.tsx`
 
 ### Kiosk Components
+*   `src/components/kiosk/KioskManagement.tsx`
+*   `src/components/kiosk/KioskPairingScreen.tsx`
 *   `src/components/kiosk/KioskSession.tsx`
 
 ### Shared Components
-*   `src/components/shared/AccessControl.tsx`
-*   `src/components/shared/PendingPage.tsx`
+*   `src/components/shared/AccessControl.tsx` (UPDATED)
+*   `src/components/shared/AutoLock.tsx`
+*   `src/components/shared/pass.tsx`
+*   `src/components/shared/PendingPage.tsx` (UPDATED)
+*   `src/components/shared/QuickSignOut.tsx`
+*   `src/components/shared/SelfieCapture.tsx`
+*   `src/components/shared/Sidebar.tsx`
+
+### Supervisor Components
+*   `src/components/supervisor/SupervisorComplianceWorkspace.tsx`
+*   `src/components/supervisor/SupervisorPortal.tsx`
+*   `src/components/supervisor/SupervisorTeamWorkspace.tsx`
 
 ---
 
