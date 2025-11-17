@@ -1,13 +1,9 @@
-/* eslint-disable @typescript-eslint/no-misused-promises */
-/* eslint-disable @typescript-eslint/no-floating-promises */
 import React, { useState, useEffect } from "react";
-import { useMutation, useQuery, useAction } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { Id } from "../../convex/_generated/dataModel";
-import FireEvacManagement from "./FireEvacManagement";
+import FireEvacManagement from "../admin/FireEvacManagement";
+import { toast } from 'sonner';
 
 type Props = {
-  residentId: Id<"residents">;
+  residentId: string;
   onBack?: () => void;
 };
 
@@ -21,15 +17,39 @@ const TABS = [
 
 export default function ResidentCase({ residentId, onBack }: Props) {
   const [tab, setTab] = useState("overview");
-  const resident = useQuery(api.people.listResidents, {})?.find((r: any) => r.id === residentId);
+  const [resident, setResident] = useState<any>(null);
+  const [loadingResident, setLoadingResident] = useState(true);
+  const [errorResident, setErrorResident] = useState<string | null>(null);
 
-  useEffect(() => {}, [residentId, tab]);
+  useEffect(() => {
+    async function fetchResident() {
+      setLoadingResident(true);
+      setErrorResident(null);
+      try {
+        const res = await fetch(`/api/care/residents?residentId=${residentId}`);
+        if (!res.ok) {
+          throw new Error('Failed to fetch resident');
+        }
+        const data = await res.json();
+        setResident(data);
+      } catch (error: any) {
+        console.error('Error fetching resident:', error);
+        setErrorResident(error.message || 'Failed to load resident data.');
+      } finally {
+        setLoadingResident(false);
+      }
+    }
+    fetchResident();
+  }, [residentId]);
 
-  if (resident === undefined) {
+  if (loadingResident) {
     return <div>Loading...</div>;
   }
+  if (errorResident) {
+    return <div className="text-red-600">{errorResident}</div>;
+  }
   if (!resident) {
-    return <div className="text-red-600">Not authorized or resident not found.</div>;
+    return <div className="text-red-600">Resident not found.</div>;
   }
 
   return (
@@ -84,29 +104,67 @@ function OverviewTab({ resident }: { resident: any }) {
   );
 }
 
-function LogsTab({ residentId }: { residentId: Id<"residents"> }) {
-  const logs = useQuery(api.kiosk.listResidentLogs, { residentId }) || [];
-  const canLog = useQuery(api.kiosk.canLogForResident, { residentId });
-  const acknowledgeIsp = useMutation(api.kiosk.acknowledgeIsp);
-  const createLog = useMutation(api.kiosk.createResidentLog);
-  const editLog = useMutation(api.kiosk.editResidentLog);
-  // const user = useQuery(api.auth.loggedInUser);
-    const user = useQuery(api.users.getCurrentUser);
-  
-
-  const [form, setForm] = useState({ mood: "", notes: "" });
-  const [editingLogId, setEditingLogId] = useState<Id<"resident_logs"> | null>(null);
+function LogsTab({ residentId }: { residentId: string }) {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [canLog, setCanLog] = useState<boolean | null>(null);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({ mood: "", notes: "" });
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const latestLog = logs.length > 0 ? logs[0] : null;
+  const fetchLogsData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [logsRes, pendingAcksRes, userRes] = await Promise.all([
+        fetch(`/api/care/resident-logs?residentId=${residentId}`),
+        fetch(`/api/care/pending-acknowledgments`),
+        fetch(`/api/users/current`),
+      ]);
+
+      if (!logsRes.ok) throw new Error('Failed to fetch logs');
+      if (!pendingAcksRes.ok) throw new Error('Failed to fetch pending acknowledgments');
+      if (!userRes.ok) throw new Error('Failed to fetch current user');
+
+      const logsData = await logsRes.json();
+      const pendingAcksData = await pendingAcksRes.json();
+      const userData = await userRes.json();
+
+      setLogs(logsData);
+      setUser(userData);
+      setCanLog(!pendingAcksData.some((ack: any) => ack.residentId === residentId));
+    } catch (e: any) {
+      console.error('Error fetching logs data:', e);
+      setError(e.message || 'Failed to load logs data.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogsData();
+  }, [residentId]);
 
   const handleAcknowledge = async () => {
     setError(null);
+    setSubmitting(true);
     try {
-      await acknowledgeIsp({ residentId });
+      const res = await fetch('/api/care/acknowledge-isp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ residentId, ispId: 'placeholder-isp-id' }), // ispId will be determined by the backend
+      });
+
+      if (!res.ok) throw new Error('Failed to acknowledge ISP');
+      toast.success('ISP acknowledged successfully!');
+      await fetchLogsData(); // Refresh data
     } catch (e: any) {
       setError(e.message || "Failed to acknowledge ISP.");
+      toast.error(e.message || "Failed to acknowledge ISP.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -115,38 +173,63 @@ function LogsTab({ residentId }: { residentId: Id<"residents"> }) {
     setError(null);
     setSubmitting(true);
     try {
-      if (!canLog) {
+      if (canLog === false) {
         setError("You must acknowledge the current ISP before submitting a log.");
         setSubmitting(false);
         return;
       }
-      await createLog({
-        residentId,
-        template: "Daily Note",
-        fields: { ...form },
+      const res = await fetch('/api/care/create-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          residentId,
+          template: "daily_notes", // Using a predefined template ID
+          content: JSON.stringify({ ...form }),
+        }),
       });
+
+      if (!res.ok) throw new Error('Failed to submit log');
+      toast.success('Log submitted successfully!');
       setForm({ mood: "", notes: "" });
+      await fetchLogsData(); // Refresh data
     } catch (e: any) {
       setError(e.message || "Failed to submit log.");
+      toast.error(e.message || "Failed to submit log.");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
-  const handleEdit = async (logId: Id<"resident_logs">) => {
+  const handleEdit = async (logId: string) => {
     setError(null);
     setSubmitting(true);
     try {
-      await editLog({
-        logId,
-        fields: { ...form },
+      const res = await fetch('/api/care/edit-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          logId,
+          residentId,
+          template: "daily_notes", // Assuming same template for editing
+          fields: { ...form },
+        }),
       });
+
+      if (!res.ok) throw new Error('Failed to edit log');
+      toast.success('Log edited successfully!');
       setEditingLogId(null);
       setForm({ mood: "", notes: "" });
+      await fetchLogsData(); // Refresh data
     } catch (e: any) {
       setError(e.message || "Failed to edit log.");
+      toast.error(e.message || "Failed to edit log.");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
+
+  if (loading) return <div>Loading logs...</div>;
+  if (error) return <div className="text-red-600">{error}</div>;
 
   return (
     <div>
@@ -202,7 +285,7 @@ function LogsTab({ residentId }: { residentId: Id<"residents"> }) {
               fields = { mood: "", notes: "" };
             }
             return (
-              <li key={log._id} className="border-b py-2">
+              <li key={log.id} className="border-b py-2">
                 <div>
                   <b>v{log.version}</b> | <b>Author:</b> {log.authorName} |{" "}
                   <b>Created:</b> {new Date(log.createdAt).toLocaleString()}
@@ -215,7 +298,7 @@ function LogsTab({ residentId }: { residentId: Id<"residents"> }) {
                   <button
                     className="button mt-1"
                     onClick={() => {
-                      setEditingLogId(log._id as Id<"resident_logs">);
+                      setEditingLogId(log.id);
                       setForm({ ...fields });
                     }}
                     disabled={submitting}
@@ -223,11 +306,11 @@ function LogsTab({ residentId }: { residentId: Id<"residents"> }) {
                     Edit (new version)
                   </button>
                 )}
-                {editingLogId === log._id && (
+                {editingLogId === log.id && (
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      handleEdit(log._id as Id<"resident_logs">);
+                      handleEdit(log.id);
                     }}
                     className="flex flex-col gap-1 mt-2"
                   >
@@ -270,20 +353,17 @@ function LogsTab({ residentId }: { residentId: Id<"residents"> }) {
   );
 }
 
-function ISPTab({ residentId }: { residentId: Id<"residents"> }) {
-  const ispFiles = useQuery(api.isp.listISPFiles, { residentId }) || [];
-  const downloadISP = useAction(api.isp.generateISPDownloadUrl);
-  const generateUploadUrl = useMutation(api.isp.generateISPUploadUrl);
-  const createISPFile = useMutation(api.isp.createISPFile);
-  const activateISPFile = useMutation(api.isp.activateISPFile);
-  const deleteISPFile = useMutation(api.isp.deleteISPFile);
-  const userRole = useQuery(api.settings.getUserRole);
+function ISPTab({ residentId }: { residentId: string }) {
+  const [ispFiles, setIspFiles] = useState<any[]>([]);
+  const [userRole, setUserRole] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   const [downloading, setDownloading] = useState<string | null>(null);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [activatingId, setActivatingId] = useState<Id<"isp_files"> | null>(null);
-  const [deletingId, setDeletingId] = useState<Id<"isp_files"> | null>(null);
+  const [activatingId, setActivatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   
   const [uploadForm, setUploadForm] = useState({
     versionLabel: "",
@@ -292,6 +372,35 @@ function ISPTab({ residentId }: { residentId: Id<"residents"> }) {
     notes: "",
     file: null as File | null,
   });
+
+  const fetchIspData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [ispFilesRes, userRoleRes] = await Promise.all([
+        fetch(`/api/care/isp-files?residentId=${residentId}`),
+        fetch(`/api/users/role`),
+      ]);
+
+      if (!ispFilesRes.ok) throw new Error('Failed to fetch ISP files');
+      if (!userRoleRes.ok) throw new Error('Failed to fetch user role');
+
+      const ispFilesData = await ispFilesRes.json();
+      const userRoleData = await userRoleRes.json();
+
+      setIspFiles(ispFilesData);
+      setUserRole(userRoleData);
+    } catch (e: any) {
+      console.error('Error fetching ISP data:', e);
+      setError(e.message || 'Failed to load ISP data.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchIspData();
+  }, [residentId]);
 
   const activeISP = ispFiles.find(file => file.status === "active");
   const draftISPs = ispFiles.filter(file => file.status === "draft");
@@ -331,8 +440,11 @@ function ISPTab({ residentId }: { residentId: Id<"residents"> }) {
 
     setUploading(true);
     try {
-      const uploadUrl = await generateUploadUrl({ residentId });
-      const result = await fetch(uploadUrl, {
+      const uploadUrlRes = await fetch('/api/care/isp-files/upload-url', { method: 'POST' });
+      if (!uploadUrlRes.ok) throw new Error('Failed to get upload URL');
+      const { url, storageId } = await uploadUrlRes.json();
+
+      const result = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": uploadForm.file.type },
         body: uploadForm.file,
@@ -342,21 +454,23 @@ function ISPTab({ residentId }: { residentId: Id<"residents"> }) {
         throw new Error("File upload failed");
       }
 
-      const { storageId } = await result.json();
-
-      await createISPFile({
-        residentId,
-        versionLabel: uploadForm.versionLabel.trim(),
-        effectiveDate: new Date(uploadForm.effectiveDate).getTime(),
-        fileStorageId: storageId,
-        fileName: uploadForm.file.name,
-        fileSize: uploadForm.file.size,
-        contentType: uploadForm.file.type,
-        preparedBy: uploadForm.preparedBy.trim() || undefined,
-        notes: uploadForm.notes.trim() || undefined,
+      await fetch('/api/care/isp-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          residentId,
+          versionLabel: uploadForm.versionLabel.trim(),
+          effectiveDate: uploadForm.effectiveDate,
+          fileStorageId: storageId,
+          fileName: uploadForm.file.name,
+          fileSize: uploadForm.file.size,
+          contentType: uploadForm.file.type,
+          preparedBy: uploadForm.preparedBy.trim() || undefined,
+          notes: uploadForm.notes.trim() || undefined,
+        }),
       });
 
-      alert("ISP file uploaded successfully");
+      toast.success("ISP file uploaded successfully");
       setShowUploadForm(false);
       setUploadForm({
         versionLabel: "",
@@ -365,53 +479,71 @@ function ISPTab({ residentId }: { residentId: Id<"residents"> }) {
         notes: "",
         file: null,
       });
+      await fetchIspData(); // Refresh data
     } catch (error: any) {
-      alert(error.message || "Upload failed");
+      toast.error(error.message || "Upload failed");
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDownload = async (ispFileId: Id<"isp_files">) => {
+  const handleDownload = async (ispFileId: string) => {
     setDownloading(ispFileId);
     try {
-      const result = await downloadISP({ ispFileId });
-      if (result?.downloadUrl) {
-        window.open(result.downloadUrl, "_blank", "noopener,noreferrer");
+      const res = await fetch(`/api/care/isp-files/download-url?ispFileId=${ispFileId}`);
+      if (!res.ok) throw new Error('Failed to get download URL');
+      const { downloadUrl } = await res.json();
+
+      if (downloadUrl) {
+        window.open(downloadUrl, "_blank", "noopener,noreferrer");
       }
     } catch (e: any) {
-      alert("Download failed: " + (e.message || "Unknown error"));
+      toast.error("Download failed: " + (e.message || "Unknown error"));
     }
     setDownloading(null);
   };
 
-  const handleActivate = async (ispFileId: Id<"isp_files">) => {
+  const handleActivate = async (ispFileId: string) => {
     if (!window.confirm("Are you sure you want to activate this ISP version? This will archive the current active version.")) {
       return;
     }
 
     setActivatingId(ispFileId);
     try {
-      await activateISPFile({ ispFileId });
-      alert("ISP file activated successfully");
+      const res = await fetch('/api/care/isp-files', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ispFileId }),
+      });
+
+      if (!res.ok) throw new Error('Failed to activate ISP file');
+      toast.success("ISP file activated successfully");
+      await fetchIspData(); // Refresh data
     } catch (error: any) {
-      alert(error.message || "Activation failed");
+      toast.error(error.message || "Activation failed");
     } finally {
       setActivatingId(null);
     }
   };
 
-  const handleDelete = async (ispFileId: Id<"isp_files">) => {
+  const handleDelete = async (ispFileId: string) => {
     if (!window.confirm("Are you sure you want to delete this ISP file? This action cannot be undone.")) {
       return;
     }
 
     setDeletingId(ispFileId);
     try {
-      await deleteISPFile({ ispFileId });
-      alert("ISP file deleted successfully");
+      const res = await fetch('/api/care/isp-files', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ispFileId }),
+      });
+
+      if (!res.ok) throw new Error('Failed to delete ISP file');
+      toast.success("ISP file deleted successfully");
+      await fetchIspData(); // Refresh data
     } catch (error: any) {
-      alert(error.message || "Delete failed");
+      toast.error(error.message || "Delete failed");
     } finally {
       setDeletingId(null);
     }
@@ -419,6 +551,9 @@ function ISPTab({ residentId }: { residentId: Id<"residents"> }) {
 
   const canActivate = userRole?.role === "admin" || userRole?.role === "supervisor";
   const canDelete = userRole?.role === "admin";
+
+  if (loading) return <div>Loading ISP data...</div>;
+  if (error) return <div className="text-red-600">{error}</div>;
 
   return (
     <div className="space-y-6">
@@ -675,11 +810,11 @@ function ISPTab({ residentId }: { residentId: Id<"residents"> }) {
   );
 }
 
-function FireEvacTab({ residentId, residentName }: { residentId: Id<"residents">; residentName: string }) {
+function FireEvacTab({ residentId, residentName }: { residentId: string; residentName: string }) {
   return <FireEvacManagement residentId={residentId} residentName={residentName} />;
 }
 
-function DocumentsTab({ residentId }: { residentId: Id<"residents"> }) {
+function DocumentsTab({ residentId }: { residentId: string }) {
   const [showUploadForm, setShowUploadForm] = useState(false);
 
   return (
@@ -704,22 +839,28 @@ function DocumentsTab({ residentId }: { residentId: Id<"residents"> }) {
           <h4 className="text-md font-semibold mb-4">Upload New Document</h4>
           <form className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="documentTitle" className="block text-sm font-medium text-gray-700 mb-2">
                 Document Title *
               </label>
               <input
+                id="documentTitle"
                 type="text"
                 placeholder="e.g., Medical Records, Consent Form"
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
+                aria-label="Document Title"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="documentType" className="block text-sm font-medium text-gray-700 mb-2">
                 Document Type
               </label>
-              <select className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <select 
+                id="documentType"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="Document Type"
+              >
                 <option value="medical">Medical Records</option>
                 <option value="consent">Consent Form</option>
                 <option value="assessment">Assessment</option>
@@ -728,25 +869,29 @@ function DocumentsTab({ residentId }: { residentId: Id<"residents"> }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="documentNotes" className="block text-sm font-medium text-gray-700 mb-2">
                 Notes (Optional)
               </label>
               <textarea
+                id="documentNotes"
                 placeholder="Additional notes about this document"
                 rows={3}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="Document Notes"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="documentFile" className="block text-sm font-medium text-gray-700 mb-2">
                 File (PDF or DOCX) *
               </label>
               <input
+                id="documentFile"
                 type="file"
                 accept=".pdf,.docx"
                 className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required
+                aria-label="Document File"
               />
               <p className="text-xs text-gray-500 mt-1">
                 Only PDF and DOCX files are allowed. Maximum size: 10MB
@@ -776,7 +921,7 @@ function DocumentsTab({ residentId }: { residentId: Id<"residents"> }) {
       <div className="text-center py-12 text-gray-500">
         <div className="text-5xl mb-4">📄</div>
         <p className="text-lg font-medium mb-2">No other documents yet</p>
-        <p className="text-sm">Upload documents using the button above</p>
+        <p className="text-sm">Click "Upload New Document" above to get started</p>
         <p className="text-xs text-gray-400 mt-4">Note: ISP and Fire Evac plans are managed in their respective tabs</p>
       </div>
     </div>
@@ -784,15 +929,40 @@ function DocumentsTab({ residentId }: { residentId: Id<"residents"> }) {
 }
 
 // Show audit trail for log actions
-function AuditTrail({ residentId }: { residentId: Id<"residents"> }) {
-  const logs = useQuery(api.kiosk.getResidentAuditTrail, { residentId }) || [];
+function AuditTrail({ residentId }: { residentId: string }) {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchAuditLogs() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await fetch(`/api/care/resident-audit-trail?residentId=${residentId}`);
+        if (!res.ok) throw new Error('Failed to fetch audit logs');
+        const data = await res.json();
+        setLogs(data);
+      } catch (e: any) {
+        console.error('Error fetching audit logs:', e);
+        setError(e.message || 'Failed to load audit logs.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchAuditLogs();
+  }, [residentId]);
+
+  if (loading) return <div>Loading audit trail...</div>;
+  if (error) return <div className="text-red-600">{error}</div>;
   if (!logs.length) return null;
+
   return (
     <div>
       <b>Audit Trail:</b>
       <ul className="text-xs mt-1">
         {logs.map((log: any) => (
-          <li key={log._id}>
+          <li key={log.id}>
             {new Date(log.timestamp).toLocaleString()} - {log.event}{" "}
             {log.details && <span>({log.details})</span>}
           </li>

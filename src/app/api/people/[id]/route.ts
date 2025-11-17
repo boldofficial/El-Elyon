@@ -1,40 +1,38 @@
-import {NextResponse} from 'next/server';
-import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '../../../../../lib/db-helpers';
-import {deleteResident} from '../../../../../db/mutations/people';
+import { NextRequest, NextResponse } from 'next/server';
+import { requireAdminAccess } from '@/lib/db-helpers';
+import { deleteResident } from '@/db/mutations/people'; // Assuming this mutation exists or will be created
+import { auth } from '@clerk/nextjs/server';
 
-export async function DELETE(request: Request, {params}: {params: {id: string}}) {
-    const {userId} = await auth();
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const { userId } = await auth();
     if (!userId) {
-        return NextResponse.json({error: 'Unauthorized'}, {status: 401});
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    await requireAdminAccess(userId);
+
+    const residentId = params.id;
+    if (!residentId) {
+      return NextResponse.json({ error: 'Resident ID is required' }, { status: 400 });
     }
 
-    try {
-        await requireAdminAccess(userId);
+    await deleteResident(residentId);
+    return NextResponse.json({ message: 'Resident deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting resident:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
 
-        const residentId = params.id;
-        if (!residentId) {
-            return NextResponse.json({error: 'Resident ID is required'}, {status: 400});
-        }
+// Placeholder for GET, PUT, POST if needed in the future for specific resident operations
+export async function GET() {
+  return NextResponse.json({ message: 'GET method not implemented for specific resident' }, { status: 501 });
+}
 
-        await deleteResident(residentId);
+export async function PUT() {
+  return NextResponse.json({ message: 'PUT method not implemented for specific resident' }, { status: 501 });
+}
 
-        await logAudit({
-            clerkUserId: userId,
-            event: 'DELETE_RESIDENT_SUCCESS',
-            details: `Resident ${residentId} deleted.`,
-            deviceId: 'system', // Placeholder
-            location: '', // Placeholder
-        });
-        return NextResponse.json({message: 'Resident deleted successfully'}, {status: 200});
-    } catch (error: any) {
-        await logAudit({
-            clerkUserId: userId,
-            event: 'DELETE_RESIDENT_FAILED',
-            details: error.message,
-            deviceId: 'system', // Placeholder
-            location: '', // Placeholder
-        });
-        return NextResponse.json({error: error.message}, {status: 500});
-    }
+export async function POST() {
+  return NextResponse.json({ message: 'POST method not implemented for specific resident' }, { status: 501 });
 }

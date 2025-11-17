@@ -1,21 +1,47 @@
-import React, { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
-import { Id } from "../../convex/_generated/dataModel";
+import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 import ResidentOnboardingForm from "./ResidentOnboardingForm";
 import ResidentCase from "./ResidentCase";
 
 
 export default function ResidentsWorkspace() {
-  const residents = useQuery(api.people.listResidents) || [];
-  const userRole = useQuery(api.settings.getUserRole);
+  const [residents, setResidents] = useState<any[]>([]);
+  const [userRole, setUserRole] = useState<any>(null);
+  const [loadingData, setLoadingData] = useState(true);
+  const [errorData, setErrorData] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedResident, setSelectedResident] = useState<Id<"residents"> | null>(null);
+  const [selectedResident, setSelectedResident] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [locationFilter, setLocationFilter] = useState("all");
 
-  const deleteResident = useMutation(api.people.deleteResident);
+  const fetchResidentsAndRole = async () => {
+    setLoadingData(true);
+    setErrorData(null);
+    try {
+      const [residentsRes, userRoleRes] = await Promise.all([
+        fetch('/api/care/residents'),
+        fetch('/api/users/role'),
+      ]);
+
+      if (!residentsRes.ok) throw new Error('Failed to fetch residents');
+      if (!userRoleRes.ok) throw new Error('Failed to fetch user role');
+
+      const residentsData = await residentsRes.json();
+      const userRoleData = await userRoleRes.json();
+
+      setResidents(residentsData);
+      setUserRole(userRoleData);
+    } catch (e: any) {
+      console.error('Error fetching initial data:', e);
+      setErrorData(e.message || 'Failed to load initial data.');
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchResidentsAndRole();
+  }, []);
 
   // Get unique locations for filter
   const locations = [...new Set(residents.map(r => r.location))];
@@ -27,23 +53,34 @@ export default function ResidentsWorkspace() {
     return matchesSearch && matchesLocation;
   });
 
-  async function handleDeleteResident(residentId: Id<"residents">) {
+  async function handleDeleteResident(residentId: string) {
     if (!window.confirm("Are you sure you want to delete this resident? This action cannot be undone.")) {
       return;
     }
     
     try {
-      await deleteResident({ residentId });
+      const res = await fetch(`/api/people/${residentId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to delete resident');
+      }
       toast.success("Resident deleted successfully");
       if (selectedResident === residentId) {
         setSelectedResident(null);
       }
+      await fetchResidentsAndRole(); // Refresh the list
     } catch (error: any) {
       toast.error(error.message || "Failed to delete resident");
     }
   }
 
   const canDelete = userRole?.role === "admin";
+
+  if (loadingData) return <div>Loading residents...</div>;
+  if (errorData) return <div className="text-red-600">{errorData}</div>;
 
   if (selectedResident) {
     const resident = residents.find(r => r.id === selectedResident);
@@ -77,21 +114,25 @@ export default function ResidentsWorkspace() {
       <div className="bg-white rounded-lg shadow-sm border p-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Search Residents</label>
+            <label htmlFor="searchResidents" className="block text-sm font-medium text-gray-700 mb-2">Search Residents</label>
             <input
+              id="searchResidents"
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by name..."
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Search Residents by name"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Location</label>
+            <label htmlFor="locationFilter" className="block text-sm font-medium text-gray-700 mb-2">Filter by Location</label>
             <select
+              id="locationFilter"
               value={locationFilter}
               onChange={(e) => setLocationFilter(e.target.value)}
               className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Filter Residents by Location"
             >
               <option value="all">All Locations</option>
               {locations.map(location => (
@@ -104,7 +145,10 @@ export default function ResidentsWorkspace() {
 
       {/* Add Resident Form */}
       {showAddForm && (
-        <ResidentOnboardingForm onCreated={() => setShowAddForm(false)} />
+        <ResidentOnboardingForm onCreated={() => {
+          setShowAddForm(false);
+          fetchResidentsAndRole(); // Refresh residents list after creation
+        }} />
       )}
 
       {/* Residents List */}
@@ -151,6 +195,7 @@ export default function ResidentsWorkspace() {
                     <button
                       onClick={() => setSelectedResident(resident.id)}
                       className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
+                      aria-label={`View details for ${resident.name}`}
                     >
                       View Details
                     </button>
@@ -159,6 +204,7 @@ export default function ResidentsWorkspace() {
                       <button
                         onClick={() => handleDeleteResident(resident.id)}
                         className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors"
+                        aria-label={`Delete ${resident.name}`}
                       >
                         Delete
                       </button>
@@ -173,4 +219,3 @@ export default function ResidentsWorkspace() {
     </div>
   );
 }
-

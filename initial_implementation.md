@@ -31,9 +31,9 @@ Below is a list of all components found in `src/components/`, categorized for cl
 *   `src/components/admin/AdminDeviceBadge.tsx` (UPDATED)
 *   `src/components/admin/AdminPortal.tsx` (UPDATED)
 *   `src/components/admin/BootstrapAdmin.tsx` (UPDATED)
-*   `src/components/admin/DatabaseCleanup.tsx`
-*   `src/components/admin/DataCleanupWorkspace.tsx`
-*   `src/components/admin/DeviceManagementWorkspace.tsx`
+*   `src/components/admin/DatabaseCleanup.tsx` (UPDATED)
+*   `src/components/admin/DataCleanupWorkspace.tsx` (UPDATED)
+*   `src/components/admin/DeviceManagementWorkspace.tsx` (UPDATED)
 *   `src/components/admin/EmployeeInviteAcceptance.tsx`
 *   `src/components/admin/EmployeeWorkspace.tsx`
 *   `src/components/admin/FireEvacManagement.tsx`
@@ -56,14 +56,14 @@ Below is a list of all components found in `src/components/`, categorized for cl
 *   `src/components/auth/SignInForm.tsx` (UPDATED)
 
 ### Care Components
-*   `src/components/care/CareLogsWorkspace.tsx`
+*   `src/components/care/CareLogsWorkspace.tsx` (UPDATED)
 *   `src/components/care/CarePortal.tsx` (UPDATED)
-*   `src/components/care/CareProfileWorkspace.tsx`
-*   `src/components/care/CareResidentsWorkspace.tsx`
-*   `src/components/care/CareShiftWorkspace.tsx`
-*   `src/components/care/ResidentCase.tsx`
-*   `src/components/care/ResidentOnboardingForm.tsx`
-*   `src/components/care/ResidentsWorkspace.tsx`
+*   `src/components/care/CareProfileWorkspace.tsx` (UPDATED)
+*   `src/components/care/CareResidentsWorkspace.tsx` (UPDATED)
+*   `src/components/care/CareShiftWorkspace.tsx` (UPDATED)
+*   `src/components/care/ResidentCase.tsx` (UPDATED)
+*   `src/components/care/ResidentOnboardingForm.tsx` (UPDATED)
+*   `src/components/care/ResidentsWorkspace.tsx` (UPDATED)
 
 ### Compliance Components
 *   `src/components/compliance/ComplianceAlerts.tsx`
