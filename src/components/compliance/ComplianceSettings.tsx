@@ -145,7 +145,7 @@ export default function ComplianceSettings() {
 
 			{/* Compliance Items */}
 			<div className="space-y-4">
-				<div className="flex justify-between items-center">
+				<div className="flex justify-between items-center mb-4">
 					<h3 className="text-lg font-semibold">Compliance Items</h3>
 					<div className="flex gap-2">
 						<button
@@ -176,6 +176,46 @@ export default function ComplianceSettings() {
 						</button>
 					</div>
 				</div>
+
+				{/* Filters */}
+				<div className="flex gap-4 mb-4">
+					<select
+						value={statusFilter}
+						onChange={(e) => setStatusFilter(e.target.value)}
+						className="border border-gray-300 rounded-md shadow-sm p-2 text-sm"
+						aria-label="Filter by Status">
+						<option value="all">All Statuses</option>
+						<option value="ok">OK</option>
+						<option value="due-soon">Due Soon</option>
+						<option value="overdue">Overdue</option>
+					</select>
+
+					<select
+						value={typeFilter}
+						onChange={(e) => setTypeFilter(e.target.value)}
+						className="border border-gray-300 rounded-md shadow-sm p-2 text-sm"
+						aria-label="Filter by Type">
+						<option value="all">All Types</option>
+						<option value="isp">ISP</option>
+						<option value="fire-evac">Fire Evac</option>
+					</select>
+
+					<select
+						value={locationFilter}
+						onChange={(e) => setLocationFilter(e.target.value)}
+						className="border border-gray-300 rounded-md shadow-sm p-2 text-sm"
+						aria-label="Filter by Location">
+						<option value="all">All Locations</option>
+						{[...new Set(overview.map((item) => item.location))].map(
+							(location) => (
+								<option key={location} value={location}>
+									{location}
+								</option>
+							)
+						)}
+					</select>
+				</div>
+
 				<div className="overflow-x-auto">
 					<table className="min-w-full divide-y divide-gray-200">
 						<thead className="bg-gray-50">

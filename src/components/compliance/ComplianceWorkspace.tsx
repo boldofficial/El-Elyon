@@ -1,7 +1,7 @@
 import React, {useState, useMemo, useEffect} from 'react';
 import {toast} from 'sonner';
-import ISPWorkspace from './ISPWorkspace';
-import FireEvacManagement from './FireEvacManagement';
+import FireEvacManagement from '../admin/FireEvacManagement';
+import ISPWorkspace from '../admin/ISPWorkspace';
 
 type StatusType = 'ok' | 'due-soon' | 'overdue';
 
@@ -153,6 +153,9 @@ export default function ComplianceWorkspace() {
 							Location
 						</label>
 						<select
+							id="location-filter"
+							title="Select location"
+							disabled={isFetching}
 							value={filters.location}
 							onChange={(e) =>
 								setFilters({...filters, location: e.target.value})
@@ -171,6 +174,9 @@ export default function ComplianceWorkspace() {
 							Item Type
 						</label>
 						<select
+							id="item-type-filter"
+							title="Select item type"
+							disabled={isFetching}
 							value={filters.itemType}
 							onChange={(e) =>
 								setFilters({...filters, itemType: e.target.value})
@@ -186,6 +192,9 @@ export default function ComplianceWorkspace() {
 							Status
 						</label>
 						<select
+							id="status-filter"
+							title="Select status"
+							disabled={isFetching}
 							value={filters.status}
 							onChange={(e) => setFilters({...filters, status: e.target.value})}
 							className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
