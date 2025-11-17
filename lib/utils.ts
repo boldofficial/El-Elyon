@@ -38,3 +38,10 @@ export function generateNeutralId(residentId: string): string {
 		.toString()
 		.padStart(4, '0');
 }
+
+// Helper: Hash a password (placeholder - replace with a robust hashing library like bcrypt)
+export async function hashPassword(password: string): Promise<string> {
+  // In a real application, use a secure hashing library like bcrypt.
+  // This is a placeholder for demonstration purposes.
+  return `hashed_${password}_${Math.random().toString(36).substring(7)}`;
+}

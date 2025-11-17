@@ -530,10 +530,13 @@ export const users = pgTable(
 		lastLoginLocation: varchar('last_login_location', {length: 255}),
 		createdAt: timestamp('created_at').notNull(),
 		updatedAt: timestamp('updated_at'),
+		resetToken: varchar('reset_token', {length: 255}),
+		resetTokenExpiry: timestamp('reset_token_expiry'),
 	},
 	(table) => ({
 		clerkUserIdIdx: index('users_clerk_user_id_idx').on(table.clerkUserId),
 		emailIdx: index('users_email_idx').on(table.email),
+		resetTokenIdx: index('users_reset_token_idx').on(table.resetToken),
 	})
 );
 

@@ -141,6 +141,93 @@ export async function sendWelcomeEmailWithCredentials(args: { employeeId: string
 }
 
 /**
+ * Send password reset email
+ * Called when a user requests to reset their password
+ */
+export async function sendPasswordResetEmail(email: string, token: string) {
+    try {
+        console.log('📧 Sending password reset email to:', email);
+
+        if (!process.env.RESEND_API_KEY) {
+            console.error('❌ RESEND_API_KEY not configured');
+            return { success: false, error: 'Email service not configured' };
+        }
+
+        const resetUrl = `${baseUrl}/reset-password?email=${encodeURIComponent(email)}&code=${encodeURIComponent(token)}`;
+
+        const emailHtml = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #f59e0b; color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; }
+            .button { display: inline-block; background: #f59e0b; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+            .footer { text-align: center; margin-top: 30px; color: #6b7280; font-size: 14px; }
+            .warning-box { background: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Password Reset Request</h1>
+            </div>
+            <div class="content">
+              <h2>Hello,</h2>
+              <p>You have requested to reset your password for your El-Elyon Properties LLC account.</p>
+              
+              <div class="warning-box">
+                <p style="margin: 0;">If you did not request a password reset, please ignore this email. Your password will remain unchanged.</p>
+              </div>
+
+              <p>To reset your password, please click the link below:</p>
+
+              <div style="text-align: center;">
+                <a href="${resetUrl}" class="button">Reset Your Password</a>
+              </div>
+
+              <p style="color: #6b7280; font-size: 14px;">Or copy and paste this link into your browser:<br>
+              <a href="${resetUrl}">${resetUrl}</a></p>
+
+              <p>This link will expire in 1 hour for security reasons.</p>
+
+              <p>If you have any questions or need further assistance, please contact your administrator.</p>
+
+              <p>Best regards,<br>
+              <strong>El-Elyon Properties Team</strong></p>
+            </div>
+            <div class="footer">
+              <p>© ${new Date().getFullYear()} El-Elyon Properties LLC. All rights reserved.</p>
+              <p style="font-size: 12px;">Powered by Bold Ideas Innovations Ltd</p>
+            </div>
+          </div>
+        </body>
+        </html>
+        `;
+
+        const { data, error } = await resend.emails.send({
+            from: fromEmail,
+            to: email,
+            subject: 'Password Reset Request for El-Elyon Properties',
+            html: emailHtml,
+        });
+
+        if (error) {
+            console.error('❌ Resend API error:', error);
+            return { success: false, error: `Failed to send password reset email: ${error.message || 'Unknown error'}` };
+        }
+
+        console.log('✅ Password reset email sent successfully:', data?.id);
+        return { success: true, emailId: data?.id };
+    } catch (error) {
+        console.error('❌ Exception while sending password reset email:', error);
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
+    }
+}
+
+/**
  * Send password change confirmation email
  * Optional - can be used to confirm password changes
  */

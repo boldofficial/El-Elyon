@@ -13,14 +13,17 @@ export async function createUser(data: {
 }
 
 export async function updateUser(
-	clerkUserId: string,
+	id: string, // Changed to update by internal ID
 	data: {
 		email?: string;
 		name?: string;
-		updatedAt: Date;
+		updatedAt?: Date; // Made optional as it might be set by default or other mutations
+		resetToken?: string | null;
+		resetTokenExpiry?: Date | null;
+		passwordHash?: string; // Add for password reset
 	}
 ) {
-	await db.update(users).set(data).where(eq(users.clerkUserId, clerkUserId));
+	await db.update(users).set(data).where(eq(users.id, id));
 }
 
 export async function deleteUser(clerkUserId: string) {
