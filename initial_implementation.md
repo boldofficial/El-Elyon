@@ -34,12 +34,12 @@ Below is a list of all components found in `src/components/`, categorized for cl
 *   `src/components/admin/DatabaseCleanup.tsx` (UPDATED)
 *   `src/components/admin/DataCleanupWorkspace.tsx` (UPDATED)
 *   `src/components/admin/DeviceManagementWorkspace.tsx` (UPDATED)
-*   `src/components/admin/EmployeeInviteAcceptance.tsx`
-*   `src/components/admin/EmployeeWorkspace.tsx`
-*   `src/components/admin/FireEvacManagement.tsx`
-*   `src/components/admin/FirstAdminSetup.tsx`
-*   `src/components/admin/ImprovedEmployeeCreation.tsx`
-*   `src/components/admin/InviteAcceptance.tsx`
+*   `src/components/admin/EmployeeInviteAcceptance.tsx` (UPDATED)
+*   `src/components/admin/EmployeeWorkspace.tsx` (UPDATED)
+*   `src/components/admin/FireEvacManagement.tsx` (UPDATED)
+*   `src/components/admin/FirstAdminSetup.tsx` (UPDATED)
+*   `src/components/admin/ImprovedEmployeeCreation.tsx` (UPDATED)
+*   `src/components/admin/InviteAcceptance.tsx` (UPDATED)
 *   `src/components/admin/ISPWorkspace.tsx`
 *   `src/components/admin/LocationBanner.tsx`
 *   `src/components/admin/LocationsWorkspace.tsx`
@@ -49,9 +49,9 @@ Below is a list of all components found in `src/components/`, categorized for cl
 *   `src/components/admin/SystemSettings.tsx`
 
 ### Authentication Components
-*   `src/components/auth/AuthDiagnostic.tsx`
-*   `src/components/auth/ForgotPasswordPage.tsx`
-*   `src/components/auth/ResetPasswordPage.tsx`
+*   `src/components/auth/AuthDiagnostic.tsx` (UPDATED)
+*   `src/components/auth/ForgotPasswordPage.tsx` (UPDATED)
+*   `src/components/auth/ResetPasswordPage.tsx` (UPDATED)
 *   `src/components/auth/SignOutButton.tsx`
 *   `src/components/auth/SignInForm.tsx` (UPDATED)
 

@@ -50,13 +50,14 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `src/app/api/admin/locations/summary/route.ts`
 *   `src/app/api/admin/locations/sync/route.ts`
 *   `src/app/api/admin/locations/update/route.ts`
-*   `src/app/api/admin/logs/recent/route.ts`
-*   `src/app/api/admin/users/[id]/role/route.ts`
 *   `src/app/api/admin/users-with-roles/route.ts`
 
 ### Authentication
 *   `src/app/api/auth/sync/route.ts`
 *   `src/app/api/auth/webhook/route.ts`
+*   `src/app/api/auth/request-password-reset/route.ts`
+*   `src/app/api/auth/verify-reset-token/route.ts`
+*   `src/app/api/auth/reset-password/route.ts`
 
 ### Device Management
 *   `src/app/api/devices/check/route.ts`
@@ -68,9 +69,14 @@ This document provides a comprehensive list of API routes, library files, and da
 ### Care Management
 *   `src/app/api/care/acknowledge-isp/route.ts`
 *   `src/app/api/care/create-log/route.ts`
+*   `src/app/api/care/edit-log/route.ts`
+*   `src/app/api/care/isp-files/download-url/route.ts`
+*   `src/app/api/care/isp-files/route.ts`
+*   `src/app/api/care/isp-files/upload-url/route.ts`
 *   `src/app/api/care/log-templates/route.ts`
 *   `src/app/api/care/logs-summary/route.ts`
 *   `src/app/api/care/pending-acknowledgments/route.ts`
+*   `src/app/api/care/resident-audit-trail/route.ts`
 *   `src/app/api/care/resident-isp-status/route.ts`
 *   `src/app/api/care/resident-logs/route.ts`
 *   `src/app/api/care/residents/route.ts`
@@ -115,13 +121,10 @@ This document provides a comprehensive list of API routes, library files, and da
 ### Supervisor Operations
 *   `src/app/api/supervisor/isp-acknowledgments/route.ts`
 *   `src/app/api/supervisor/isps/route.ts`
-*   `src/app/api/supervisor/isps/[id]/publish/route.ts`
 *   `src/app/api/supervisor/managed-locations/route.ts`
 *   `src/app/api/supervisor/team-members/route.ts`
 *   `src/app/api/supervisor/team-shift-summary/route.ts`
 *   `src/app/api/supervisor/time-exceptions/route.ts`
-*   `src/app/api/supervisor/time-exceptions/[id]/approve/route.ts`
-*   `src/app/api/supervisor/time-exceptions/[id]/deny/route.ts`
 
 ### Uploads
 *   `src/app/api/uploads/fire-evac-url/route.ts`
