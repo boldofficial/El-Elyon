@@ -65,6 +65,17 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `src/app/api/emails/send-password-change-confirmation/route.ts`
 *   `src/app/api/emails/send-welcome-email/route.ts`
 
+### Care Management
+*   `src/app/api/care/acknowledge-isp/route.ts`
+*   `src/app/api/care/create-log/route.ts`
+*   `src/app/api/care/log-templates/route.ts`
+*   `src/app/api/care/logs-summary/route.ts`
+*   `src/app/api/care/pending-acknowledgments/route.ts`
+*   `src/app/api/care/resident-isp-status/route.ts`
+*   `src/app/api/care/resident-logs/route.ts`
+*   `src/app/api/care/residents/route.ts`
+*   `src/app/api/care/search-logs/route.ts`
+
 ### Guardian Checklists
 *   `src/app/api/guardian-checklists/acknowledge/route.ts`
 *   `src/app/api/guardian-checklists/by-token/route.ts`
@@ -105,7 +116,9 @@ This document provides a comprehensive list of API routes, library files, and da
 *   `src/app/api/supervisor/isp-acknowledgments/route.ts`
 *   `src/app/api/supervisor/isps/route.ts`
 *   `src/app/api/supervisor/isps/[id]/publish/route.ts`
+*   `src/app/api/supervisor/managed-locations/route.ts`
 *   `src/app/api/supervisor/team-members/route.ts`
+*   `src/app/api/supervisor/team-shift-summary/route.ts`
 *   `src/app/api/supervisor/time-exceptions/route.ts`
 *   `src/app/api/supervisor/time-exceptions/[id]/approve/route.ts`
 *   `src/app/api/supervisor/time-exceptions/[id]/deny/route.ts`
