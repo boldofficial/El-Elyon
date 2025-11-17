@@ -1,4 +1,5 @@
 import React, {useState, useEffect} from 'react';
+import { toast } from 'sonner';
 
 const COMM_CHANNELS = [
 	{value: 'email', label: 'Email'},
@@ -16,8 +17,8 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 		generateChecklist: false,
 	});
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [error, setError] = useState(null);
-	const [availableLocations, setAvailableLocations] = useState([]);
+	const [error, setError] = useState<string | null>(null);
+	const [availableLocations, setAvailableLocations] = useState<string[]>([]);
 	const [loadingLocations, setLoadingLocations] = useState(true);
 
 	useEffect(() => {
@@ -26,9 +27,9 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 			try {
 				const res = await fetch('/api/admin/employees/available-locations');
 				if (!res.ok) throw new Error('Failed to fetch locations');
-				const data = await res.json();
+				const data: string[] = await res.json();
 				setAvailableLocations(data);
-			} catch (e) {
+			} catch (e: any) {
 				console.error('Error fetching locations:', e);
 				setError(e.message || 'Failed to load locations.');
 			} finally {
@@ -38,7 +39,7 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 		fetchLocations();
 	}, []);
 
-	const handleGuardianChange = (idx, field, value) => {
+	const handleGuardianChange = (idx: number, field: string, value: string) => {
 		setForm((prev) => {
 			const guardians = [...prev.guardians];
 			guardians[idx] = {...guardians[idx], [field]: value};
@@ -56,14 +57,15 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 		}));
 	};
 
-	const removeGuardian = (idx) => {
+	const removeGuardian = (idx: number) => {
 		setForm((prev) => ({
 			...prev,
 			guardians: prev.guardians.filter((_, i) => i !== idx),
 		}));
 	};
 
-	const handleSubmit = async () => {
+	const handleSubmit = async (e: React.FormEvent) => {
+		e.preventDefault(); // Prevent default form submission
 		setError(null);
 
 		if (!form.legalName.trim() || !form.dob.trim() || !form.location.trim()) {
@@ -90,7 +92,7 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 			}
 
 			const result = await res.json();
-			alert('Resident created successfully!');
+			toast.success('Resident created successfully!');
 			setForm({
 				legalName: '',
 				dob: '',
@@ -101,9 +103,9 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 				generateChecklist: false,
 			});
 			if (onCreated && result && result.id) onCreated(result.id);
-		} catch (err) {
+		} catch (err: any) {
 			setError(err.message);
-			alert(err.message);
+			toast.error(err.message);
 		} finally {
 			setIsSubmitting(false);
 		}
@@ -114,10 +116,11 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 			<h3 className="text-lg font-semibold mb-4">Add New Resident</h3>
 			<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 				<div>
-					<label className="block text-sm font-medium text-gray-700 mb-2">
+					<label htmlFor="legalName" className="block text-sm font-medium text-gray-700 mb-2">
 						Legal Name *
 					</label>
 					<input
+						id="legalName"
 						type="text"
 						value={form.legalName}
 						onChange={(e) =>
@@ -126,32 +129,39 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 						className="w-full border border-gray-300 rounded-md px-3 py-2"
 						required
 						disabled={isSubmitting}
+						aria-label="Resident Legal Name"
 					/>
 				</div>
 				<div>
-					<label className="block text-sm font-medium text-gray-700 mb-2">
+					<label htmlFor="dob" className="block text-sm font-medium text-gray-700 mb-2">
 						Date of Birth *
 					</label>
 					<input
+						id="dob"
 						type="date"
 						value={form.dob}
 						onChange={(e) => setForm((f) => ({...f, dob: e.target.value}))}
 						className="w-full border border-gray-300 rounded-md px-3 py-2"
 						required
 						disabled={isSubmitting}
+						aria-label="Resident Date of Birth"
 					/>
 				</div>
 				<div>
-					<label className="block text-sm font-medium text-gray-700 mb-2">
+					<label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-2">
 						Primary Location *
 					</label>
 					<select
+						id="location"
 						value={form.location}
 						onChange={(e) => setForm((f) => ({...f, location: e.target.value}))}
 						className="w-full border border-gray-300 rounded-md px-3 py-2"
 						required
-						disabled={isSubmitting}>
-						<option value="">Select location</option>
+						disabled={isSubmitting || loadingLocations}
+						aria-label="Resident Primary Location">
+						<option value="">
+							{loadingLocations ? 'Loading locations...' : 'Select location'}
+						</option>
 						{availableLocations.map((loc) => (
 							<option key={loc} value={loc}>
 								{loc}
@@ -173,9 +183,9 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 							onChange={(e) =>
 								handleGuardianChange(idx, 'name', e.target.value)
 							}
-							className="border border-gray-300 rounded-md px-3 py-2 flex-1"
+							className="w-full border border-gray-300 rounded-md px-3 py-2 flex-1"
 							required
-							disabled={isSubmitting}
+							disabled={isSubmitting || loadingLocations}
 							aria-label={`Guardian ${idx + 1} Name`}
 						/>
 						<input
@@ -185,9 +195,9 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 							onChange={(e) =>
 								handleGuardianChange(idx, 'email', e.target.value)
 							}
-							className="border border-gray-300 rounded-md px-3 py-2 flex-1"
+							className="w-full border border-gray-300 rounded-md px-3 py-2 flex-1"
 							required
-							disabled={isSubmitting}
+							disabled={isSubmitting || loadingLocations}
 							aria-label={`Guardian ${idx + 1} Email`}
 						/>
 						<input
@@ -197,9 +207,9 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 							onChange={(e) =>
 								handleGuardianChange(idx, 'phone', e.target.value)
 							}
-							className="border border-gray-300 rounded-md px-3 py-2 flex-1"
+							className="w-full border border-gray-300 rounded-md px-3 py-2 flex-1"
 							required
-							disabled={isSubmitting}
+							disabled={isSubmitting || loadingLocations}
 							aria-label={`Guardian ${idx + 1} Phone`}
 						/>
 						<select
@@ -207,9 +217,9 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 							onChange={(e) =>
 								handleGuardianChange(idx, 'preferredChannel', e.target.value)
 							}
-							className="border border-gray-300 rounded-md px-3 py-2 flex-1"
+							className="w-full border border-gray-300 rounded-md px-3 py-2 flex-1"
 							required
-							disabled={isSubmitting}
+							disabled={isSubmitting || loadingLocations}
 							aria-label={`Guardian ${idx + 1} Preferred Communication Channel`}>
 							{COMM_CHANNELS.map((ch) => (
 								<option key={ch.value} value={ch.value}>
@@ -222,7 +232,7 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 								type="button"
 								onClick={() => removeGuardian(idx)}
 								className="text-red-600"
-								disabled={isSubmitting}>
+								disabled={isSubmitting || loadingLocations}>
 								Remove
 							</button>
 						)}
@@ -232,7 +242,7 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 					type="button"
 					onClick={addGuardian}
 					className="text-blue-600 mt-2"
-					disabled={isSubmitting}>
+					disabled={isSubmitting || loadingLocations}>
 					+ Add Guardian
 				</button>
 			</div>
@@ -244,7 +254,7 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 					onChange={(e) =>
 						setForm((f) => ({...f, generateChecklist: e.target.checked}))
 					}
-					disabled={isSubmitting}
+					disabled={isSubmitting || loadingLocations}
 				/>
 				<label
 					htmlFor="generateChecklist"
@@ -261,7 +271,7 @@ export default function ResidentOnboardingForm({ onCreated }: { onCreated?: (res
 				<button
 					onClick={handleSubmit}
 					className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-					disabled={isSubmitting}>
+					disabled={isSubmitting || loadingLocations}>
 					{isSubmitting ? 'Creating...' : 'Create Resident'}
 				</button>
 			</div>
