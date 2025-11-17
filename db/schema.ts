@@ -172,6 +172,7 @@ export const residentLogs = pgTable(
 		location: varchar('location', {length: 255}),
 		shiftId: uuid('shift_id').references(() => shifts.id),
 		authorId: varchar('author_id', {length: 255}),
+		authorName: varchar('author_name', {length: 255}), // Added authorName
 		version: integer('version'),
 		template: varchar('template', {length: 255}),
 		createdAt: timestamp('created_at').defaultNow(),
@@ -186,6 +187,7 @@ export const residentLogs = pgTable(
 		residentIdIdx: index('resident_logs_resident_id_idx').on(table.residentId),
 		locationIdx: index('resident_logs_location_idx').on(table.location),
 		authorIdIdx: index('resident_logs_author_id_idx').on(table.authorId),
+		authorNameIdx: index('resident_logs_author_name_idx').on(table.authorName), // Added index for authorName
 		createdAtIdx: index('resident_logs_created_at_idx').on(table.createdAt),
 	})
 );

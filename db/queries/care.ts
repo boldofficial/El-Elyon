@@ -360,7 +360,7 @@ export async function getCurrentShift(clerkUserId: string) {
 			eq(shifts.clerkUserId, clerkUserId),
 			isNull(shifts.clockOutTime)
 		),
-		orderBy: (shifts, {desc}) => [desc(shifts.createdAt)],
+		orderBy: (shifts, {desc}) => [desc(shifts.clockInTime)],
 	});
 
 	return currentShift
@@ -449,4 +449,41 @@ export async function getPendingAcknowledgments(clerkUserId: string) {
 		})
 	);
 	return enriched;
+}
+
+// Query: Get resident audit trail
+export async function getResidentAuditTrail(clerkUserId: string, residentId: string) {
+  const userRole = await requireCareAccess(clerkUserId);
+
+  const resident = await db.query.residents.findFirst({
+    where: eq(residents.id, residentId),
+  });
+  if (!resident) throw new Error('Resident not found');
+
+  const userLocations =
+    userRole.role === 'admin' ? [] : userRole.locations || [];
+  if (
+    userRole.role !== 'admin' &&
+    !userLocations.includes(resident.location)
+  ) {
+    throw new Error('Access denied to view audit trail for this resident');
+  }
+
+  // Fetch audit logs that are related to this resident
+  // This assumes that residentId is part of the details or there's a direct link
+  // For now, we'll filter by details containing the residentId.
+  // A more robust solution might involve adding a residentId column to auditLogs.
+  const auditLogs = await db.query.auditLogs.findMany({
+    where: (auditLogs, { like }) => like(auditLogs.details, `%residentId=${residentId}%`),
+    orderBy: (auditLogs, { desc }) => [desc(auditLogs.timestamp)],
+    limit: 50, // Limit to recent audit logs
+  });
+
+  return auditLogs.map(log => ({
+    id: log.id,
+    event: log.event,
+    details: log.details,
+    timestamp: log.timestamp,
+    clerkUserId: log.clerkUserId,
+  }));
 }

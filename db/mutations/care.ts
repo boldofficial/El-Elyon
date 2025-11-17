@@ -61,6 +61,75 @@ export async function createResidentLog(clerkUserId: string, residentId: string,
 	return newLog.id;
 }
 
+// Mutation: Edit resident log
+export async function editResidentLog(args: {
+  logId: string;
+  residentId: string;
+  template: string;
+  fields: Record<string, any>;
+  authorId: string;
+  authorName: string;
+}) {
+  const { logId, residentId, template, fields, authorId, authorName } = args;
+  const userRole = await requireCareAccess(authorId);
+
+  // Check if resident exists and user has access
+  const resident = await db.query.residents.findFirst({
+    where: eq(residents.id, residentId),
+  });
+  if (!resident) throw new Error('Resident not found');
+
+  const userLocations =
+    userRole.role === 'admin' ? [] : userRole.locations || [];
+  if (
+    userRole.role !== 'admin' &&
+    !userLocations.includes(resident.location)
+  ) {
+    throw new Error('Access denied to edit logs for this resident');
+  }
+
+  // Get the next version number for this resident and log
+  const existingLogs = await db.query.residentLogs.findMany({
+    where: and(eq(residentLogs.residentId, residentId), eq(residentLogs.template, template)),
+  });
+
+  const nextVersion =
+    Math.max(
+      0,
+      ...existingLogs.map((log) =>
+        typeof log.version === 'number' ? log.version : 0
+      )
+    ) + 1;
+
+  const [updatedLog] = await db.insert(residentLogs).values({
+    residentId: residentId,
+    authorId: authorId,
+    authorName: authorName,
+    version: nextVersion,
+    template: template,
+    content: JSON.stringify(fields),
+    location: resident.location,
+    createdAt: new Date(),
+    // Assuming logId is the ID of the log being "edited" to create a new version
+    // If the intention is to update the existing log entry, the logic would be different.
+    // For now, this creates a new version as per the original Convex pattern.
+  }).returning();
+
+  if (!updatedLog) {
+    throw new Error('Failed to edit resident log');
+  }
+
+  await logAudit({
+    clerkUserId: authorId,
+    event: 'edit_resident_log',
+    details: `residentId=${residentId},template=${template},version=${nextVersion},originalLogId=${logId}`,
+    deviceId: 'system',
+    location: '',
+  });
+
+  return updatedLog.id;
+}
+
 // Mutation: Generate upload URL for selfie
 export async function generateSelfieUploadUrl() {
 	// In a real Next.js app, this would interact with a file storage service
