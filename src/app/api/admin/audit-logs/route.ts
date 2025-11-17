@@ -43,7 +43,7 @@ export async function GET(request: Request) {
 
         const logs = await db.query.auditLogs.findMany({
             where: and(...whereConditions),
-            orderBy: (auditLogsTable: typeof auditLogs) => [desc(auditLogsTable.timestamp)],
+            orderBy: (fields) => [desc(fields.timestamp)],
             limit: 1000, // Limit to 1000 as in Convex
         });
         const employeesList = await db.query.employees.findMany();
