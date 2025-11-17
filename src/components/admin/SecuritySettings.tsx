@@ -118,6 +118,7 @@ export default function SecuritySettings() {
 		if (activeTab === 'audit') {
 			fetchAuditLogs();
 		}
+	// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [auditFilters, activeTab]);
 
 	const handleUpdateUser = async (e: React.FormEvent) => {
@@ -269,10 +270,12 @@ export default function SecuritySettings() {
 									</div>
 
 									<div>
-										<label className="block text-sm font-medium text-gray-700 mb-2">
+										<label htmlFor="role-select" className="block text-sm font-medium text-gray-700 mb-2">
 											Role
 										</label>
 										<select
+											id="role-select"
+											title="Select user role"
 											value={editingUser.role || ''}
 											onChange={(e) =>
 												setEditingUser({...editingUser, role: e.target.value})
@@ -462,10 +465,12 @@ export default function SecuritySettings() {
 						<h3 className="text-lg font-semibold mb-4">Filter Audit Logs</h3>
 						<div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-2">
+								<label htmlFor="audit-actor-select" className="block text-sm font-medium text-gray-700 mb-2">
 									Actor
 								</label>
 								<select
+									id="audit-actor-select"
+									title="Select audit actor"
 									value={auditFilters.actor}
 									onChange={(e) =>
 										setAuditFilters({...auditFilters, actor: e.target.value})
@@ -481,10 +486,12 @@ export default function SecuritySettings() {
 							</div>
 
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-2">
+								<label htmlFor="audit-action-select" className="block text-sm font-medium text-gray-700 mb-2">
 									Action
 								</label>
 								<select
+									id="audit-action-select"
+									title="Select audit action"
 									value={auditFilters.action}
 									onChange={(e) =>
 										setAuditFilters({...auditFilters, action: e.target.value})
@@ -500,10 +507,12 @@ export default function SecuritySettings() {
 							</div>
 
 							<div>
-								<label className="block text-sm font-medium text-gray-700 mb-2">
+								<label htmlFor="audit-location-select" className="block text-sm font-medium text-gray-700 mb-2">
 									Location
 								</label>
 								<select
+									id="audit-location-select"
+									title="Select audit location"
 									value={auditFilters.location}
 									onChange={(e) =>
 										setAuditFilters({...auditFilters, location: e.target.value})
@@ -635,7 +644,7 @@ export default function SecuritySettings() {
 													</div>
 												</td>
 												<td className="px-6 py-4 whitespace-nowrap">
-													<div className="text-sm text-gray-500 font-mono text-xs">
+													<div className=" text-gray-500 font-mono text-xs">
 														{log.deviceId}
 													</div>
 												</td>
