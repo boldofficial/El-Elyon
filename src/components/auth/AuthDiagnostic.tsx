@@ -1,12 +1,67 @@
-import {useQuery} from 'convex/react';
-import {api} from '../../convex/_generated/api';
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import {toast} from 'sonner';
 
+interface AdminUser {
+	userId: string;
+	role: string;
+	locations?: string[];
+}
+
 export default function AuthDiagnostic() {
-	const needsBootstrap = useQuery(api.auth.needsBootstrap);
-	const admins = useQuery(api.auth.listAdmins);
+	const [needsBootstrap, setNeedsBootstrap] = useState<boolean | undefined>(
+		undefined
+	);
+	const [admins, setAdmins] = useState<AdminUser[] | undefined>(undefined);
+	const [loadingBootstrap, setLoadingBootstrap] = useState(true);
+	const [loadingAdmins, setLoadingAdmins] = useState(true);
 	const [showDetails, setShowDetails] = useState(false);
+
+	useEffect(() => {
+		const fetchNeedsBootstrap = async () => {
+			try {
+				const response = await fetch('/api/admin/has-admin');
+				if (!response.ok) {
+					throw new Error('Failed to fetch bootstrap status');
+				}
+				const data = await response.json();
+				setNeedsBootstrap(!data.hasAdmin); // hasAdmin is true if admin exists, so needsBootstrap is false
+			} catch (error) {
+				console.error('Error fetching bootstrap status:', error);
+				toast.error('Failed to load bootstrap status.');
+				setNeedsBootstrap(undefined); // Indicate an error or unknown state
+			} finally {
+				setLoadingBootstrap(false);
+			}
+		};
+
+		const fetchAdmins = async () => {
+			try {
+				const response = await fetch('/api/admin/users-with-roles');
+				if (!response.ok) {
+					throw new Error('Failed to fetch admins');
+				}
+				const data = await response.json();
+				// Assuming data.users is an array of users, and we need to filter for admins
+				const adminUsers: AdminUser[] = data.users
+					.filter((user: any) => user.role === 'admin')
+					.map((user: any) => ({
+						userId: user.clerkUserId, // Assuming clerkUserId is the user ID
+						role: user.role,
+						locations: user.locations, // Assuming locations might be part of the user object
+					}));
+				setAdmins(adminUsers);
+			} catch (error) {
+				console.error('Error fetching admins:', error);
+				toast.error('Failed to load admin list.');
+				setAdmins(undefined); // Indicate an error or unknown state
+			} finally {
+				setLoadingAdmins(false);
+			}
+		};
+
+		fetchNeedsBootstrap();
+		fetchAdmins();
+	}, []);
 
 	const handleForceRefresh = () => {
 		toast.info('Refreshing page...');
@@ -33,15 +88,19 @@ export default function AuthDiagnostic() {
 										? 'bg-yellow-100 text-yellow-800'
 										: 'bg-green-100 text-green-800'
 								}`}>
-								{needsBootstrap === undefined
+								{loadingBootstrap
 									? 'Loading...'
-									: needsBootstrap.toString()}
+									: needsBootstrap === undefined
+										? 'Error'
+										: needsBootstrap.toString()}
 							</span>
 						</div>
 						<p className="text-sm text-blue-700 dark:text-blue-300">
-							{needsBootstrap
-								? 'No admin exists - Bootstrap page should show'
-								: 'Admin exists - Sign-in page should show'}
+							{loadingBootstrap
+								? 'Checking admin bootstrap status...'
+								: needsBootstrap
+									? 'No admin exists - Bootstrap page should show'
+									: 'Admin exists - Sign-in page should show'}
 						</p>
 					</div>
 
@@ -52,7 +111,11 @@ export default function AuthDiagnostic() {
 								Admin Count:
 							</span>
 							<span className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-semibold">
-								{admins === undefined ? 'Loading...' : admins.length}
+								{loadingAdmins
+									? 'Loading...'
+									: admins === undefined
+										? 'Error'
+										: admins.length}
 							</span>
 						</div>
 						{admins && admins.length > 0 && (
@@ -118,8 +181,8 @@ export default function AuthDiagnostic() {
 							💡 Expected Behavior:
 						</h3>
 						<ul className="text-sm text-amber-800 dark:text-amber-300 space-y-1 list-disc list-inside">
-							<li>If needsBootstrap = true → Show Bootstrap page</li>
-							<li>If needsBootstrap = false → Show Sign-in page</li>
+							<li>If needsBootstrap = true &rarr; Show Bootstrap page</li>
+							<li>If needsBootstrap = false &rarr; Show Sign-in page</li>
 							<li>Admin count should match roles in database</li>
 						</ul>
 					</div>
@@ -129,7 +192,7 @@ export default function AuthDiagnostic() {
 						<div className="p-4 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
 							<div className="flex items-start gap-3">
 								<svg
-									className="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5"
+									className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5"
 									fill="none"
 									stroke="currentColor"
 									viewBox="0 0 24 24">
@@ -146,8 +209,8 @@ export default function AuthDiagnostic() {
 									</p>
 									<p className="text-sm text-green-700 dark:text-green-300">
 										Your admin account exists. You should now see the sign-in
-										page instead of bootstrap. If you're still seeing the
-										bootstrap page, click "Force Page Refresh" above.
+										page instead of bootstrap. If you&quot;re still seeing the
+										bootstrap page, click &quot;Force Page Refresh&quot; above.
 									</p>
 								</div>
 							</div>

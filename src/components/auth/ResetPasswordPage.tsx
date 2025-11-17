@@ -1,13 +1,9 @@
-/* eslint-disable @typescript-eslint/no-misused-promises */
 "use client";
 import { useEffect, useState } from "react";
-import { useMutation } from "convex/react";
-import { api } from "../../convex/_generated/api";
+import Link from "next/link";
 import { toast } from "sonner";
 
 export default function ResetPasswordPage() {
-  const resetPasswordMutation = useMutation(api.passwordReset.resetPassword);
-  const verifyTokenMutation = useMutation(api.passwordReset.verifyResetToken);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
@@ -17,41 +13,51 @@ export default function ResetPasswordPage() {
   const [userName, setUserName] = useState("");
 
   useEffect(() => {
-    // Get the full URL and parse it manually
     const fullUrl = window.location.href;
     const url = new URL(fullUrl);
     const emailParam = (url.searchParams.get("email") || "").trim().toLowerCase();
     const codeParam = (url.searchParams.get("code") || "").trim();
-    
+
     console.log("Full URL:", fullUrl);
     console.log("Search params:", url.search);
     console.log("Email param:", emailParam);
     console.log("Code param:", codeParam);
-    
+
     setEmail(emailParam);
     setCode(codeParam);
 
-    // Verify the token if we have both email and code
-    if (emailParam && codeParam) {
-      verifyTokenMutation({ email: emailParam, token: codeParam })
-        .then((result) => {
-          if (result.valid) {
+    const verifyToken = async () => {
+      if (emailParam && codeParam) {
+        try {
+          const response = await fetch("/api/auth/verify-reset-token", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email: emailParam, token: codeParam }),
+          });
+
+          const result = await response.json();
+
+          if (response.ok && result.valid) {
             setTokenValid(true);
             setUserName(result.userName || "");
           } else {
             setTokenValid(false);
             toast.error(result.message || "Invalid reset link");
           }
-        })
-        .catch((err) => {
+        } catch (err: any) {
           setTokenValid(false);
           toast.error("Failed to verify reset link");
           console.error("Token verification error:", err);
-        });
-    } else {
-      setTokenValid(false);
-    }
-  }, [verifyTokenMutation]);
+        }
+      } else {
+        setTokenValid(false);
+      }
+    };
+
+    verifyToken();
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -70,18 +76,25 @@ export default function ResetPasswordPage() {
 
     setSubmitting(true);
     try {
-      await resetPasswordMutation({
-        email,
-        token: code,
-        newPassword: password,
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, token: code, newPassword: password }),
       });
-      
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Reset failed. Please try again.");
+      }
+
       toast.success("Password reset successfully! Redirecting to sign in...");
       setTimeout(() => {
         window.location.href = "/";
       }, 2000);
     } catch (err: any) {
-      toast.error(err?.message ?? "Reset failed. Please try again.");
+      toast.error(err.message ?? "Reset failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -117,12 +130,12 @@ export default function ResetPasswordPage() {
             <p className="text-xs text-gray-500 mb-6">
               Debug: Email={email || "missing"}, Code={code || "missing"}
             </p>
-            <a
+            <Link
               href="/forgot"
               className="inline-block px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               Request New Reset Link
-            </a>
+            </Link>
           </div>
         </div>
       </div>
@@ -195,12 +208,12 @@ export default function ResetPasswordPage() {
           </button>
 
           <div className="text-center">
-            <a
+            <Link
               href="/"
               className="text-sm text-blue-600 hover:text-blue-800 underline"
             >
               Back to Sign In
-            </a>
+            </Link>
           </div>
         </form>
 
