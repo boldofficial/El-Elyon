@@ -1,3 +1,5 @@
+// lib/db-helpers.ts
+
 import {db} from '../db/index';
 import {roles, auditLogs} from '../db/schema'; // Import auditLogs schema
 import {eq} from 'drizzle-orm';
