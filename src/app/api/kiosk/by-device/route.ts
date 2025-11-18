@@ -2,7 +2,7 @@
 // Get kiosk by device ID API
 // ===================================
 import {NextRequest, NextResponse} from 'next/server';
-import {db} from '@/db';
+import {db} from '@/db/index';
 import {kiosks} from '@/db/schema';
 import {eq} from 'drizzle-orm';
 

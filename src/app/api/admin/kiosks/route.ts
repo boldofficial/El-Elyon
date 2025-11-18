@@ -1,9 +1,9 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '../../../../../lib/db-helpers';
-import {insertKiosk} from '../../../../../db/mutations/kiosks';
-import {db} from '../../../../../db/index';
-import {kiosks} from '../../../../../db/schema';
+import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {insertKiosk} from '@/db/mutations/kiosks';
+import {db} from '@/db/index';
+import {kiosks} from '@/db/schema';
 import {eq} from 'drizzle-orm';
 
 export async function POST(request: Request) {

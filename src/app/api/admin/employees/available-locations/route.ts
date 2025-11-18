@@ -1,3 +1,5 @@
+// src/app/api/admin/employees/available-locations/route.ts
+
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {getAvailableLocations} from '@/db/queries/employees';
