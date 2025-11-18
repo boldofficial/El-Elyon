@@ -2,7 +2,7 @@
 // Get guardian checklist by token API
 // ====================================
 import {NextRequest, NextResponse} from 'next/server';
-import {db} from '@/db';
+import {db} from '@/db/index';
 import {
 	guardianChecklistLinks,
 	guardianChecklistTemplates,

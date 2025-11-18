@@ -1,8 +1,11 @@
+// src/app/api/guardians/route.ts
+
+
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireCareAccess, logAudit} from '../../../../lib/db-helpers';
-import {listAllGuardians, getResidentById} from '../../../../db/queries/people';
-import {insertGuardian} from '../../../../db/mutations/guardians';
+import {requireCareAccess, logAudit} from '@/lib/db-helpers';
+import {listAllGuardians, getResidentById} from '@/db/queries/people';
+import {insertGuardian} from '@/db/mutations/guardians';
 
 export async function GET(request: Request) {
     const {userId} = await auth();

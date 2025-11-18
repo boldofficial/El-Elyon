@@ -1,7 +1,8 @@
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {getClerkUser} from '@/lib/clerk';
-import {getUserByClerkId, createUser, updateUser} from '@/db/queries/users'; // User mutations are currently in queries/users.ts
+
+
 import {getEmployeeByClerkId} from '@/db/queries/employees';
 import {createEmployee, updateEmployee} from '@/db/mutations/employees';
 import {
@@ -10,6 +11,8 @@ import {
 	updateRole,
 	checkForAdmins,
 } from '@/db/queries/roles';
+import { getUserByClerkId } from '@/db/queries/users';
+import { createUser, updateUser } from '@/db/mutations/users';
 
 export async function POST() {
 	try {

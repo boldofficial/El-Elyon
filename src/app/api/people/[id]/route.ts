@@ -1,3 +1,5 @@
+// src/app/api/people/[id]/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAccess } from '@/lib/db-helpers';
 import { deleteResident } from '@/db/mutations/people'; // Assuming this mutation exists or will be created

@@ -1,6 +1,6 @@
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
-import {db} from '@/db';
+import {db} from '@/db/index';
 import {shifts} from '@/db/schema';
 import {eq, and, isNull} from 'drizzle-orm';
 
