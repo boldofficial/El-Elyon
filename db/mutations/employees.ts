@@ -1,9 +1,33 @@
 import {db} from '../index';
-import {employees, roles, shifts, residentLogs, auditLogs, ispAccessLogs, ispAcknowledgments, complianceAlerts, residents, guardians, kiosks, users, hrFiles, hrFileLogs} from '../schema';
+import {
+	employees,
+	roles,
+	shifts,
+	residentLogs,
+	auditLogs,
+	ispAccessLogs,
+	ispAcknowledgments,
+	complianceAlerts,
+	residents,
+	guardians,
+	kiosks,
+	users,
+	hrFiles,
+	hrFileLogs,
+} from '../schema';
 import {eq, and, or, isNull} from 'drizzle-orm';
 import {generateToken, generatePassword} from '@/lib/utils';
-import {getClerkUser, createClerkUser, updateClerkMetadata, deleteClerkUser} from '@/lib/clerk';
-import {sendInviteEmail, sendWelcomeEmailWithCredentials} from '@/lib/emails';
+import {
+	getClerkUser,
+	createClerkUser,
+	updateClerkMetadata,
+	deleteClerkUser,
+} from '@/lib/clerk';
+import {
+	// sendInviteEmail,
+
+	sendWelcomeEmailWithCredentials,
+} from '@/lib/emails';
 import {auth} from '@clerk/nextjs/server';
 import {getUserRoleDoc, requireAdminAccess, logAudit} from '@/lib/db-helpers'; // Import from db-helpers
 
@@ -20,7 +44,10 @@ export async function acceptInvite(token: string) {
 		throw new Error('Invalid invite token');
 	}
 
-	if (!employee.inviteExpiresAt || employee.inviteExpiresAt.getTime() < Date.now()) {
+	if (
+		!employee.inviteExpiresAt ||
+		employee.inviteExpiresAt.getTime() < Date.now()
+	) {
 		console.log('Invite expired for employee:', employee.name);
 		throw new Error('Invite expired');
 	}
@@ -30,10 +57,13 @@ export async function acceptInvite(token: string) {
 		throw new Error('Invite already accepted');
 	}
 
-	await db.update(employees).set({
-		hasAcceptedInvite: true,
-		employmentStatus: 'active',
-	}).where(eq(employees.id, employee.id));
+	await db
+		.update(employees)
+		.set({
+			hasAcceptedInvite: true,
+			employmentStatus: 'active',
+		})
+		.where(eq(employees.id, employee.id));
 
 	await logAudit({
 		clerkUserId: null, // No clerkUserId yet for public invite acceptance
@@ -55,7 +85,11 @@ export async function acceptInvite(token: string) {
 }
 
 // Mutation: Link authenticated Clerk user to employee record and create role
-export async function linkUserToEmployee(employeeId: string, clerkUserId: string, userEmail: string) {
+export async function linkUserToEmployee(
+	employeeId: string,
+	clerkUserId: string,
+	userEmail: string
+) {
 	const employee = await db.query.employees.findFirst({
 		where: eq(employees.id, employeeId),
 	});
@@ -90,11 +124,14 @@ export async function linkUserToEmployee(employeeId: string, clerkUserId: string
 	});
 
 	// Update employee record with Clerk user link
-	await db.update(employees).set({
-		clerkUserId,
-		onboardedBy: clerkUserId,
-		onboardedAt: new Date(),
-	}).where(eq(employees.id, employee.id));
+	await db
+		.update(employees)
+		.set({
+			clerkUserId,
+			onboardedBy: clerkUserId,
+			onboardedAt: new Date(),
+		})
+		.where(eq(employees.id, employee.id));
 
 	await logAudit({
 		clerkUserId,
@@ -108,18 +145,24 @@ export async function linkUserToEmployee(employeeId: string, clerkUserId: string
 }
 
 // Mutation: Create employee with Clerk account (admin only)
-export async function createEmployee(args: {
-	name: string;
-	email: string;
-	role: 'admin' | 'supervisor' | 'staff';
-	locations: string[];
-	assignedDeviceId?: string;
-}, adminClerkUserId: string) {
+export async function createEmployee(
+	args: {
+		name: string;
+		email: string;
+		role: 'admin' | 'supervisor' | 'staff';
+		locations: string[];
+		assignedDeviceId?: string;
+	},
+	adminClerkUserId: string
+) {
 	await requireAdminAccess(adminClerkUserId);
 
 	// Check if employee with this email already exists
 	const existingEmployee = await db.query.employees.findFirst({
-		where: or(eq(employees.email, args.email), eq(employees.workEmail, args.email)),
+		where: or(
+			eq(employees.email, args.email),
+			eq(employees.workEmail, args.email)
+		),
 	});
 
 	if (existingEmployee) {
@@ -158,18 +201,21 @@ export async function createEmployee(args: {
 	console.log('✅ Clerk user created:', clerkUserId);
 
 	// Create employee record directly (no webhook waiting needed with Drizzle)
-	const [newEmployee] = await db.insert(employees).values({
-		name: args.name,
-		email: args.email,
-		workEmail: args.email,
-		role: args.role,
-		locations: args.locations,
-		assignedDeviceId: args.assignedDeviceId,
-		clerkUserId: clerkUserId,
-		createdAt: new Date(),
-		createdBy: adminClerkUserId,
-		employmentStatus: 'pending', // Set to pending until invite accepted or manually activated
-	}).returning();
+	const [newEmployee] = await db
+		.insert(employees)
+		.values({
+			name: args.name,
+			email: args.email,
+			workEmail: args.email,
+			role: args.role,
+			locations: args.locations,
+			assignedDeviceId: args.assignedDeviceId,
+			clerkUserId: clerkUserId,
+			createdAt: new Date(),
+			createdBy: adminClerkUserId,
+			employmentStatus: 'pending', // Set to pending until invite accepted or manually activated
+		})
+		.returning();
 
 	if (!newEmployee) {
 		throw new Error('Failed to create employee record');
@@ -200,10 +246,7 @@ export async function createEmployee(args: {
 			email: args.email,
 			password: generatedPassword,
 		});
-		console.log(
-			'📧 Scheduled welcome email with credentials for:',
-			args.email
-		);
+		console.log('📧 Scheduled welcome email with credentials for:', args.email);
 	} catch (error) {
 		console.error('❌ Failed to schedule welcome email:', error);
 		// Don't throw - account was created successfully
@@ -217,14 +260,17 @@ export async function createEmployee(args: {
 }
 
 // Mutation: Update employee (admin only)
-export async function updateEmployee(args: {
-	employeeId: string;
-	name: string;
-	email: string;
-	role: 'admin' | 'supervisor' | 'staff';
-	locations: string[];
-	assignedDeviceId?: string;
-}, clerkUserId: string) {
+export async function updateEmployee(
+	args: {
+		employeeId: string;
+		name: string;
+		email: string;
+		role: 'admin' | 'supervisor' | 'staff';
+		locations: string[];
+		assignedDeviceId?: string;
+	},
+	clerkUserId: string
+) {
 	await requireAdminAccess(clerkUserId);
 
 	const employee = await db.query.employees.findFirst({
@@ -233,22 +279,28 @@ export async function updateEmployee(args: {
 	if (!employee) throw new Error('Employee not found');
 
 	// Update employee record
-	await db.update(employees).set({
-		name: args.name,
-		email: args.email,
-		workEmail: args.email,
-		role: args.role,
-		locations: args.locations,
-		updatedAt: new Date(),
-		assignedDeviceId: args.assignedDeviceId,
-	}).where(eq(employees.id, args.employeeId));
+	await db
+		.update(employees)
+		.set({
+			name: args.name,
+			email: args.email,
+			workEmail: args.email,
+			role: args.role,
+			locations: args.locations,
+			updatedAt: new Date(),
+			assignedDeviceId: args.assignedDeviceId,
+		})
+		.where(eq(employees.id, args.employeeId));
 
 	// Update role if employee has clerkUserId
 	if (employee.clerkUserId) {
-		await db.update(roles).set({
-			role: args.role,
-			locations: args.locations,
-		}).where(eq(roles.clerkUserId, employee.clerkUserId));
+		await db
+			.update(roles)
+			.set({
+				role: args.role,
+				locations: args.locations,
+			})
+			.where(eq(roles.clerkUserId, employee.clerkUserId));
 
 		// Update Clerk metadata to keep in sync
 		try {
@@ -275,7 +327,10 @@ export async function updateEmployee(args: {
 }
 
 // Mutation: Generate invite link for an employee (admin only)
-export async function generateInviteLink(employeeId: string, adminClerkUserId: string) {
+export async function generateInviteLink(
+	employeeId: string,
+	adminClerkUserId: string
+) {
 	await requireAdminAccess(adminClerkUserId);
 
 	const employee = await db.query.employees.findFirst({
@@ -287,13 +342,16 @@ export async function generateInviteLink(employeeId: string, adminClerkUserId: s
 	const token = generateToken();
 	const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
 
-	await db.update(employees).set({
-		inviteToken: token,
-		inviteExpiresAt: expiresAt,
-		inviteResent: new Date(),
-		hasAcceptedInvite: false,
-		inviteBounced: false,
-	}).where(eq(employees.id, employeeId));
+	await db
+		.update(employees)
+		.set({
+			inviteToken: token,
+			inviteExpiresAt: expiresAt,
+			inviteResent: new Date(),
+			hasAcceptedInvite: false,
+			inviteBounced: false,
+		})
+		.where(eq(employees.id, employeeId));
 
 	await logAudit({
 		clerkUserId: adminClerkUserId,
@@ -346,20 +404,45 @@ export async function deleteEmployee(employeeId: string, clerkUserId: string) {
 		// Delete all related records
 		await db.delete(roles).where(eq(roles.clerkUserId, linkedClerkUserId));
 		await db.delete(shifts).where(eq(shifts.clerkUserId, linkedClerkUserId));
-		await db.delete(residentLogs).where(eq(residentLogs.authorId, linkedClerkUserId));
-		await db.delete(auditLogs).where(eq(auditLogs.clerkUserId, linkedClerkUserId));
-		await db.delete(ispAccessLogs).where(eq(ispAccessLogs.clerkUserId, linkedClerkUserId));
-		await db.delete(ispAcknowledgments).where(eq(ispAcknowledgments.clerkUserId, linkedClerkUserId));
+		await db
+			.delete(residentLogs)
+			.where(eq(residentLogs.authorId, linkedClerkUserId));
+		await db
+			.delete(auditLogs)
+			.where(eq(auditLogs.clerkUserId, linkedClerkUserId));
+		await db
+			.delete(ispAccessLogs)
+			.where(eq(ispAccessLogs.clerkUserId, linkedClerkUserId));
+		await db
+			.delete(ispAcknowledgments)
+			.where(eq(ispAcknowledgments.clerkUserId, linkedClerkUserId));
 
 		// For compliance alerts, set dismissedBy to undefined
-		await db.update(complianceAlerts).set({dismissedBy: null}).where(eq(complianceAlerts.dismissedBy, linkedClerkUserId));
+		await db
+			.update(complianceAlerts)
+			.set({dismissedBy: null})
+			.where(eq(complianceAlerts.dismissedBy, linkedClerkUserId));
 
 		// For residents and guardians, set createdBy to undefined
-		await db.update(residents).set({createdBy: null}).where(eq(residents.createdBy, linkedClerkUserId));
-		await db.update(guardians).set({createdBy: null}).where(eq(guardians.createdBy, linkedClerkUserId));
+		await db
+			.update(residents)
+			.set({createdBy: null})
+			.where(eq(residents.createdBy, linkedClerkUserId));
+		await db
+			.update(guardians)
+			.set({createdBy: null})
+			.where(eq(guardians.createdBy, linkedClerkUserId));
 
 		// For kiosks, set createdBy and registeredBy to undefined
-		await db.update(kiosks).set({createdBy: null, registeredBy: null}).where(or(eq(kiosks.createdBy, linkedClerkUserId), eq(kiosks.registeredBy, linkedClerkUserId)));
+		await db
+			.update(kiosks)
+			.set({createdBy: null, registeredBy: null})
+			.where(
+				or(
+					eq(kiosks.createdBy, linkedClerkUserId),
+					eq(kiosks.registeredBy, linkedClerkUserId)
+				)
+			);
 
 		await db.delete(users).where(eq(users.clerkUserId, linkedClerkUserId));
 
