@@ -2,9 +2,6 @@ import {Webhook} from 'svix';
 import {headers} from 'next/headers';
 import {NextResponse} from 'next/server';
 import {
-	createUser,
-	updateUser,
-	deleteUser,
 	getUserByClerkId,
 } from '@/db/queries/users'; // User mutations are currently in queries/users.ts
 import {
@@ -20,6 +17,7 @@ import {
 	getRoleByClerkId,
 	checkForAdmins,
 } from '@/db/queries/roles';
+import { createUser, deleteUser, updateUser } from '@/db/mutations/users';
 
 export async function POST(req: Request) {
 	const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;

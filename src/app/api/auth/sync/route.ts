@@ -1,18 +1,12 @@
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {getClerkUser} from '@/lib/clerk';
-
-
 import {getEmployeeByClerkId} from '@/db/queries/employees';
 import {createEmployee, updateEmployee} from '@/db/mutations/employees';
-import {
-	getRoleByClerkId,
-	createRole,
-	updateRole,
-	checkForAdmins,
-} from '@/db/queries/roles';
-import { getUserByClerkId } from '@/db/queries/users';
-import { createUser, updateUser } from '@/db/mutations/users';
+import {getRoleByClerkId, checkForAdmins} from '@/db/queries/roles';
+import {getUserByClerkId} from '@/db/queries/users';
+import {createUser, updateUser} from '@/db/mutations/users';
+import {updateRole, createRole} from '@/db/mutations/roles';
 
 export async function POST() {
 	try {
@@ -37,12 +31,16 @@ export async function POST() {
 		const {email, name, metadata} = clerkUserData;
 		const role = metadata?.role || 'staff';
 		const locations = metadata?.locations || [];
-		const assignedDeviceId = metadata?.assignedDeviceId;
+		const metadataDeviceId = metadata?.assignedDeviceId;
 
 		// Check if first user
 		const admins = await checkForAdmins();
 		const isFirstUser = admins.length === 0;
 		const finalRole = isFirstUser ? 'admin' : role;
+
+		// FIX: Admins get undefined assignedDeviceId (no device restriction)
+		const assignedDeviceId =
+			finalRole === 'admin' ? undefined : metadataDeviceId;
 
 		console.log(
 			`${isFirstUser ? '🎖️  First user - creating admin' : '👤 Restoring user with role: ' + finalRole}`
@@ -69,9 +67,9 @@ export async function POST() {
 					employeeId: existingEmployee.id,
 					name,
 					email,
-					role: (finalRole as 'admin' | 'supervisor' | 'staff'),
+					role: finalRole as 'admin' | 'supervisor' | 'staff',
 					locations,
-					assignedDeviceId: assignedDeviceId || undefined,
+					assignedDeviceId,
 				},
 				userId
 			);
@@ -80,9 +78,9 @@ export async function POST() {
 				{
 					name,
 					email,
-					role: (finalRole as 'admin' | 'supervisor' | 'staff'),
+					role: finalRole as 'admin' | 'supervisor' | 'staff',
 					locations,
-					assignedDeviceId: assignedDeviceId || undefined,
+					assignedDeviceId,
 				},
 				userId
 			);
