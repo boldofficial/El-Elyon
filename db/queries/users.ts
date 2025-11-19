@@ -1,3 +1,5 @@
+// db/queries/users.ts
+
 import {db} from '../index';
 import {users, employees, roles} from '../schema';
 import {eq} from 'drizzle-orm';
@@ -33,7 +35,10 @@ export async function getFullUserData(clerkUserId: string) {
 		getRoleByClerkId(clerkUserId),
 	]);
 
-	if (!user || !employee || !role) {
+	// Check if user needs sync (missing records)
+	const needsSync = !user || !employee || !role;
+	if (needsSync) {
+		console.log('⚠️  User incomplete - needs sync');
 		return null;
 	}
 
