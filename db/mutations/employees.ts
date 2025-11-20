@@ -22,6 +22,7 @@ import {
 	createClerkUser,
 	updateClerkMetadata,
 	deleteClerkUser,
+	getClerkUserByEmail,
 } from '@/lib/clerk';
 import {
 	// sendInviteEmail,
@@ -145,6 +146,7 @@ export async function linkUserToEmployee(
 
 // Mutation: Create employee with Clerk account (admin only)
 // ✅ FIX: Skip admin check if this is the first admin being created
+
 export async function createEmployee(
 	args: {
 		name: string;
@@ -183,33 +185,84 @@ export async function createEmployee(
 
 	console.log('🔐 Creating Clerk user for:', args.email);
 
-	// Create Clerk user with metadata
-	let clerkUser;
-	try {
-		clerkUser = await createClerkUser({
-			email: args.email,
-			password: generatedPassword,
-			firstName: args.name.split(' ')[0] || '',
-			lastName: args.name.split(' ').slice(1).join(' ') || '',
+	let clerkUserId: string;
+
+	// ✅ FIX: Check if Clerk user already exists
+	const existingClerkUser = await getClerkUserByEmail(args.email);
+
+	if (existingClerkUser) {
+		console.log('✅ Existing Clerk user found:', existingClerkUser.id);
+		clerkUserId = existingClerkUser.id;
+
+		// Update metadata for existing user
+		await updateClerkMetadata(clerkUserId, {
 			role: args.role,
 			locations: args.locations,
 			assignedDeviceId: args.assignedDeviceId,
 		});
-	} catch (error) {
-		console.error('❌ Failed to create Clerk user:', error);
-		throw new Error(
-			`Failed to create employee account: ${error instanceof Error ? error.message : String(error)}`
-		);
+	} else {
+		// Create new Clerk user with metadata
+		console.log('🔐 Creating new Clerk user...');
+
+		try {
+			const newClerkUser = await createClerkUser({
+				email: args.email,
+				password: generatedPassword,
+				firstName: args.name.split(' ')[0] || '',
+				lastName: args.name.split(' ').slice(1).join(' ') || '',
+				role: args.role,
+				locations: args.locations,
+				assignedDeviceId: args.assignedDeviceId,
+			});
+
+			if (!newClerkUser || !newClerkUser.clerkUserId) {
+				throw new Error('Failed to get Clerk user ID after creation');
+			}
+
+			clerkUserId = newClerkUser.clerkUserId;
+			console.log('✅ New Clerk user created:', clerkUserId);
+		} catch (error) {
+			console.error('❌ Failed to create Clerk user:', error);
+			throw new Error(
+				`Failed to create employee account: ${error instanceof Error ? error.message : String(error)}`
+			);
+		}
 	}
 
-	if (!clerkUser || !clerkUser.clerkUserId) {
-		throw new Error('Failed to get Clerk user ID after creation');
+	// ✅ Wait for webhook to process (give it 2 seconds)
+	console.log('⏳ Waiting for webhook to create records...');
+	await new Promise((resolve) => setTimeout(resolve, 2000));
+
+	// Create employee record (webhook should have already created it)
+	const existingWebhookEmployee = await db.query.employees.findFirst({
+		where: eq(employees.clerkUserId, clerkUserId),
+	});
+
+	if (existingWebhookEmployee) {
+		console.log('✅ Webhook already created employee record');
+
+		// Send welcome email
+		try {
+			await sendWelcomeEmailWithCredentials({
+				employeeId: existingWebhookEmployee.id,
+				email: args.email,
+				password: generatedPassword,
+			});
+			console.log('📧 Sent welcome email with credentials for:', args.email);
+		} catch (error) {
+			console.error('❌ Failed to send welcome email:', error);
+		}
+
+		return {
+			success: true,
+			clerkUserId: clerkUserId,
+			generatedPassword,
+		};
 	}
-	const clerkUserId = clerkUser.clerkUserId;
 
-	console.log('✅ Clerk user created:', clerkUserId);
+	// ✅ Fallback: If webhook failed, create manually
+	console.log("⚠️  Webhook didn't create employee, creating manually...");
 
-	// Create employee record
 	const [newEmployee] = await db
 		.insert(employees)
 		.values({
@@ -222,7 +275,7 @@ export async function createEmployee(
 			clerkUserId: clerkUserId,
 			createdAt: new Date(),
 			createdBy: adminClerkUserId,
-			employmentStatus: isFirstAdmin ? 'active' : 'pending', // ✅ First admin is active
+			employmentStatus: isFirstAdmin ? 'active' : 'pending',
 		})
 		.returning();
 
@@ -249,16 +302,16 @@ export async function createEmployee(
 		location: '',
 	});
 
-	// Send welcome email with credentials
+	// Send welcome email
 	try {
 		await sendWelcomeEmailWithCredentials({
 			employeeId: newEmployee.id,
 			email: args.email,
 			password: generatedPassword,
 		});
-		console.log('📧 Scheduled welcome email with credentials for:', args.email);
+		console.log('📧 Sent welcome email with credentials for:', args.email);
 	} catch (error) {
-		console.error('❌ Failed to schedule welcome email:', error);
+		console.error('❌ Failed to send welcome email:', error);
 	}
 
 	return {

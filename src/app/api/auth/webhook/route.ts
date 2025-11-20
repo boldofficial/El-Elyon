@@ -25,15 +25,25 @@ export async function POST(req: Request) {
 	const svix_timestamp = headerPayload.get('svix-timestamp');
 	const svix_signature = headerPayload.get('svix-signature');
 
+	console.log('📨 Received webhook request');
+	console.log('🔍 Headers:', {
+		svix_id,
+		svix_timestamp,
+		svix_signature: svix_signature ? 'present' : 'missing',
+	});
+
 	if (!svix_id || !svix_timestamp || !svix_signature) {
+		console.error('❌ Missing Svix headers');
 		return new NextResponse('Error: Missing svix headers', {
 			status: 400,
 		});
 	}
 
-	// Get body
-	const payload = await req.json();
-	const body = JSON.stringify(payload);
+	// Get body - THIS IS THE FIX!
+	// Don't stringify it again - it's already a string from req.text()
+	const payload = await req.text();
+
+	console.log('📦 Payload length:', payload.length);
 
 	// Create new Svix instance with secret
 	const wh = new Webhook(WEBHOOK_SECRET);
@@ -42,13 +52,16 @@ export async function POST(req: Request) {
 
 	// Verify payload with headers
 	try {
-		evt = wh.verify(body, {
+		// Pass the raw payload string directly - DON'T JSON.stringify it!
+		evt = wh.verify(payload, {
 			'svix-id': svix_id,
 			'svix-timestamp': svix_timestamp,
 			'svix-signature': svix_signature,
 		});
+
+		console.log('✅ Webhook signature verified');
 	} catch (err) {
-		console.error('Error: Could not verify webhook:', err);
+		console.error('❌ Error: Could not verify webhook:', err);
 		return new NextResponse('Error: Verification error', {
 			status: 400,
 		});
@@ -58,7 +71,7 @@ export async function POST(req: Request) {
 	const eventType = evt.type;
 	const userData = evt.data;
 
-	console.log(`📨 Webhook received: ${eventType}`);
+	console.log(`📨 Processing webhook: ${eventType}`);
 
 	try {
 		switch (eventType) {
@@ -78,6 +91,7 @@ export async function POST(req: Request) {
 				console.log(`ℹ️  Unhandled event type: ${eventType}`);
 		}
 
+		console.log('✅ Webhook processed successfully');
 		return NextResponse.json({success: true});
 	} catch (error) {
 		console.error('❌ Webhook processing error:', error);
