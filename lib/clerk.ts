@@ -1,3 +1,5 @@
+// lib/clerk.ts
+
 import {clerkClient} from '@clerk/nextjs/server';
 
 export async function getClerkUser(userId: string) {
