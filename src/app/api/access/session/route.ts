@@ -1,6 +1,8 @@
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
-import {getFullUserData} from '@/db/queries/users';
+import {getUserByClerkId} from '@/db/queries/users';
+import {getEmployeeByClerkId} from '@/db/queries/employees';
+import {getRoleByClerkId} from '@/db/queries/roles';
 
 export async function GET() {
 	try {
@@ -12,40 +14,57 @@ export async function GET() {
 				user: null,
 				role: null,
 				locations: [],
-				defaultRoute: '/',
+				defaultRoute: null,
+				needsSync: false,
 			});
 		}
 
-		const userData = await getFullUserData(userId);
+		// Get user data from all tables
+		const [user, employee, role] = await Promise.all([
+			getUserByClerkId(userId),
+			getEmployeeByClerkId(userId),
+			getRoleByClerkId(userId),
+		]);
 
-		if (!userData) {
+		// Check if user needs sync (missing records)
+		const needsSync = !user || !employee || !role;
+
+		if (needsSync) {
+			console.log('⚠️  User incomplete - needs sync');
 			return NextResponse.json({
 				authenticated: true,
-				user: {id: userId},
 				role: null,
 				locations: [],
-				defaultRoute: '/pending',
+				defaultRoute: null,
 				needsSync: true,
 			});
 		}
 
-		const defaultRoute =
-			userData.role === 'admin'
-				? '/admin'
-				: userData.role === 'supervisor' || userData.role === 'staff'
-					? '/care'
-					: '/pending';
+		// Determine default route based on role
+		let defaultRoute = '/';
+		if (role.role === 'admin') {
+			defaultRoute = '/admin';
+		} else if (role.role === 'supervisor' || role.role === 'staff') {
+			defaultRoute = '/care';
+		}
+
+		// Check if this is a kiosk session (based on device assignment)
+		const isKiosk = employee.assignedDeviceId ? true : false;
 
 		return NextResponse.json({
 			authenticated: true,
 			user: {
-				id: userData.clerkUserId,
-				name: userData.name,
-				email: userData.email,
+				id: user.id,
+				clerkUserId: user.clerkUserId,
+				name: user.name,
+				email: user.email,
 			},
-			role: userData.role,
-			locations: userData.locations,
+			role: role.role,
+			locations: role.locations || employee.locations || [],
 			defaultRoute,
+			employmentStatus: employee.employmentStatus,
+			assignedDeviceId: employee.assignedDeviceId,
+			isKiosk,
 			needsSync: false,
 		});
 	} catch (error) {

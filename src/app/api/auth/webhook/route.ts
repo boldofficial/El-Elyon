@@ -1,23 +1,16 @@
 import {Webhook} from 'svix';
 import {headers} from 'next/headers';
 import {NextResponse} from 'next/server';
-import {
-	getUserByClerkId,
-} from '@/db/queries/users'; // User mutations are currently in queries/users.ts
+import {getUserByClerkId} from '@/db/queries/users';
 import {
 	createEmployee,
 	updateEmployee,
 	deleteEmployee,
 } from '@/db/mutations/employees';
 import {getEmployeeByClerkId} from '@/db/queries/employees';
-import {
-	createRole,
-	updateRole,
-	deleteRole,
-	getRoleByClerkId,
-	checkForAdmins,
-} from '@/db/queries/roles';
-import { createUser, deleteUser, updateUser } from '@/db/mutations/users';
+import {getRoleByClerkId, checkForAdmins} from '@/db/queries/roles';
+import {createUser, deleteUser, updateUser} from '@/db/mutations/users';
+import {updateRole, createRole, deleteRole} from '@/db/mutations/roles';
 
 export async function POST(req: Request) {
 	const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
@@ -32,7 +25,6 @@ export async function POST(req: Request) {
 	const svix_timestamp = headerPayload.get('svix-timestamp');
 	const svix_signature = headerPayload.get('svix-signature');
 
-	// If there are no headers, error out
 	if (!svix_id || !svix_timestamp || !svix_signature) {
 		return new NextResponse('Error: Missing svix headers', {
 			status: 400,
@@ -132,18 +124,29 @@ async function handleUserCreated(userData: any) {
 	const isFirstUser = admins.length === 0;
 	const finalRole = isFirstUser ? 'admin' : metadata.role || 'staff';
 
+	// ✅ CRITICAL FIX: Admins get undefined assignedDeviceId (no device restriction)
+	const assignedDeviceId =
+		finalRole === 'admin' ? undefined : metadata.assignedDeviceId;
+
+	console.log('📋 User metadata:', {
+		role: finalRole,
+		locations: metadata.locations,
+		assignedDeviceId,
+		isFirstUser,
+	});
+
 	if (existingEmployee) {
 		console.log('ℹ️  Employee already exists, updating');
 		await updateEmployee(
 			{
-				employeeId: existingEmployee.id, // Use existingEmployee.id
+				employeeId: existingEmployee.id,
 				name,
 				email,
-				role: (finalRole as 'admin' | 'supervisor' | 'staff'), // Cast to expected type
+				role: finalRole as 'admin' | 'supervisor' | 'staff',
 				locations: metadata.locations || [],
-				assignedDeviceId: metadata.assignedDeviceId || undefined, // Convert null to undefined
+				assignedDeviceId, // undefined for admins
 			},
-			clerkUserId // Pass clerkUserId as the second argument
+			clerkUserId
 		);
 	} else {
 		console.log(
@@ -153,11 +156,11 @@ async function handleUserCreated(userData: any) {
 			{
 				name,
 				email,
-				role: (finalRole as 'admin' | 'supervisor' | 'staff'), // Cast to expected type
+				role: finalRole as 'admin' | 'supervisor' | 'staff',
 				locations: metadata.locations || [],
-				assignedDeviceId: metadata.assignedDeviceId || undefined, // Convert null to undefined
+				assignedDeviceId, // ✅ undefined for admins
 			},
-			clerkUserId // Pass clerkUserId as the second argument (adminClerkUserId)
+			clerkUserId
 		);
 		console.log('✅ Employee created');
 	}
@@ -203,19 +206,30 @@ async function handleUserUpdated(userData: any) {
 
 	// Update employee
 	const employee = await getEmployeeByClerkId(clerkUserId);
-		if (employee) {
-			await updateEmployee(
-				{
-					employeeId: employee.id,
-					name,
-					email,
-					role: (metadata.role as 'admin' | 'supervisor' | 'staff') || (employee.role as 'admin' | 'supervisor' | 'staff') || 'staff',
-					locations: metadata.locations || employee.locations || [],
-					assignedDeviceId: metadata.assignedDeviceId || employee.assignedDeviceId || undefined,
-				},
-				clerkUserId
-			);
-		}
+	if (employee) {
+		const currentRole =
+			(metadata.role as 'admin' | 'supervisor' | 'staff') ||
+			(employee.role as 'admin' | 'supervisor' | 'staff') ||
+			'staff';
+
+		// FIX: Admins get undefined assignedDeviceId
+		const assignedDeviceId =
+			currentRole === 'admin'
+				? undefined
+				: metadata.assignedDeviceId || employee.assignedDeviceId || undefined;
+
+		await updateEmployee(
+			{
+				employeeId: employee.id,
+				name,
+				email,
+				role: currentRole,
+				locations: metadata.locations || employee.locations || [],
+				assignedDeviceId,
+			},
+			clerkUserId
+		);
+	}
 
 	// Update role
 	const role = await getRoleByClerkId(clerkUserId);
@@ -239,7 +253,7 @@ async function handleUserDeleted(userData: any) {
 
 	await deleteUser(clerkUserId);
 	if (employee) {
-		await deleteEmployee(employee.id, clerkUserId); // Pass employeeId and clerkUserId
+		await deleteEmployee(employee.id, clerkUserId);
 	}
 	await deleteRole(clerkUserId);
 

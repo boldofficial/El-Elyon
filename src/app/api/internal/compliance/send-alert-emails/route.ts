@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 		}
 		const resend = new Resend(apiKey);
 		const fromEmail = process.env.FROM_EMAIL || 'Compliance System <noreply@compliance.example.com>';
-		const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yourdomain.com';
+		const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001';
 
 		for (const alert of alerts) {
 			for (const admin of admins) {

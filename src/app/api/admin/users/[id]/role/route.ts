@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '../../../../../../../lib/db-helpers';
-import {updateRole, deleteRole} from '../../../../../../../db/mutations/roles';
+import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {updateRole, deleteRole} from '@/db/mutations/roles';
 
 export async function PATCH(request: Request, {params}: {params: {id: string}}) {
     const {userId} = await auth();
