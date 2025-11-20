@@ -3,7 +3,7 @@
 // ===================================
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
-import {db} from '@/db';
+import {db} from '@/db/index';
 import {residents} from '@/db/schema';
 
 export async function GET() {
