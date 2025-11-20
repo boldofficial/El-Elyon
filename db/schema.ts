@@ -1,5 +1,5 @@
 import {
-	pgTableCreator,
+	pgTable,
 	text,
 	varchar,
 	integer,
@@ -12,7 +12,7 @@ import {
 import {relations} from 'drizzle-orm';
 
 // Create a custom table creator with a prefix
-const pgTable = pgTableCreator((name) => `el_elyon_${name}`);
+// const pgTable = pgTableCreator((name) => `el_elyon_${name}`);
 
 // Residents Table
 export const residents = pgTable(
