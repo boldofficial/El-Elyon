@@ -1,5 +1,4 @@
 // src/app/api/devices/check/route.ts
-// ✅ NEW FILE - Critical for admin device bypass
 
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
@@ -131,11 +130,3 @@ export async function POST(req: Request) {
 		return NextResponse.json({error: 'Internal server error'}, {status: 500});
 	}
 }
-
-
-// =========
-// one-off
-// ===========
-
-
-
