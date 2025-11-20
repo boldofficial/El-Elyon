@@ -30,6 +30,7 @@ import {
 } from '@/lib/emails';
 import {auth} from '@clerk/nextjs/server';
 import {getUserRoleDoc, requireAdminAccess, logAudit} from '@/lib/db-helpers'; // Import from db-helpers
+import {checkForAdmins} from '../queries/roles';
 
 // Mutation: Accept invite by token (public for invite acceptance)
 export async function acceptInvite(token: string) {
@@ -66,7 +67,7 @@ export async function acceptInvite(token: string) {
 		.where(eq(employees.id, employee.id));
 
 	await logAudit({
-		clerkUserId: null, // No clerkUserId yet for public invite acceptance
+		clerkUserId: null,
 		event: 'accept_invite',
 		timestamp: new Date(),
 		details: `employeeId=${employee.id},token=${token}`,
@@ -99,12 +100,10 @@ export async function linkUserToEmployee(
 	if (!employee.hasAcceptedInvite)
 		throw new Error('Employee invite not accepted');
 
-	// Check if Clerk user email matches employee email
 	if (userEmail !== employee.email && userEmail !== employee.workEmail) {
 		throw new Error('User email does not match employee email');
 	}
 
-	// Check if user already has a role
 	const existingRole = await db.query.roles.findFirst({
 		where: eq(roles.clerkUserId, clerkUserId),
 	});
@@ -113,7 +112,6 @@ export async function linkUserToEmployee(
 		throw new Error('User already has a role assigned');
 	}
 
-	// Create role based on employee record
 	const roleToAssign = employee.role || 'staff';
 	const locationsToAssign = employee.locations || [];
 
@@ -124,7 +122,6 @@ export async function linkUserToEmployee(
 		assignedAt: new Date(),
 	});
 
-	// Update employee record with Clerk user link
 	await db
 		.update(employees)
 		.set({
@@ -147,6 +144,7 @@ export async function linkUserToEmployee(
 }
 
 // Mutation: Create employee with Clerk account (admin only)
+// ✅ FIX: Skip admin check if this is the first admin being created
 export async function createEmployee(
 	args: {
 		name: string;
@@ -157,7 +155,16 @@ export async function createEmployee(
 	},
 	adminClerkUserId: string
 ) {
-	await requireAdminAccess(adminClerkUserId);
+	// ✅ CRITICAL FIX: Check if this is first admin BEFORE requiring admin access
+	const admins = await checkForAdmins();
+	const isFirstAdmin = admins.length === 0;
+
+	// Only require admin access if NOT creating first admin
+	if (!isFirstAdmin) {
+		await requireAdminAccess(adminClerkUserId);
+	} else {
+		console.log('🎖️  Creating first admin - skipping admin check');
+	}
 
 	// Check if employee with this email already exists
 	const existingEmployee = await db.query.employees.findFirst({
@@ -202,7 +209,7 @@ export async function createEmployee(
 
 	console.log('✅ Clerk user created:', clerkUserId);
 
-	// Create employee record directly (no webhook waiting needed with Drizzle)
+	// Create employee record
 	const [newEmployee] = await db
 		.insert(employees)
 		.values({
@@ -215,7 +222,7 @@ export async function createEmployee(
 			clerkUserId: clerkUserId,
 			createdAt: new Date(),
 			createdBy: adminClerkUserId,
-			employmentStatus: 'pending', // Set to pending until invite accepted or manually activated
+			employmentStatus: isFirstAdmin ? 'active' : 'pending', // ✅ First admin is active
 		})
 		.returning();
 
@@ -252,7 +259,6 @@ export async function createEmployee(
 		console.log('📧 Scheduled welcome email with credentials for:', args.email);
 	} catch (error) {
 		console.error('❌ Failed to schedule welcome email:', error);
-		// Don't throw - account was created successfully
 	}
 
 	return {
@@ -281,7 +287,6 @@ export async function updateEmployee(
 	});
 	if (!employee) throw new Error('Employee not found');
 
-	// Update employee record
 	await db
 		.update(employees)
 		.set({
@@ -295,7 +300,6 @@ export async function updateEmployee(
 		})
 		.where(eq(employees.id, args.employeeId));
 
-	// Update role if employee has clerkUserId
 	if (employee.clerkUserId) {
 		await db
 			.update(roles)
@@ -305,7 +309,6 @@ export async function updateEmployee(
 			})
 			.where(eq(roles.clerkUserId, employee.clerkUserId));
 
-		// Update Clerk metadata to keep in sync
 		try {
 			await updateClerkMetadata(employee.clerkUserId, {
 				role: args.role,
@@ -315,7 +318,6 @@ export async function updateEmployee(
 			console.log('✅ Clerk metadata updated');
 		} catch (error) {
 			console.error('❌ Failed to update Clerk metadata:', error);
-			// Don't throw - local update succeeded
 		}
 	}
 
@@ -342,9 +344,8 @@ export async function generateInviteLink(
 	});
 	if (!employee) throw new Error('Employee not found');
 
-	// Generate a new token and expiry (24h from now)
 	const token = generateToken();
-	const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+	const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
 	await db
 		.update(employees)
@@ -406,7 +407,6 @@ export async function deleteEmployee(employeeId: string, clerkUserId: string) {
 	}
 
 	if (linkedClerkUserId) {
-		// Delete all related records
 		await db.delete(roles).where(eq(roles.clerkUserId, linkedClerkUserId));
 		await db.delete(shifts).where(eq(shifts.clerkUserId, linkedClerkUserId));
 		await db
@@ -422,13 +422,11 @@ export async function deleteEmployee(employeeId: string, clerkUserId: string) {
 			.delete(ispAcknowledgments)
 			.where(eq(ispAcknowledgments.clerkUserId, linkedClerkUserId));
 
-		// For compliance alerts, set dismissedBy to undefined
 		await db
 			.update(complianceAlerts)
 			.set({dismissedBy: null})
 			.where(eq(complianceAlerts.dismissedBy, linkedClerkUserId));
 
-		// For residents and guardians, set createdBy to undefined
 		await db
 			.update(residents)
 			.set({createdBy: null})
@@ -438,7 +436,6 @@ export async function deleteEmployee(employeeId: string, clerkUserId: string) {
 			.set({createdBy: null})
 			.where(eq(guardians.createdBy, linkedClerkUserId));
 
-		// For kiosks, set createdBy and registeredBy to undefined
 		await db
 			.update(kiosks)
 			.set({createdBy: null, registeredBy: null})
@@ -451,7 +448,6 @@ export async function deleteEmployee(employeeId: string, clerkUserId: string) {
 
 		await db.delete(users).where(eq(users.clerkUserId, linkedClerkUserId));
 
-		// Schedule deletion of Clerk user account
 		try {
 			await deleteClerkUser(linkedClerkUserId);
 			console.log('✅ Deleted Clerk user:', linkedClerkUserId);
@@ -460,7 +456,6 @@ export async function deleteEmployee(employeeId: string, clerkUserId: string) {
 		}
 	}
 
-	// Delete the employee record
 	await db.delete(employees).where(eq(employees.id, employeeId));
 
 	await logAudit({
