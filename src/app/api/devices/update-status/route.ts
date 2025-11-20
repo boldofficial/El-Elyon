@@ -29,7 +29,7 @@ export async function PUT(req: Request) {
 			);
 		}
 
-		await updateDeviceStatus(deviceId, isActive, userId);
+		await updateDeviceStatus(deviceId, isActive);
 
 		return NextResponse.json({success: true});
 	} catch (error) {
