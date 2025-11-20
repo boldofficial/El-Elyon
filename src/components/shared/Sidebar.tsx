@@ -59,7 +59,7 @@ export default function Sidebar({
 			<div className="h-16 flex items-center justify-center border-b px-4">
 				{/* Replace the src below with your logo image path */}
 				<Image
-					src="/logo.png"
+					src="/logo.svg"
 					alt="Admin Portal Logo"
 					width={40}
 					height={40}
