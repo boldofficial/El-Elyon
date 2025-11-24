@@ -3,7 +3,7 @@
 // ====================================
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
-import {db} from '@/db';
+import {db} from '@/db/index';
 import {auditLogs} from '@/db/schema';
 
 export async function POST(req: Request) {
@@ -19,7 +19,6 @@ export async function POST(req: Request) {
 		await db.insert(auditLogs).values({
 			clerkUserId: userId,
 			event: activity,
-			timestamp: new Date(),
 			deviceId: 'web',
 			location: 'system',
 			details: details || null,

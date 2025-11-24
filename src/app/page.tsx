@@ -215,7 +215,7 @@ function AuthenticatedApp({deviceId}: {deviceId: string}) {
 		}
 
 		fetchData();
-	}, [user?.id, deviceId]); // Removed syncAttempted/syncInProgress from deps
+	}, [user?.id, sessionInfo, deviceId, deviceCheck, userCheck, syncAttempted, syncInProgress]); // Removed syncAttempted/syncInProgress from deps
 
 	// Update route when URL changes
 	useEffect(() => {
