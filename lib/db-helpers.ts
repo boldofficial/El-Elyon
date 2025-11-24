@@ -15,7 +15,6 @@ export async function getUserRoleDoc(clerkUserId: string) {
 export async function logAudit(args: {
 	clerkUserId: string | null;
 	event: string;
-	timestamp: Date;
 	deviceId: string;
 	location: string;
 	details?: string;
@@ -41,7 +40,6 @@ export async function requireCareAccess(clerkUserId: string) {
 		await logAudit({
 			clerkUserId: clerkUserId,
 			event: 'access_denied',
-			timestamp: new Date(),
 			details: 'care_access_required',
 			deviceId: 'system',
 			location: '',
@@ -58,7 +56,6 @@ export async function requireSupervisorAccess(clerkUserId: string) {
 		await logAudit({
 			clerkUserId: clerkUserId,
 			event: 'access_denied',
-			timestamp: new Date(),
 			details: 'supervisor_access_required',
 			deviceId: 'system',
 			location: '',
@@ -75,7 +72,6 @@ export async function requireAdminAccess(clerkUserId: string) {
 		await logAudit({
 			clerkUserId: clerkUserId,
 			event: 'access_denied',
-			timestamp: new Date(),
 			details: 'admin_access_required',
 			deviceId: 'system',
 			location: '',
