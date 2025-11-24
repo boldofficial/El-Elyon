@@ -1,23 +1,36 @@
 // ====================================
 // Get residents API
 // ===================================
-import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
+import {auth} from '@clerk/nextjs/server';
+import {requireCareAccess} from '@/lib/db-helpers';
 import {db} from '@/db/index';
 import {residents} from '@/db/schema';
 
 export async function GET() {
-	try {
 		const {userId} = await auth();
-
 		if (!userId) {
-			return NextResponse.json({error: 'Not authenticated'}, {status: 401});
+				return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 		}
 
-		const allResidents = await db.query.residents.findMany();
-		return NextResponse.json(allResidents);
-	} catch (error) {
-		console.error('Error getting residents:', error);
-		return NextResponse.json({error: 'Internal server error'}, {status: 500});
-	}
+		try {
+				await requireCareAccess(userId);
+
+				const residentsList = await db.query.residents.findMany({
+						orderBy: (residents, {asc}) => [asc(residents.name)],
+				});
+
+				return NextResponse.json(
+						residentsList.map((r) => ({
+								id: r.id,
+								name: r.name,
+								location: r.location,
+								dateOfBirth: r.dateOfBirth,
+								profileImageId: r.profileImageId,
+						}))
+				);
+		} catch (error: any) {
+				console.error('Error fetching residents:', error);
+				return NextResponse.json({error: error.message}, {status: 500});
+		}
 }

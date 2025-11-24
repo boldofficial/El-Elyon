@@ -8,15 +8,19 @@ import {NextResponse} from 'next/server';
 import {getRoleByClerkId} from '@/db/queries/roles';
 
 export async function GET() {
+	const {userId} = await auth();
+	if (!userId) {
+		return NextResponse.json(null);
+	}
 	try {
-		const {userId} = await auth();
+		const userRole = await getRoleByClerkId(userId);
+		// return NextResponse.json(userRole);
 
-		if (!userId) {
-			return NextResponse.json(null);
-		}
-
-		const role = await getRoleByClerkId(userId);
-		return NextResponse.json(role);
+		return NextResponse.json({
+			role: userRole.role,
+			locations: userRole.locations || [],
+			isKiosk: false, // Kiosk mode is determined by route, not role
+		});
 	} catch (error) {
 		console.error('Error getting user role:', error);
 		return NextResponse.json({error: 'Internal server error'}, {status: 500});

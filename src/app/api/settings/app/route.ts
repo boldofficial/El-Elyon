@@ -3,10 +3,10 @@
 // ===================================
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
-import {db} from '../../../../../db/index';
-import {config} from '../../../../../db/schema';
-import {upsertConfig} from '../../../../../db/mutations/config';
-import {requireAdminAccess, logAudit} from '../../../../../lib/db-helpers';
+import {db} from '@/db/index';
+import {config} from '@/db/schema';
+import {upsertConfig} from '@/db/mutations/config';
+import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
 
 export async function GET() {
 	try {
