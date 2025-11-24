@@ -1,6 +1,4 @@
-// =====================================
-// List all kiosk devices (optionally filter by location)
-// ====================================
+// src/app/admin/kiosks/list/route.ts
 import {NextRequest, NextResponse} from 'next/server';
 import {requireRole} from '@/lib/auth';
 import {db} from '@/db/index';

@@ -3,7 +3,7 @@
 // ========================================
 import {NextResponse} from 'next/server';
 import {requireRole} from '@/lib/auth';
-import {db} from '@/db';
+import {db} from '@/db/index';
 import {locations, residents} from '@/db/schema';
 import {eq} from 'drizzle-orm';
 
@@ -41,3 +41,5 @@ export async function DELETE(req: Request) {
 		return NextResponse.json({error: 'Internal server error'}, {status: 500});
 	}
 }
+
+//////
