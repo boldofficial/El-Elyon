@@ -3,7 +3,7 @@
 // ===================================
 import {NextResponse} from 'next/server';
 import {requireRole} from '@/lib/auth';
-import {db} from '@/db';
+import {db} from '@/db/index';
 import {locations} from '@/db/schema';
 import {eq} from 'drizzle-orm';
 
