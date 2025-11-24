@@ -1,8 +1,8 @@
+// POST /api/kiosk/complete-pairing - Complete kiosk pairing (public endpoint)
 import {NextResponse} from 'next/server';
 import {completePairing} from '@/db/mutations/kiosks';
 import {logAudit} from '@/lib/db-helpers';
 
-// POST /api/kiosk/complete-pairing - Complete kiosk pairing (public endpoint)
 export async function POST(request: Request) {
 	try {
 		const body = await request.json();
