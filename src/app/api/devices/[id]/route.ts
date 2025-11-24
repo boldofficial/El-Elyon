@@ -47,7 +47,6 @@ export async function PATCH(
 		await logAudit({
 			clerkUserId: userId,
 			event: eventType,
-			timestamp: new Date(),
 			details: `${eventType === 'device_updated' ? 'Updated' : body.isActive ? 'Activated' : 'Deactivated'} device: ${device.deviceName}`,
 			deviceId: device.deviceId,
 			location: device.location,
@@ -88,7 +87,6 @@ export async function DELETE(
 		await logAudit({
 			clerkUserId: userId,
 			event: 'device_deleted',
-			timestamp: new Date(),
 			details: `Deleted device: ${device.deviceName}`,
 			deviceId: device.deviceId,
 			location: device.location,

@@ -62,7 +62,6 @@ export async function POST(request: Request) {
 			await logAudit({
 				clerkUserId: userId,
 				event: 'device_login',
-				timestamp: new Date(),
 				details: `Login from device: ${result.deviceName}`,
 				deviceId: deviceId,
 				location: result.location || '',

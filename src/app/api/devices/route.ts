@@ -72,7 +72,6 @@ export async function POST(request: Request) {
 		await logAudit({
 			clerkUserId: userId,
 			event: 'device_registered',
-			timestamp: new Date(),
 			details: `Registered device: ${deviceName}`,
 			deviceId: deviceId,
 			location: location,
@@ -84,7 +83,6 @@ export async function POST(request: Request) {
 		await logAudit({
 			clerkUserId: userId,
 			event: 'device_register_failed',
-			timestamp: new Date(),
 			details: error.message,
 			deviceId: 'system',
 			location: '',

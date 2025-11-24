@@ -34,7 +34,6 @@ export async function PATCH(request: Request) {
 		await logAudit({
 			clerkUserId: userId,
 			event: isActive ? 'device_activated' : 'device_deactivated',
-      timestamp: new Date(),
 			details: `${isActive ? 'Activated' : 'Deactivated'} device: ${device.deviceName}`,
 			deviceId: deviceId,
 			location: device.location,
