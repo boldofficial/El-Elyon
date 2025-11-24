@@ -1,7 +1,7 @@
 'use client';
 
 import {useUser} from '@clerk/nextjs';
-import {useEffect, useState} from 'react';
+import {useEffect, useState, useRef} from 'react';
 import {Toaster, toast} from 'sonner';
 
 import KioskSession from '@/components/kiosk/KioskSession';
@@ -11,7 +11,7 @@ import AdminPortal from '@/components/admin/AdminPortal';
 import CarePortal from '@/components/care/CarePortal';
 import PendingPage from '@/components/shared/PendingPage';
 import {SignInForm} from '@/components/auth/SignInForm';
-import {initializeDeviceId} from '@/lib/device';
+import {initializeDeviceId, getDeviceId} from '@/lib/device';
 
 // API helper functions
 async function checkUserExists() {
@@ -61,6 +61,7 @@ export default function HomePage() {
 	const {isLoaded, isSignedIn, user} = useUser();
 	const [deviceInitialized, setDeviceInitialized] = useState(false);
 	const [deviceId, setDeviceId] = useState<string>('');
+	const initRef = useRef(false); // Prevent double initialization in StrictMode
 
 	// Check for checklist token in URL
 	const [checklistToken, setChecklistToken] = useState<string | null>(null);
@@ -72,21 +73,33 @@ export default function HomePage() {
 		}
 	}, []);
 
-	// Initialize device ID
+	// Initialize device ID - ONLY ONCE
 	useEffect(() => {
+		// Prevent double initialization (React StrictMode calls useEffect twice)
+		if (initRef.current) {
+			return;
+		}
+		initRef.current = true;
+
 		async function initDevice() {
 			try {
+				// This function checks localStorage first, only generates if not found
 				const id = await initializeDeviceId();
 				setDeviceId(id);
-				console.log('📱 Device initialized:', id);
 				setDeviceInitialized(true);
 			} catch (error) {
 				console.error('❌ Failed to initialize device:', error);
+				// Try to get existing ID as fallback
+				const existingId = getDeviceId();
+				if (existingId) {
+					setDeviceId(existingId);
+				}
 				setDeviceInitialized(true); // Continue anyway
 			}
 		}
+
 		initDevice();
-	}, []);
+	}, []); // Empty deps - only run once on mount
 
 	// Show Guardian Checklist if token present
 	if (checklistToken) {
@@ -138,12 +151,17 @@ function AuthenticatedApp({deviceId}: {deviceId: string}) {
 	const [userCheck, setUserCheck] = useState<any>(null);
 	const [syncAttempted, setSyncAttempted] = useState(false);
 	const [syncInProgress, setSyncInProgress] = useState(false);
+	const fetchRef = useRef(false); // Prevent double fetch
 
 	// Check if user exists in database and get session info
 	useEffect(() => {
-		async function fetchData() {
-			if (!user?.id || !deviceId) return;
+		if (!user?.id || !deviceId) return;
 
+		// Prevent double fetch in StrictMode
+		if (fetchRef.current) return;
+		fetchRef.current = true;
+
+		async function fetchData() {
 			try {
 				// Check if user exists in database (self-healing check)
 				const userCheckData = await checkUserExists();
@@ -197,7 +215,7 @@ function AuthenticatedApp({deviceId}: {deviceId: string}) {
 		}
 
 		fetchData();
-	}, [user?.id, deviceId, syncAttempted, syncInProgress]);
+	}, [user?.id, deviceId]); // Removed syncAttempted/syncInProgress from deps
 
 	// Update route when URL changes
 	useEffect(() => {
@@ -211,9 +229,9 @@ function AuthenticatedApp({deviceId}: {deviceId: string}) {
 		return () => window.removeEventListener('popstate', handlePopState);
 	}, []);
 
-	// Debug logging
+	// Debug logging (only once when data is ready)
 	useEffect(() => {
-		if (user?.id) {
+		if (user?.id && sessionInfo && deviceCheck) {
 			console.log('🔑 User ID:', user.id);
 			console.log('📧 Email:', user.primaryEmailAddress?.emailAddress);
 			console.log('💻 Device ID:', deviceId);
@@ -221,7 +239,7 @@ function AuthenticatedApp({deviceId}: {deviceId: string}) {
 			console.log('🔍 Session Info:', sessionInfo);
 			console.log('📱 Device Check:', deviceCheck);
 		}
-	}, [user, deviceId, userCheck, sessionInfo, deviceCheck]);
+	}, [user?.id, sessionInfo]); // Only log when all data ready
 
 	// Loading state - show while syncing or fetching data
 	if (

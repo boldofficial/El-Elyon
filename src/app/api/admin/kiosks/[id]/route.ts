@@ -25,6 +25,7 @@ export async function PATCH(request: Request, {params}: {params: {id: string}}) 
         await logAudit({
             clerkUserId: userId,
             event: 'UPDATE_KIOSK_SUCCESS',
+            timestamp: new Date(),
             details: `Kiosk ${kioskId} updated.`,
             deviceId: '', // Kiosk ID is the deviceId here
             location: location || '',
@@ -34,6 +35,7 @@ export async function PATCH(request: Request, {params}: {params: {id: string}}) 
         await logAudit({
             clerkUserId: userId,
             event: 'UPDATE_KIOSK_FAILED',
+            timestamp: new Date(),
             details: error.message,
             deviceId: '',
             location: '',
@@ -61,6 +63,7 @@ export async function DELETE(request: Request, {params}: {params: {id: string}})
         await logAudit({
             clerkUserId: userId,
             event: 'DELETE_KIOSK_SUCCESS',
+            timestamp: new Date(),
             details: `Kiosk ${kioskId} deleted.`,
             deviceId: '',
             location: '',
@@ -70,6 +73,7 @@ export async function DELETE(request: Request, {params}: {params: {id: string}})
         await logAudit({
             clerkUserId: userId,
             event: 'DELETE_KIOSK_FAILED',
+            timestamp: new Date(),
             details: error.message,
             deviceId: '',
             location: '',
