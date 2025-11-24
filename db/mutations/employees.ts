@@ -70,7 +70,6 @@ export async function acceptInvite(token: string) {
 	await logAudit({
 		clerkUserId: null,
 		event: 'accept_invite',
-		timestamp: new Date(),
 		details: `employeeId=${employee.id},token=${token}`,
 		deviceId: 'system',
 		location: '',
@@ -135,7 +134,6 @@ export async function linkUserToEmployee(
 	await logAudit({
 		clerkUserId,
 		event: 'link_user_to_employee',
-		timestamp: new Date(),
 		details: `employeeId=${employeeId},role=${roleToAssign}`,
 		deviceId: 'system',
 		location: '',
@@ -296,7 +294,6 @@ export async function createEmployee(
 	await logAudit({
 		clerkUserId: adminClerkUserId,
 		event: 'create_employee',
-		timestamp: new Date(),
 		details: `employeeId=${newEmployee.id},clerkUserId=${clerkUserId},role=${args.role},assignedDeviceId=${args.assignedDeviceId || 'none'}`,
 		deviceId: 'system',
 		location: '',
@@ -377,7 +374,6 @@ export async function updateEmployee(
 	await logAudit({
 		clerkUserId,
 		event: 'update_employee',
-		timestamp: new Date(),
 		details: `employeeId=${args.employeeId},role=${args.role},assignedDeviceId=${args.assignedDeviceId || 'none'}`,
 		deviceId: 'system',
 		location: '',
@@ -414,7 +410,6 @@ export async function generateInviteLink(
 	await logAudit({
 		clerkUserId: adminClerkUserId,
 		event: 'generate_invite_link',
-		timestamp: new Date(),
 		details: `employeeId=${employeeId}`,
 		deviceId: 'system',
 		location: '',
@@ -514,7 +509,6 @@ export async function deleteEmployee(employeeId: string, clerkUserId: string) {
 	await logAudit({
 		clerkUserId,
 		event: 'delete_employee',
-		timestamp: new Date(),
 		details: `employeeId=${employeeId},linkedClerkUserId=${linkedClerkUserId || 'none'}`,
 		deviceId: 'system',
 		location: '',
