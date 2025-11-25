@@ -8,14 +8,17 @@ import {updateEmployeeHRDocs} from '@/db/mutations/employee-hr';
 import {getEmployeeHRDetails} from '@/db/queries/employee-hr';
 
 // GET - Get employee HR details
-export async function GET(request: Request, {params}: {params: {id: string}}) {
+export async function GET(
+	request: Request,
+	{params}: {params: Promise<{id: string}>}
+) {
 	const {userId} = await auth();
 	if (!userId) {
 		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 	}
 
 	try {
-		const employeeId = params.id;
+		const {id: employeeId} = await params;
 		const employee = await getEmployeeHRDetails(employeeId, userId);
 
 		if (!employee) {

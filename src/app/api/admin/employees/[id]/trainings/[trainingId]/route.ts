@@ -13,7 +13,7 @@ import {
 // PATCH - Update training record
 export async function PATCH(
 	request: Request,
-	{params}: {params: {trainingId: string}}
+	{params}: {params: Promise<{trainingId: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -23,7 +23,7 @@ export async function PATCH(
 	try {
 		await requireAdminAccess(userId);
 
-		const trainingId = params.trainingId;
+		const {trainingId} = await params;
 		const body = await request.json();
 
 		// Check if this is just a completion toggle

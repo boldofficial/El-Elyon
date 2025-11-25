@@ -11,14 +11,17 @@ import {
 import {listEmployeeTrainings} from '@/db/queries/employee-hr';
 
 // GET - List all trainings for an employee
-export async function GET(request: Request, {params}: {params: {id: string}}) {
+export async function GET(
+	request: Request,
+	{params}: {params: Promise<{id: string}>}
+) {
 	const {userId} = await auth();
 	if (!userId) {
 		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 	}
 
 	try {
-		const employeeId = params.id;
+		const {id: employeeId} = await params;
 		const trainings = await listEmployeeTrainings(employeeId, userId);
 
 		return NextResponse.json(trainings);
@@ -28,8 +31,11 @@ export async function GET(request: Request, {params}: {params: {id: string}}) {
 	}
 }
 
-// POST - Create new training record
-export async function POST(request: Request, {params}: {params: {id: string}}) {
+// POST - Create new training 
+export async function POST(
+	request: Request,
+	{params}: {params: Promise<{id: string}>}
+) {
 	const {userId} = await auth();
 	if (!userId) {
 		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
@@ -38,7 +44,7 @@ export async function POST(request: Request, {params}: {params: {id: string}}) {
 	try {
 		await requireAdminAccess(userId);
 
-		const employeeId = params.id;
+		const {id: employeeId} = await params;
 		const body = await request.json();
 
 		const training = await createEmployeeTraining({

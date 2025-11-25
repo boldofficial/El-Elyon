@@ -9,7 +9,10 @@ import {residentLogs} from '@/db/schema';
 import {eq, desc} from 'drizzle-orm';
 
 // GET - List resident logs
-export async function GET(request: Request, {params}: {params: {id: string}}) {
+export async function GET(
+	request: Request,
+	{params}: {params: Promise<{id: string}>}
+) {
 	const {userId} = await auth();
 	if (!userId) {
 		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
@@ -18,7 +21,7 @@ export async function GET(request: Request, {params}: {params: {id: string}}) {
 	try {
 		await requireCareAccess(userId);
 
-		const residentId = params.id;
+		const {id: residentId} = await params;
 		const {searchParams} = new URL(request.url);
 		const limit = parseInt(searchParams.get('limit') || '50');
 
@@ -39,7 +42,10 @@ export async function GET(request: Request, {params}: {params: {id: string}}) {
 }
 
 // POST - Create new resident log with activities
-export async function POST(request: Request, {params}: {params: {id: string}}) {
+export async function POST(
+	request: Request,
+	{params}: {params: Promise<{id: string}>}
+) {
 	const {userId} = await auth();
 	if (!userId) {
 		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
@@ -48,7 +54,7 @@ export async function POST(request: Request, {params}: {params: {id: string}}) {
 	try {
 		await requireCareAccess(userId);
 
-		const residentId = params.id;
+		const {id: residentId} = await params;
 		const body = await request.json();
 
 		const result = await createResidentLogWithActivities({
