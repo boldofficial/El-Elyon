@@ -89,7 +89,6 @@ export async function createResidentLogWithActivities(data: {
 	return {log, activities: []};
 }
 
-
 export async function createIncidentReport(data: {
 	residentId: string;
 	reportedBy: string;

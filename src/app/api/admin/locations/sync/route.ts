@@ -9,7 +9,8 @@ import {locations} from '@/db/schema';
 export async function POST(req: Request) {
 	try {
 		const user = await requireRole(['admin']);
-		const {locationNames} = await req.json();
+		const body = await req.json();
+		const locationNames = body.locationNames || []; // Ensure locationNames is an array
 
 		console.log('🏢 Syncing locations:', locationNames);
 
