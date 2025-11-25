@@ -10,17 +10,21 @@ import PeopleWorkspace from './PeopleWorkspace';
 import ComplianceWorkspace from '../compliance/ComplianceWorkspace';
 import SettingsWorkspace from './SettingsWorkspace';
 import ComplianceAlerts from '../compliance/ComplianceAlerts';
-import LocationsWorkspace from './LocationsWorkspace';
+import LocationsWorkspace from './LocationsWorkspace'; // Ensure this is present
 import GuardianChecklistWorkspace from '../guardian/GuardianChecklistWorkspace';
 import {DataCleanupWorkspace} from './DataCleanupWorkspace';
 import DeviceManagementWorkspace from './DeviceManagementWorkspace';
 import AdminDeviceBadge from './AdminDeviceBadge';
+import EmployeeHRManagement from './EmployeeHRManagement';
+import ResidentProfileManagement from './ResidentProfileManagement';
 
 export default function AdminPortal() {
 	const [activeView, setActiveView] = useState('dashboard');
 	const {user: clerkUser} = useUser();
 	const [currentUser, setCurrentUser] = useState<any>(null);
 	const [deviceCheck, setDeviceCheck] = useState<any>(null);
+	const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
+	const [selectedResidentId, setSelectedResidentId] = useState<string | null>(null);
 	const deviceId = getDeviceId();
 
 	useEffect(() => {
@@ -43,16 +47,54 @@ export default function AdminPortal() {
 		fetchData();
 	}, [deviceId]);
 
+	const handleNavigate = (view: string, entityId?: string) => {
+		setActiveView(view);
+		if (view === 'employee-hr' && entityId) {
+			setSelectedEmployeeId(entityId);
+		} else if (view === 'resident-profile' && entityId) {
+			setSelectedResidentId(entityId);
+		} else {
+			setSelectedEmployeeId(null);
+			setSelectedResidentId(null);
+		}
+	};
+
 	const renderContent = () => {
+		if (activeView === 'employee-hr' && selectedEmployeeId) {
+			return (
+				<div>
+					<button
+						onClick={() => setActiveView('people')}
+						className="mb-4 text-blue-600 hover:underline">
+						← Back to People
+					</button>
+					<EmployeeHRManagement employeeId={selectedEmployeeId} />
+				</div>
+			);
+		}
+
+		if (activeView === 'resident-profile' && selectedResidentId) {
+			return (
+				<div>
+					<button
+						onClick={() => setActiveView('people')}
+						className="mb-4 text-blue-600 hover:underline">
+						← Back to People
+					</button>
+					<ResidentProfileManagement residentId={selectedResidentId} />
+				</div>
+			);
+		}
+
 		switch (activeView) {
 			case 'dashboard':
-				return <AdminDashboard onNavigate={setActiveView} />;
+				return <AdminDashboard onNavigate={handleNavigate} />;
 			case 'people':
-				return <PeopleWorkspace />;
+				return <PeopleWorkspace onNavigate={handleNavigate} />;
 			case 'compliance':
 				return <ComplianceWorkspace />;
 			case 'locations':
-				return <LocationsWorkspace />;
+				return <LocationsWorkspace />; // Use LocationsWorkspace
 			case 'devices':
 				return <DeviceManagementWorkspace />;
 			case 'guardian-checklists':
@@ -62,7 +104,7 @@ export default function AdminPortal() {
 			case 'settings':
 				return <SettingsWorkspace />;
 			default:
-				return <AdminDashboard onNavigate={setActiveView} />;
+				return <AdminDashboard onNavigate={handleNavigate} />;
 		}
 	};
 
@@ -95,7 +137,10 @@ export default function AdminPortal() {
 			<main className="flex-1 overflow-y-auto p-8">
 				<div className="flex justify-between items-center mb-8">
 					<h1 className="text-3xl font-bold text-gray-900">
-						{activeView.charAt(0).toUpperCase() + activeView.slice(1)}
+						{activeView === 'employee-hr' && 'Employee HR Documents'}
+						{activeView === 'resident-profile' && 'Resident Profile'}
+						{activeView !== 'employee-hr' && activeView !== 'resident-profile' &&
+							activeView.charAt(0).toUpperCase() + activeView.slice(1)}
 					</h1>
 					<SignOutButton />
 				</div>
