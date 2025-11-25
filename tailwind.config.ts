@@ -1,4 +1,5 @@
 import type {Config} from 'tailwindcss';
+import defaultTheme from 'tailwindcss/defaultTheme';
 
 export default {
 	content: [
@@ -9,7 +10,10 @@ export default {
 	theme: {
 		extend: {
 			fontFamily: {
-				sans: ['Inter var', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+				sans: [
+					'Inter var',
+					...defaultTheme.fontFamily.sans,
+				],
 			},
 			borderRadius: {
 				DEFAULT: '8px',

@@ -15,9 +15,9 @@ export async function getUserRoleDoc(clerkUserId: string) {
 export async function logAudit(args: {
 	clerkUserId: string | null;
 	event: string;
-	details?: string;
 	deviceId: string;
 	location: string;
+	details?: string;
 }) {
 	await db.insert(auditLogs).values({
 		clerkUserId: args.clerkUserId,

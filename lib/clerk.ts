@@ -1,3 +1,5 @@
+// lib/clerk.ts
+
 import {clerkClient} from '@clerk/nextjs/server';
 
 export async function getClerkUser(userId: string) {
@@ -12,6 +14,33 @@ export async function getClerkUser(userId: string) {
 		};
 	} catch (error) {
 		console.error('Error fetching Clerk user:', error);
+		return null;
+	}
+}
+
+export async function getClerkUserByEmail(email: string) {
+	try {
+		const client = await clerkClient();
+
+		// Search for users by email
+		const users = await client.users.getUserList({
+			emailAddress: [email],
+		});
+
+		if (users.data.length === 0) {
+			return null;
+		}
+
+		const user = users.data[0];
+
+		return {
+			id: user.id,
+			email: user.emailAddresses[0]?.emailAddress,
+			name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'User',
+			metadata: user.publicMetadata as Record<string, any>,
+		};
+	} catch (error) {
+		console.error('Error fetching Clerk user by email:', error);
 		return null;
 	}
 }

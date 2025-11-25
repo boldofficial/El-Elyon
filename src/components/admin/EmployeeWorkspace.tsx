@@ -1,3 +1,5 @@
+// src/components/admin/EmployeeWorkspace.tsx
+
 'use client';
 
 import React, {useState, useEffect, useCallback} from 'react';
@@ -12,12 +14,12 @@ interface Employee {
 	locations: string[];
 	assignedDeviceId?: string;
 	clerkUserId?: string;
-	workEmail?: string; // API might return workEmail instead of email
+	workEmail?: string;
 }
 
 interface Device {
-	id: string; // Internal ID
-	deviceId: string; // The actual device ID string
+	id: string;
+	deviceId: string;
 	deviceName: string;
 	location: string;
 	isActive: boolean;
@@ -27,7 +29,13 @@ interface UserRole {
 	role: 'admin' | 'supervisor' | 'staff' | 'kiosk' | null;
 }
 
-export default function EmployeeWorkspace() {
+interface EmployeeWorkspaceProps {
+	onNavigate?: (view: string, entityId: string) => void;
+}
+
+export default function EmployeeWorkspace({
+	onNavigate,
+}: EmployeeWorkspaceProps) {
 	const [userRole, setUserRole] = useState<UserRole | null>(null);
 	const [employees, setEmployees] = useState<Employee[]>([]);
 	const [availableLocations, setAvailableLocations] = useState<string[]>([]);
@@ -58,21 +66,18 @@ export default function EmployeeWorkspace() {
 	const fetchAllData = useCallback(async () => {
 		setLoading(true);
 		try {
-			const [
-				userRoleRes,
-				employeesRes,
-				availableLocationsRes,
-				devicesRes,
-			] = await Promise.all([
-				fetch('/api/users/role'),
-				fetch('/api/admin/employees'),
-				fetch('/api/admin/employees/available-locations'),
-				fetch('/api/admin/kiosks/list'),
-			]);
+			const [userRoleRes, employeesRes, availableLocationsRes, devicesRes] =
+				await Promise.all([
+					fetch('/api/users/role'),
+					fetch('/api/admin/employees'),
+					fetch('/api/admin/employees/available-locations'),
+					fetch('/api/admin/kiosks/list'),
+				]);
 
 			const userRoleData: UserRole = await userRoleRes.json();
 			const employeesData: Employee[] = await employeesRes.json();
-			const availableLocationsData: string[] = await availableLocationsRes.json();
+			const availableLocationsData: string[] =
+				await availableLocationsRes.json();
 			const devicesData: Device[] = await devicesRes.json();
 
 			setUserRole(userRoleData);
@@ -109,7 +114,7 @@ export default function EmployeeWorkspace() {
 					email: newEmployeeForm.email.trim(),
 					role: newEmployeeForm.role,
 					locations: newEmployeeForm.locations,
-					assignedDeviceId: newEmployeeForm.assignedDeviceId || null, // Ensure null for optional
+					assignedDeviceId: newEmployeeForm.assignedDeviceId || null,
 				}),
 			});
 
@@ -118,7 +123,7 @@ export default function EmployeeWorkspace() {
 				throw new Error(errorData.error || 'Failed to create employee');
 			}
 
-			const result = await res.json(); // Assuming API returns some result, e.g., generated password
+			const result = await res.json();
 			setNewEmployeeForm({
 				name: '',
 				email: '',
@@ -127,7 +132,7 @@ export default function EmployeeWorkspace() {
 				assignedDeviceId: undefined,
 			});
 			setShowAddForm(false);
-			await fetchAllData(); // Refresh data
+			await fetchAllData();
 
 			toast.success('Employee account created! Credentials sent via email.');
 
@@ -174,7 +179,7 @@ export default function EmployeeWorkspace() {
 
 			toast.success('Employee deleted.');
 			if (selectedEmployee === employeeId) setSelectedEmployee(null);
-			await fetchAllData(); // Refresh data
+			await fetchAllData();
 		} catch (error: any) {
 			toast.error(error?.message || 'Failed to delete employee');
 		} finally {
@@ -228,7 +233,7 @@ export default function EmployeeWorkspace() {
 
 			setShowEditForm(false);
 			setSelectedEmployee(null);
-			await fetchAllData(); // Refresh data
+			await fetchAllData();
 			toast.success('Employee updated successfully!');
 		} catch (error: any) {
 			toast.error(error.message || 'Failed to update employee');
@@ -251,7 +256,6 @@ export default function EmployeeWorkspace() {
 		);
 	}
 
-	// Get device name helper
 	const getDeviceName = (deviceId?: string) => {
 		if (!deviceId) return 'No device assigned';
 		const device = devices.find((d) => d.deviceId === deviceId);
@@ -269,7 +273,6 @@ export default function EmployeeWorkspace() {
 		);
 	}
 
-	// Only allow admin to view this workspace
 	if (userRole?.role !== 'admin') {
 		return (
 			<div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800 text-center">
@@ -309,7 +312,9 @@ export default function EmployeeWorkspace() {
 					<h3 className="text-lg font-semibold mb-4">Edit Employee</h3>
 					<form onSubmit={handleUpdateEmployee} className="space-y-4">
 						<div>
-							<label htmlFor="edit-name" className="block text-sm font-medium text-gray-700 mb-2">
+							<label
+								htmlFor="edit-name"
+								className="block text-sm font-medium text-gray-700 mb-2">
 								Name
 								<span className="text-red-500">*</span>
 							</label>
@@ -328,7 +333,9 @@ export default function EmployeeWorkspace() {
 							/>
 						</div>
 						<div>
-							<label htmlFor="edit-email" className="block text-sm font-medium text-gray-700 mb-2">
+							<label
+								htmlFor="edit-email"
+								className="block text-sm font-medium text-gray-700 mb-2">
 								Email <span className="text-red-500">*</span>
 							</label>
 							<input
@@ -346,7 +353,9 @@ export default function EmployeeWorkspace() {
 							/>
 						</div>
 						<div>
-							<label htmlFor="edit-role" className="block text-sm font-medium text-gray-700 mb-2">
+							<label
+								htmlFor="edit-role"
+								className="block text-sm font-medium text-gray-700 mb-2">
 								Role
 							</label>
 							<select
@@ -365,7 +374,9 @@ export default function EmployeeWorkspace() {
 							</select>
 						</div>
 						<div>
-							<label htmlFor="edit-assignedDeviceId" className="block text-sm font-medium text-gray-700 mb-2">
+							<label
+								htmlFor="edit-assignedDeviceId"
+								className="block text-sm font-medium text-gray-700 mb-2">
 								Assigned Device
 							</label>
 							<select
@@ -442,7 +453,9 @@ export default function EmployeeWorkspace() {
 					<h3 className="text-lg font-semibold mb-4">Add New Employee</h3>
 					<form onSubmit={handleAddEmployee} className="space-y-4">
 						<div>
-							<label htmlFor="add-name" className="block text-sm font-medium text-gray-700 mb-2">
+							<label
+								htmlFor="add-name"
+								className="block text-sm font-medium text-gray-700 mb-2">
 								Name <span className="text-red-500">*</span>
 							</label>
 							<input
@@ -461,7 +474,9 @@ export default function EmployeeWorkspace() {
 							/>
 						</div>
 						<div>
-							<label htmlFor="add-email" className="block text-sm font-medium text-gray-700 mb-2">
+							<label
+								htmlFor="add-email"
+								className="block text-sm font-medium text-gray-700 mb-2">
 								Email <span className="text-red-500">*</span>
 							</label>
 							<input
@@ -480,7 +495,9 @@ export default function EmployeeWorkspace() {
 							/>
 						</div>
 						<div>
-							<label htmlFor="add-role" className="block text-sm font-medium text-gray-700 mb-2">
+							<label
+								htmlFor="add-role"
+								className="block text-sm font-medium text-gray-700 mb-2">
 								Role
 							</label>
 							<select
@@ -499,7 +516,9 @@ export default function EmployeeWorkspace() {
 							</select>
 						</div>
 						<div>
-							<label htmlFor="add-assignedDeviceId" className="block text-sm font-medium text-gray-700 mb-2">
+							<label
+								htmlFor="add-assignedDeviceId"
+								className="block text-sm font-medium text-gray-700 mb-2">
 								Assigned Device
 							</label>
 							<select
@@ -607,6 +626,14 @@ export default function EmployeeWorkspace() {
 										</div>
 									</div>
 									<div className="flex flex-col space-y-2 ml-4">
+										{/* NEW: HR Documents Button */}
+										{onNavigate && (
+											<button
+												onClick={() => onNavigate('employee-hr', emp.id)}
+												className="px-3 py-1 text-sm bg-purple-600 text-white rounded hover:bg-purple-700 whitespace-nowrap">
+												📄 HR Documents
+											</button>
+										)}
 										<button
 											onClick={() => handleEditEmployee(emp)}
 											className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800 border border-blue-300 rounded hover:bg-blue-50 whitespace-nowrap">

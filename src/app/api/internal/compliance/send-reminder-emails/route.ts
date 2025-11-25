@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
 
 		const recipients = await internalListAdmins(); // Assuming admins receive these reminders
 
-		const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://yourdomain.com';
+		const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001';
 
 		// Filter compliance items based on itemIds
 		const allComplianceItems = await getComplianceOverview(clerkUserId); // This will get all items for the admin

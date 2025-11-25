@@ -1,8 +1,11 @@
+// src/app/api/users/update-profile/route.ts
+
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {updateClerkUser} from '@/lib/clerk';
-import {updateUser} from '@/db/queries/users'; // updateUser is currently in queries/users.ts
+import {updateUser} from '@/db/mutations/users';
 import {updateEmployee} from '@/db/mutations/employees';
+
 import {getEmployeeByClerkId} from '@/db/queries/employees';
 import {getRoleByClerkId, updateRole} from '@/db/queries/roles';
 

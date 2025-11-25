@@ -37,63 +37,72 @@ export default function KioskSession() {
 	const [selectedResidentId, setSelectedResidentId] = useState<string | null>(
 		null
 	);
+	const [loading, setLoading] = useState(true);
 
 	const {user: clerkUser} = useUser();
 
-
-	// Fetch kiosk data, config, user role, and residents
+	// Fetch kiosk data, config, user role, current user, and residents
 	useEffect(() => {
 		async function fetchData() {
 			if (!deviceId) return;
 
+			setLoading(true);
 			try {
-				// Fetch kiosk data
-				const kioskRes = await fetch(
-					`/api/kiosk/by-device?deviceId=${deviceId}`
-				);
-				const kioskData = await kioskRes.json();
+				// Fetch all data in parallel
+				const [kioskRes, configRes, roleRes, userRes, residentsRes] =
+					await Promise.all([
+						fetch(`/api/kiosk/by-device?deviceId=${deviceId}`),
+						fetch('/api/settings/app'),
+						fetch('/api/users/role'),
+						fetch('/api/users/current'),
+						fetch('/api/residents'),
+					]);
+
+				const [kioskData, configData, roleData, userData, residentsData] =
+					await Promise.all([
+						kioskRes.json(),
+						configRes.json(),
+						roleRes.json(),
+						userRes.json(),
+						residentsRes.json(),
+					]);
+
 				setKiosk(kioskData);
-
-				// Fetch config
-				const configRes = await fetch('/api/settings/app');
-				const configData = await configRes.json();
 				setConfig(configData);
-
-				// Fetch user role
-				const roleRes = await fetch('/api/users/role');
-				const roleData = await roleRes.json();
 				setUserRole(roleData);
-
-				// Fetch current user
-				const userRes = await fetch('/api/users/current');
-				const userData = await userRes.json();
 				setCurrentUser(userData);
-
-				// Fetch residents
-				const residentsRes = await fetch('/api/residents');
-				const residentsData = await residentsRes.json();
 				setResidents(residentsData);
 			} catch (error) {
 				console.error('Error fetching kiosk data:', error);
+			} finally {
+				setLoading(false);
 			}
 		}
 
 		fetchData();
 	}, [deviceId]);
 
-	// Update last seen periodically
+	// Update last seen periodically (heartbeat)
 	useEffect(() => {
-		if (deviceId && kiosk?.isActive) {
-			const interval = setInterval(async () => {
-				await fetch('/api/kiosk/update-last-seen', {
-					method: 'POST',
-					headers: {'Content-Type': 'application/json'},
-					body: JSON.stringify({deviceId}),
-				});
-			}, 30000); // Every 30 seconds
+		if (!deviceId || !kiosk?.isActive) return;
 
-			return () => clearInterval(interval);
-		}
+		// Initial heartbeat
+		fetch('/api/kiosk/update-last-seen', {
+			method: 'POST',
+			headers: {'Content-Type': 'application/json'},
+			body: JSON.stringify({deviceId}),
+		});
+
+		// Set up interval for periodic heartbeats
+		const interval = setInterval(async () => {
+			await fetch('/api/kiosk/update-last-seen', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({deviceId}),
+			});
+		}, 30000); // Every 30 seconds
+
+		return () => clearInterval(interval);
 	}, [deviceId, kiosk?.isActive]);
 
 	// Show pairing screen if not paired
@@ -108,7 +117,19 @@ export default function KioskSession() {
 		);
 	}
 
-	// Check if kiosk is still active
+	// Loading state
+	if (loading) {
+		return (
+			<div className="min-h-screen flex items-center justify-center bg-gray-50">
+				<div className="text-center">
+					<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+					<p className="text-gray-600">Loading kiosk session...</p>
+				</div>
+			</div>
+		);
+	}
+
+	// Check if kiosk is still registered
 	if (kiosk === null) {
 		return (
 			<div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -135,6 +156,7 @@ export default function KioskSession() {
 		);
 	}
 
+	// Check if kiosk is active
 	if (kiosk && !kiosk.isActive) {
 		return (
 			<div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -153,7 +175,7 @@ export default function KioskSession() {
 		);
 	}
 
-	// Only allow staff, supervisor, or admin
+	// Check user role authorization
 	if (
 		userRole &&
 		userRole.role &&
@@ -177,13 +199,18 @@ export default function KioskSession() {
 	}
 
 	// Selfie enforcement logic
-	if (clerkUser && currentUser && config && config.selfieEnforced && !selfie) {
+	if (clerkUser && currentUser && config?.selfieEnforced && !selfie) {
 		return (
-			<div className="flex flex-col items-center gap-4">
+			<div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gray-50">
 				<h2 className="text-2xl font-bold">Selfie Required</h2>
+				<p className="text-gray-600 text-center max-w-md">
+					Please take a selfie to verify your identity before using the kiosk.
+				</p>
 				<SelfieCapture
 					onCapture={async (storageId: string) => {
 						setSelfie(storageId);
+						// Optionally log selfie capture event
+						console.log('✅ Selfie captured:', storageId);
 					}}
 					onCancel={() => setSelfieError('Selfie capture cancelled')}
 				/>
@@ -195,9 +222,12 @@ export default function KioskSession() {
 	// Auto-lock on inactivity
 	if (locked) {
 		return (
-			<div className="flex flex-col items-center gap-4">
+			<div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gray-50">
 				<h2 className="text-2xl font-bold">Session Locked</h2>
-				<button className="button" onClick={() => setLocked(false)}>
+				<p className="text-gray-600">Click unlock to continue</p>
+				<button
+					className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+					onClick={() => setLocked(false)}>
 					Unlock
 				</button>
 				<QuickSignOut />
@@ -205,34 +235,50 @@ export default function KioskSession() {
 		);
 	}
 
+	// Main kiosk interface
 	return (
-		<div>
+		<div className="min-h-screen bg-gray-50">
 			<LocationBanner location={kiosk?.location ?? 'Unknown'} />
 			<AutoLock onLock={() => setLocked(true)} />
-			<QuickSignOut />
 
-			{/* Resident selection UI */}
-			<div className="my-4">
-				<h3 className="font-semibold mb-2">Residents</h3>
-				{!residents ? (
-					<div>Loading residents...</div>
-				) : (
-					<ul className="flex flex-wrap gap-2">
-						{residents.map((r: any) => (
-							<li key={r.id}>
+			<div className="container mx-auto p-6">
+				{/* Resident selection UI */}
+				<div className="bg-white rounded-lg shadow-md p-6 mb-6">
+					<div className="flex items-center justify-between mb-4">
+						<h3 className="text-xl font-semibold">Select Resident</h3>
+						<QuickSignOut />
+					</div>
+
+					{!residents || residents.length === 0 ? (
+						<div className="text-center py-8 text-gray-500">
+							No residents available
+						</div>
+					) : (
+						<div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+							{residents.map((r: any) => (
 								<button
-									className={`px-2 py-1 rounded ${selectedResidentId === r.id ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}
+									key={r.id}
+									className={`p-4 rounded-lg border-2 transition-colors ${
+										selectedResidentId === r.id
+											? 'bg-blue-600 text-white border-blue-600'
+											: 'bg-white text-gray-900 border-gray-300 hover:border-blue-400'
+									}`}
 									onClick={() => setSelectedResidentId(r.id)}>
-									{r.name}
+									<div className="font-medium">{r.name}</div>
+									<div className="text-sm opacity-75">{r.location}</div>
 								</button>
-							</li>
-						))}
-					</ul>
+							))}
+						</div>
+					)}
+				</div>
+
+				{/* Resident case folder */}
+				{selectedResidentId && (
+					<div className="bg-white rounded-lg shadow-md p-6">
+						<ResidentCase residentId={selectedResidentId} />
+					</div>
 				)}
 			</div>
-
-			{/* Resident case folder */}
-			{selectedResidentId && <ResidentCase residentId={selectedResidentId} />}
 		</div>
 	);
 }

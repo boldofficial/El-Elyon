@@ -20,9 +20,13 @@ export async function POST(req: NextRequest) {
 			const ispFiles = await internalListResidentISPFiles(resident.id);
 			const activeISP = ispFiles.find((f) => f.status === 'active');
 			if (activeISP) {
-				const dueAt = activeISP.effectiveDate.getTime() + 6 * 30 * 24 * 60 * 60 * 1000;
+				const dueAt =
+					activeISP.effectiveDate.getTime() + 6 * 30 * 24 * 60 * 60 * 1000;
 				if (dueAt - Date.now() <= 1000 * 60 * 60 * 24 * 30) {
-					const alerts = await internalListAlertsForLocation(resident.location, 'isp');
+					const alerts = await internalListAlertsForLocation(
+						resident.location,
+						'isp'
+					);
 					const alreadyActive = alerts.some(
 						(a) => a.active && a.type === 'isp' // Check for active ISP alert
 					);
@@ -42,9 +46,13 @@ export async function POST(req: NextRequest) {
 		const fireEvacs = await internalListLatestFireEvac();
 		for (const fe of fireEvacs) {
 			const location = fe.location || 'unknown';
-			const dueAt = (fe.createdAt?.getTime() || Date.now()) + 365 * 24 * 60 * 60 * 1000;
+			const dueAt =
+				(fe.createdAt?.getTime() || Date.now()) + 365 * 24 * 60 * 60 * 1000;
 			if (dueAt - Date.now() <= 1000 * 60 * 60 * 24 * 30) {
-				const alerts = await internalListAlertsForLocation(location, 'fire_evac');
+				const alerts = await internalListAlertsForLocation(
+					location,
+					'fire_evac'
+				);
 				const alreadyActive = alerts.some(
 					(a) => a.active && a.type === 'fire_evac' // Check for active Fire Evac alert
 				);

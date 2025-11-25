@@ -1,8 +1,16 @@
+// src/components/care/CareResidentsWorkspace.tsx
+
 'use client';
 
 import React, {useState, useEffect} from 'react';
 
-export default function CareResidentsWorkspace() {
+interface CareResidentsWorkspaceProps {
+	onResidentSelect?: (resident: any) => void;
+}
+
+export default function CareResidentsWorkspace({
+	onResidentSelect,
+}: CareResidentsWorkspaceProps) {
 	const [sessionInfo, setSessionInfo] = useState<any>(null);
 	const [residents, setResidents] = useState<any[]>([]);
 	const [selectedResident, setSelectedResident] = useState<string | null>(null);
@@ -51,8 +59,14 @@ export default function CareResidentsWorkspace() {
 		fetchResidentData();
 	}, [selectedResident]);
 
-	const handleResidentSelect = (residentId: string) => {
-		setSelectedResident(residentId);
+	const handleResidentSelect = (resident: any) => {
+		// NEW: If onResidentSelect prop is provided, use it (for Care Portal navigation)
+		if (onResidentSelect) {
+			onResidentSelect(resident);
+		} else {
+			// Otherwise, use local state (existing behavior)
+			setSelectedResident(resident.id);
+		}
 	};
 
 	const handleBackToList = () => {
@@ -61,7 +75,8 @@ export default function CareResidentsWorkspace() {
 
 	const selectedResidentData = residents.find((r) => r.id === selectedResident);
 
-	if (selectedResident && selectedResidentData) {
+	// Show detail view only if using local state (not when using prop navigation)
+	if (selectedResident && selectedResidentData && !onResidentSelect) {
 		return (
 			<div className="space-y-6">
 				<div className="flex items-center space-x-4">
@@ -224,7 +239,7 @@ export default function CareResidentsWorkspace() {
 						{residents.map((resident: any) => (
 							<button
 								key={resident.id}
-								onClick={() => handleResidentSelect(resident.id)}
+								onClick={() => handleResidentSelect(resident)}
 								className="w-full px-6 py-4 text-left hover:bg-gray-50 transition-colors focus:outline-none focus:bg-blue-50">
 								<div className="flex items-center justify-between">
 									<div className="flex-1">
@@ -247,7 +262,7 @@ export default function CareResidentsWorkspace() {
 
 									<div className="flex items-center space-x-4">
 										<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-											Resident
+											{onResidentSelect ? 'View Care Portal' : 'Resident'}
 										</span>
 
 										<span className="text-gray-400">→</span>

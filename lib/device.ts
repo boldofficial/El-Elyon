@@ -1,10 +1,11 @@
 const STORAGE_KEY = 'kiosk_device_id';
 
-// Module-level cache — safe because ID never changes
+// Module-level cache — safe because ID never changes once set
 let cachedDeviceId: string | null = null;
 
 // Safe localStorage helpers
 function safeStorageGet(key: string): string | null {
+	if (typeof window === 'undefined') return null;
 	try {
 		return localStorage.getItem(key);
 	} catch {
@@ -13,6 +14,7 @@ function safeStorageGet(key: string): string | null {
 }
 
 function safeStorageSet(key: string, value: string): void {
+	if (typeof window === 'undefined') return;
 	try {
 		localStorage.setItem(key, value);
 	} catch {
@@ -68,45 +70,55 @@ async function getCanvasFingerprint(): Promise<string> {
 
 /**
  * Initialize device ID (call once at app startup)
+ * Returns the same ID every time - only generates once per device
  */
 export async function initializeDeviceId(): Promise<string> {
-	// Check cache first
+	// 1. Check module cache first (fastest)
 	if (cachedDeviceId) {
+		console.log('📱 Device ID from cache:', cachedDeviceId);
 		return cachedDeviceId;
 	}
 
-	// Check localStorage
-	let deviceId = safeStorageGet(STORAGE_KEY);
-	if (deviceId) {
-		cachedDeviceId = deviceId;
-		return deviceId;
+	// 2. Check localStorage (persisted across sessions)
+	const storedId = safeStorageGet(STORAGE_KEY);
+	if (storedId) {
+		cachedDeviceId = storedId;
+		console.log('📱 Device ID from localStorage:', storedId);
+		return storedId;
 	}
 
-	// Generate new ID
+	// 3. Generate new ID only if not found anywhere
+	console.log('🔧 Generating new device ID...');
 	const fingerprint = await generateStableFingerprint();
-	deviceId = `device_${fingerprint.substring(0, 16)}`;
-	safeStorageSet(STORAGE_KEY, deviceId);
-	cachedDeviceId = deviceId;
-	return deviceId;
+	const newDeviceId = `device_${fingerprint.substring(0, 16)}`;
+
+	// Save to localStorage AND cache
+	safeStorageSet(STORAGE_KEY, newDeviceId);
+	cachedDeviceId = newDeviceId;
+
+	console.log('✅ New device ID created:', newDeviceId);
+	return newDeviceId;
 }
 
 /**
  * Sync access to device ID (safe to call after initializeDeviceId)
  */
 export function getDeviceId(): string {
+	// Check cache first
 	if (cachedDeviceId) {
 		return cachedDeviceId;
 	}
-	// Fallback: try localStorage (in case called before init — shouldn't happen in your flow)
+
+	// Fallback: try localStorage (in case called before init)
 	const fromStorage = safeStorageGet(STORAGE_KEY);
 	if (fromStorage) {
 		cachedDeviceId = fromStorage;
 		return fromStorage;
 	}
-	// Last resort: this should not occur in normal flow
-	throw new Error(
-		'Device ID not initialized. Call initializeDeviceId() first.'
-	);
+
+	// Return empty string instead of throwing (safer for SSR)
+	console.warn('⚠️ Device ID not initialized yet');
+	return '';
 }
 
 /**
@@ -115,4 +127,18 @@ export function getDeviceId(): string {
 export async function debugDeviceId(): Promise<void> {
 	const id = await initializeDeviceId();
 	console.log('✅ Kiosk Device ID:', id);
+}
+
+/**
+ * Clear device ID (for testing/reset purposes)
+ */
+export function clearDeviceId(): void {
+	if (typeof window === 'undefined') return;
+	try {
+		localStorage.removeItem(STORAGE_KEY);
+		cachedDeviceId = null;
+		console.log('🗑️ Device ID cleared');
+	} catch {
+		// Ignore
+	}
 }

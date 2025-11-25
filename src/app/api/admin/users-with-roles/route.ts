@@ -1,8 +1,8 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess} from '../../../../../lib/db-helpers';
-import {db} from '../../../../../db/index';
-import {employees, roles, auditLogs} from '../../../../../db/schema';
+import {requireAdminAccess} from '@/lib/db-helpers';
+import {db} from '@/db/index';
+import {employees, roles, auditLogs} from '@/db/schema';
 import {eq} from 'drizzle-orm';
 
 export async function GET() {

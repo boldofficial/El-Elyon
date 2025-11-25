@@ -4,11 +4,11 @@
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {checkForAdmins} from '@/db/queries/roles';
-import {getUserByClerkId, createUser} from '@/db/queries/users';
 import {getEmployeeByClerkId} from '@/db/queries/employees';
 import {createEmployee} from '@/db/mutations/employees';
-import {createRole} from '@/db/queries/roles';
+import {createRole} from '@/db/mutations/roles';
 import {getClerkUser} from '@/lib/clerk';
+import { createUser } from '@/db/mutations/users';
 
 export async function POST() {
 	try {

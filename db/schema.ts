@@ -1,5 +1,5 @@
 import {
-	pgTableCreator,
+	pgTable,
 	text,
 	varchar,
 	integer,
@@ -12,7 +12,7 @@ import {
 import {relations} from 'drizzle-orm';
 
 // Create a custom table creator with a prefix
-const pgTable = pgTableCreator((name) => `el_elyon_${name}`);
+// const pgTable = pgTableCreator((name) => `el_elyon_${name}`);
 
 // Residents Table
 export const residents = pgTable(
@@ -23,6 +23,29 @@ export const residents = pgTable(
 		dateOfBirth: varchar('date_of_birth', {length: 50}),
 		dob: varchar('dob', {length: 50}),
 		location: varchar('location', {length: 255}).notNull(),
+		
+		// NEW FIELDS
+		phone: varchar('phone', {length: 50}),
+		placementDate: timestamp('placement_date'),
+		sex: varchar('sex', {length: 20}),
+		weight: varchar('weight', {length: 50}),
+		height: varchar('height', {length: 50}),
+		hairColor: varchar('hair_color', {length: 50}),
+		diagnostics: text('diagnostics'),
+		supportBroker: varchar('support_broker', {length: 255}),
+		importantRelationships: text('important_relationships'),
+		
+		// Funding & Case Management
+		fundingAgency: varchar('funding_agency', {length: 255}),
+		caseManagerName: varchar('case_manager_name', {length: 255}),
+		caseManagerPhone: varchar('case_manager_phone', {length: 50}),
+		caseManagerEmail: varchar('case_manager_email', {length: 255}),
+		
+		// Vocational Agency
+		vocationalAgency: varchar('vocational_agency', {length: 255}),
+		vocationalAgencyAddress: text('vocational_agency_address'),
+		
+		// Existing fields
 		guardianIds: jsonb('guardian_ids').$type<string[]>(),
 		medicalInfo: text('medical_info'),
 		careNotes: text('care_notes'),
@@ -68,6 +91,17 @@ export const employees = pgTable(
 		role: varchar('role', {length: 50}),
 		locations: jsonb('locations').$type<string[]>().notNull().default([]),
 		employmentStatus: varchar('employment_status', {length: 100}),
+		
+		// NEW HR FIELDS
+		dateOfHire: timestamp('date_of_hire'),
+		tbTestFileId: varchar('tb_test_file_id', {length: 255}),
+		tbTestExpiresAt: timestamp('tb_test_expires_at'),
+		backgroundCheckFileId: varchar('background_check_file_id', {length: 255}),
+		backgroundCheckExpiresAt: timestamp('background_check_expires_at'),
+		applicationFormFileId: varchar('application_form_file_id', {length: 255}),
+		personalBio: text('personal_bio'),
+		
+		// Existing fields
 		createdAt: timestamp('created_at').defaultNow(),
 		createdBy: varchar('created_by', {length: 255}),
 		updatedAt: timestamp('updated_at'),
@@ -165,29 +199,29 @@ export const residentLogs = pgTable(
 		residentId: uuid('resident_id')
 			.notNull()
 			.references(() => residents.id, {onDelete: 'cascade'}),
-		logType: varchar('log_type', {length: 100}),
-		content: text('content').notNull(),
-		timestamp: timestamp('timestamp'),
+		logType: varchar('log_type', {length: 100}), // e.g., 'daily_notes', 'medication'
+		content: text('content'), // General notes
+		timestamp: timestamp('timestamp').defaultNow(),
 		createdBy: varchar('created_by', {length: 255}),
 		location: varchar('location', {length: 255}),
 		shiftId: uuid('shift_id').references(() => shifts.id),
 		authorId: varchar('author_id', {length: 255}),
-		authorName: varchar('author_name', {length: 255}), // Added authorName
-		version: integer('version'),
+		authorName: varchar('author_name', {length: 255}),
+		version: integer('version').default(1),
 		template: varchar('template', {length: 255}),
 		createdAt: timestamp('created_at').defaultNow(),
-		metadata: jsonb('metadata').$type<{
-			mood?: string;
-			behavior?: string;
-			activity?: string;
-			notes?: string;
-		}>(),
+		// metadata: jsonb('metadata').$type<{
+		// 	mood?: string;
+		// 	behavior?: string;
+		// 	activity?: string;
+		// 	notes?: string;
+		// }>(), // This will be replaced by residentLogActivities and incidentReports tables
 	},
 	(table) => ({
 		residentIdIdx: index('resident_logs_resident_id_idx').on(table.residentId),
 		locationIdx: index('resident_logs_location_idx').on(table.location),
 		authorIdIdx: index('resident_logs_author_id_idx').on(table.authorId),
-		authorNameIdx: index('resident_logs_author_name_idx').on(table.authorName), // Added index for authorName
+		authorNameIdx: index('resident_logs_author_name_idx').on(table.authorName),
 		createdAtIdx: index('resident_logs_created_at_idx').on(table.createdAt),
 	})
 );
@@ -547,6 +581,7 @@ export const locations = pgTable(
 		id: uuid('id').primaryKey().defaultRandom(),
 		name: varchar('name', {length: 255}).notNull(),
 		address: text('address'),
+		phone: varchar('phone', {length: 50}), // NEW FIELD
 		capacity: integer('capacity'),
 		status: varchar('status', {length: 50}),
 		createdBy: varchar('created_by', {length: 255}),
@@ -633,6 +668,92 @@ export const complianceReminderTemplates = pgTable(
 	})
 );
 
+// Employee Training Documentation Table
+export const employeeTrainings = pgTable(
+	'employee_trainings',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		employeeId: uuid('employee_id')
+			.notNull()
+			.references(() => employees.id, {onDelete: 'cascade'}),
+		trainingName: varchar('training_name', {length: 255}).notNull(),
+		trainingYear: integer('training_year').notNull(),
+		completed: boolean('completed').notNull().default(false),
+		completedDate: timestamp('completed_date'),
+		certificateFileId: varchar('certificate_file_id', {length: 255}),
+		notes: text('notes'),
+		createdAt: timestamp('created_at').defaultNow(),
+		createdBy: varchar('created_by', {length: 255}),
+		updatedAt: timestamp('updated_at'),
+		updatedBy: varchar('updated_by', {length: 255}),
+	},
+	(table) => ({
+		employeeIdIdx: index('employee_trainings_employee_id_idx').on(
+			table.employeeId
+		),
+		yearIdx: index('employee_trainings_year_idx').on(table.trainingYear),
+		completedIdx: index('employee_trainings_completed_idx').on(table.completed),
+	})
+);
+
+// Enhanced Resident Log Activities Table (for checkboxes)
+export const residentLogActivities = pgTable(
+	'resident_log_activities',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		logId: uuid('log_id')
+			.notNull()
+			.references(() => residentLogs.id, {onDelete: 'cascade'}),
+		activityType: varchar('activity_type', {length: 100}).notNull(), // 'took_meds', 'meal', 'bath', etc.
+		completed: boolean('completed').notNull().default(false),
+		notes: text('notes'),
+		timestamp: timestamp('timestamp').defaultNow(),
+	},
+	(table) => ({
+		logIdIdx: index('resident_log_activities_log_id_idx').on(table.logId),
+		activityTypeIdx: index('resident_log_activities_activity_type_idx').on(
+			table.activityType
+		),
+	})
+);
+
+// Incident Reports Table
+export const incidentReports = pgTable(
+	'incident_reports',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		residentId: uuid('resident_id')
+			.notNull()
+			.references(() => residents.id, {onDelete: 'cascade'}),
+		reportedBy: varchar('reported_by', {length: 255}).notNull(), // Clerk User ID
+		reportedByName: varchar('reported_by_name', {length: 255}),
+		incidentDate: timestamp('incident_date').notNull(),
+		incidentType: varchar('incident_type', {length: 100}).notNull(), // 'medical', 'behavioral', 'safety', 'other'
+		severity: varchar('severity', {length: 50}).notNull(), // 'low', 'medium', 'high', 'critical'
+		location: varchar('location', {length: 255}).notNull(),
+		description: text('description').notNull(),
+		actionTaken: text('action_taken'),
+		witnessNames: text('witness_names'),
+		followUpRequired: boolean('follow_up_required').default(false),
+		followUpNotes: text('follow_up_notes'),
+		attachments: jsonb('attachments').$type<string[]>(), // Array of file IDs
+		createdAt: timestamp('created_at').defaultNow(),
+		updatedAt: timestamp('updated_at'),
+	},
+	(table) => ({
+		residentIdIdx: index('incident_reports_resident_id_idx').on(
+			table.residentId
+		),
+		reportedByIdx: index('incident_reports_reported_by_idx').on(
+			table.reportedBy
+		),
+		incidentDateIdx: index('incident_reports_incident_date_idx').on(
+			table.incidentDate
+		),
+		severityIdx: index('incident_reports_severity_idx').on(table.severity),
+	})
+);
+
 // ============================
 // RELATIONS (Drizzle ORM)
 // ============================
@@ -645,11 +766,13 @@ export const residentsRelations = relations(residents, ({many}) => ({
 	guardianChecklistLinks: many(guardianChecklistLinks),
 	ispAccessLogs: many(ispAccessLogs),
 	ispAcknowledgments: many(ispAcknowledgments),
+	incidentReports: many(incidentReports), // NEW
 }));
 
 export const employeesRelations = relations(employees, ({many}) => ({
 	hrFiles: many(hrFiles),
 	hrFileLogs: many(hrFileLogs),
+	trainings: many(employeeTrainings), // NEW
 }));
 
 export const shiftsRelations = relations(shifts, ({one, many}) => ({
@@ -660,16 +783,20 @@ export const shiftsRelations = relations(shifts, ({one, many}) => ({
 	residentLogs: many(residentLogs),
 }));
 
-export const residentLogsRelations = relations(residentLogs, ({one}) => ({
-	resident: one(residents, {
-		fields: [residentLogs.residentId],
-		references: [residents.id],
-	}),
-	shift: one(shifts, {
-		fields: [residentLogs.shiftId],
-		references: [shifts.id],
-	}),
-}));
+export const residentLogsRelations = relations(
+	residentLogs,
+	({one, many}) => ({
+		resident: one(residents, {
+			fields: [residentLogs.residentId],
+			references: [residents.id],
+		}),
+		shift: one(shifts, {
+			fields: [residentLogs.shiftId],
+			references: [shifts.id],
+		}),
+		activities: many(residentLogActivities), // NEW
+	})
+);
 
 export const ispFilesRelations = relations(ispFiles, ({one, many}) => ({
 	resident: one(residents, {
@@ -768,3 +895,30 @@ export const complianceReminderTemplatesRelations = relations(
 		}),
 	})
 );
+
+export const employeeTrainingsRelations = relations(
+	employeeTrainings,
+	({one}) => ({
+		employee: one(employees, {
+			fields: [employeeTrainings.employeeId],
+			references: [employees.id],
+		}),
+	})
+);
+
+export const residentLogActivitiesRelations = relations(
+	residentLogActivities,
+	({one}) => ({
+		log: one(residentLogs, {
+			fields: [residentLogActivities.logId],
+			references: [residentLogs.id],
+		}),
+	})
+);
+
+export const incidentReportsRelations = relations(incidentReports, ({one}) => ({
+	resident: one(residents, {
+		fields: [incidentReports.residentId],
+		references: [residents.id],
+	}),
+}));

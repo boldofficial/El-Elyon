@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 // (though dynamic import is used in Convex, here we can initialize once)
 const resend = new Resend(process.env.RESEND_API_KEY);
 const fromEmail = process.env.FROM_EMAIL || 'El-Elyon Properties <noreply@yourdomain.com>';
-const baseUrl = process.env.SITE_URL || 'http://localhost:3000'; // Adjusted for Next.js default port
+const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001'; // Adjusted for Next.js default port
 
 /**
  * Helper to get employee details by ID

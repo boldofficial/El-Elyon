@@ -1,3 +1,5 @@
+// src/components/care/CarePortal.tsx
+
 'use client';
 
 import React, {useState, useEffect} from 'react';
@@ -8,12 +10,15 @@ import CareLogsWorkspace from './CareLogsWorkspace';
 import CareProfileWorkspace from './CareProfileWorkspace';
 import SupervisorComplianceWorkspace from '../supervisor/SupervisorComplianceWorkspace';
 import SupervisorTeamWorkspace from '../supervisor/SupervisorTeamWorkspace';
-
+import CarePortalResidentDetails from './CarePortalResidentDetails';
+// NEW IMPORT
 
 export default function CarePortal() {
 	const [activeView, setActiveView] = useState('shift');
 	const [sessionInfo, setSessionInfo] = useState<any>(null);
 	const [currentShift, setCurrentShift] = useState<any>(null);
+	// NEW STATE for resident detail view
+	const [selectedResident, setSelectedResident] = useState<any>(null);
 
 	useEffect(() => {
 		async function fetchData() {
@@ -65,6 +70,7 @@ export default function CarePortal() {
 
 	const handleNavigation = async (viewId: string) => {
 		setActiveView(viewId);
+		setSelectedResident(null); // Clear selected resident when changing views
 		await fetch('/api/access/log', {
 			method: 'POST',
 			headers: {'Content-Type': 'application/json'},
@@ -75,15 +81,46 @@ export default function CarePortal() {
 		});
 	};
 
+	// NEW: Handle resident selection from residents list
+	const handleResidentSelect = (resident: any) => {
+		setSelectedResident(resident);
+		setActiveView('resident-details');
+	};
+
 	const renderContent = () => {
 		if (!isClockedIn) {
 			return <CareShiftWorkspace />;
 		}
+
+		// NEW: Show resident details when a resident is selected
+		if (activeView === 'resident-details' && selectedResident) {
+			return (
+				<div>
+					<button
+						onClick={() => {
+							setSelectedResident(null);
+							setActiveView('residents');
+						}}
+						className="mb-4 px-4 py-2 text-blue-600 hover:bg-blue-50 rounded border border-blue-200">
+						← Back to Residents
+					</button>
+					<CarePortalResidentDetails
+						resident={selectedResident}
+						userLocation={currentShift?.location || ''}
+						userName={sessionInfo?.user?.name || 'Staff'}
+						shiftId={currentShift?.id}
+					/>
+				</div>
+			);
+		}
+
 		switch (activeView) {
 			case 'shift':
 				return <CareShiftWorkspace />;
 			case 'residents':
-				return <CareResidentsWorkspace />;
+				return (
+					<CareResidentsWorkspace onResidentSelect={handleResidentSelect} />
+				);
 			case 'logs':
 				return <CareLogsWorkspace />;
 			case 'profile':
