@@ -14,6 +14,41 @@ import {relations} from 'drizzle-orm';
 // Create a custom table creator with a prefix
 // const pgTable = pgTableCreator((name) => `el_elyon_${name}`);
 
+// Files Table - Stores all uploaded files in the database
+export const files = pgTable(
+	'files',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		fileName: varchar('file_name', {length: 255}).notNull(),
+		contentType: varchar('content_type', {length: 100}).notNull(),
+		fileSize: integer('file_size').notNull(), // Size in bytes
+		fileContent: text('file_content').notNull(), // Base64 encoded content
+		category: varchar('category', {length: 50}).notNull(), // 'fire-evac', 'isp', 'hr', etc.
+		uploadedBy: varchar('uploaded_by', {length: 255}).notNull(),
+		uploadedAt: timestamp('uploaded_at').notNull().defaultNow(),
+		metadata: jsonb('metadata').$type<{
+			originalName?: string;
+			residentId?: string;
+			employeeId?: string;
+			description?: string;
+			[key: string]: any;
+		}>(),
+	},
+	(table) => ({
+		categoryIdx: index('files_category_idx').on(table.category),
+		uploadedByIdx: index('files_uploaded_by_idx').on(table.uploadedBy),
+		uploadedAtIdx: index('files_uploaded_at_idx').on(table.uploadedAt),
+	})
+);
+
+// Relations for Files
+export const filesRelations = relations(files, ({one}) => ({
+	uploader: one(employees, {
+		fields: [files.uploadedBy],
+		references: [employees.clerkUserId],
+	}),
+}));
+
 // Residents Table
 export const residents = pgTable(
 	'residents',
@@ -23,7 +58,7 @@ export const residents = pgTable(
 		dateOfBirth: varchar('date_of_birth', {length: 50}),
 		dob: varchar('dob', {length: 50}),
 		location: varchar('location', {length: 255}).notNull(),
-		
+
 		// NEW FIELDS
 		phone: varchar('phone', {length: 50}),
 		placementDate: timestamp('placement_date'),
@@ -34,17 +69,17 @@ export const residents = pgTable(
 		diagnostics: text('diagnostics'),
 		supportBroker: varchar('support_broker', {length: 255}),
 		importantRelationships: text('important_relationships'),
-		
+
 		// Funding & Case Management
 		fundingAgency: varchar('funding_agency', {length: 255}),
 		caseManagerName: varchar('case_manager_name', {length: 255}),
 		caseManagerPhone: varchar('case_manager_phone', {length: 50}),
 		caseManagerEmail: varchar('case_manager_email', {length: 255}),
-		
+
 		// Vocational Agency
 		vocationalAgency: varchar('vocational_agency', {length: 255}),
 		vocationalAgencyAddress: text('vocational_agency_address'),
-		
+
 		// Existing fields
 		guardianIds: jsonb('guardian_ids').$type<string[]>(),
 		medicalInfo: text('medical_info'),
@@ -91,7 +126,7 @@ export const employees = pgTable(
 		role: varchar('role', {length: 50}),
 		locations: jsonb('locations').$type<string[]>().notNull().default([]),
 		employmentStatus: varchar('employment_status', {length: 100}),
-		
+
 		// NEW HR FIELDS
 		dateOfHire: timestamp('date_of_hire'),
 		tbTestFileId: varchar('tb_test_file_id', {length: 255}),
@@ -100,7 +135,7 @@ export const employees = pgTable(
 		backgroundCheckExpiresAt: timestamp('background_check_expires_at'),
 		applicationFormFileId: varchar('application_form_file_id', {length: 255}),
 		personalBio: text('personal_bio'),
-		
+
 		// Existing fields
 		createdAt: timestamp('created_at').defaultNow(),
 		createdBy: varchar('created_by', {length: 255}),
@@ -287,7 +322,9 @@ export const ispFiles = pgTable(
 		versionLabel: varchar('version_label', {length: 255}).notNull(),
 		effectiveDate: timestamp('effective_date').notNull(),
 		status: varchar('status', {length: 50}).notNull(),
-		fileStorageId: varchar('file_storage_id', {length: 255}).notNull(),
+		fileId: uuid('file_id')
+			.notNull()
+			.references(() => files.id, {onDelete: 'cascade'}), // Changed from fileStorageId
 		fileName: varchar('file_name', {length: 255}).notNull(),
 		fileSize: integer('file_size').notNull(),
 		contentType: varchar('content_type', {length: 100}).notNull(),
@@ -310,6 +347,7 @@ export const ispFiles = pgTable(
 			table.residentId,
 			table.versionLabel
 		),
+		fileIdIdx: index('isp_files_file_id_idx').on(table.fileId),
 	})
 );
 
@@ -408,7 +446,7 @@ export const fireEvac = pgTable(
 		specialInstructions: text('special_instructions'),
 		createdAt: timestamp('created_at').defaultNow(),
 		createdBy: varchar('created_by', {length: 255}),
-		fileStorageId: varchar('file_storage_id', {length: 255}),
+		fileId: uuid('file_id').references(() => files.id, {onDelete: 'set null'}), // Changed
 		fileName: varchar('file_name', {length: 255}),
 		fileSize: integer('file_size'),
 		contentType: varchar('content_type', {length: 100}),
@@ -417,6 +455,7 @@ export const fireEvac = pgTable(
 	(table) => ({
 		residentIdIdx: index('fire_evac_resident_id_idx').on(table.residentId),
 		locationIdx: index('fire_evac_location_idx').on(table.location),
+		fileIdIdx: index('fire_evac_file_id_idx').on(table.fileId),
 	})
 );
 
@@ -601,8 +640,10 @@ export const hrFiles = pgTable(
 		employeeId: uuid('employee_id')
 			.notNull()
 			.references(() => employees.id, {onDelete: 'cascade'}),
+		fileId: uuid('file_id')
+			.notNull()
+			.references(() => files.id, {onDelete: 'cascade'}), // Changed
 		fileName: varchar('file_name', {length: 255}).notNull(),
-		fileStorageId: varchar('file_storage_id', {length: 255}).notNull(),
 		fileSize: integer('file_size').notNull(),
 		contentType: varchar('content_type', {length: 100}).notNull(),
 		uploadedBy: varchar('uploaded_by', {length: 255}).notNull(),
@@ -612,6 +653,7 @@ export const hrFiles = pgTable(
 	},
 	(table) => ({
 		employeeIdIdx: index('hr_files_employee_id_idx').on(table.employeeId),
+		fileIdIdx: index('hr_files_file_id_idx').on(table.fileId),
 	})
 );
 
@@ -783,20 +825,17 @@ export const shiftsRelations = relations(shifts, ({one, many}) => ({
 	residentLogs: many(residentLogs),
 }));
 
-export const residentLogsRelations = relations(
-	residentLogs,
-	({one, many}) => ({
-		resident: one(residents, {
-			fields: [residentLogs.residentId],
-			references: [residents.id],
-		}),
-		shift: one(shifts, {
-			fields: [residentLogs.shiftId],
-			references: [shifts.id],
-		}),
-		activities: many(residentLogActivities), // NEW
-	})
-);
+export const residentLogsRelations = relations(residentLogs, ({one, many}) => ({
+	resident: one(residents, {
+		fields: [residentLogs.residentId],
+		references: [residents.id],
+	}),
+	shift: one(shifts, {
+		fields: [residentLogs.shiftId],
+		references: [shifts.id],
+	}),
+	activities: many(residentLogActivities), // NEW
+}));
 
 export const ispFilesRelations = relations(ispFiles, ({one, many}) => ({
 	resident: one(residents, {
@@ -804,6 +843,10 @@ export const ispFilesRelations = relations(ispFiles, ({one, many}) => ({
 		references: [residents.id],
 	}),
 	accessLogs: many(ispAccessLogs),
+	file: one(files, {
+		fields: [ispFiles.fileId],
+		references: [files.id],
+	}),
 }));
 
 export const ispAccessLogsRelations = relations(ispAccessLogs, ({one}) => ({
@@ -844,6 +887,10 @@ export const fireEvacRelations = relations(fireEvac, ({one}) => ({
 		fields: [fireEvac.residentId],
 		references: [residents.id],
 	}),
+	file: one(files, {
+		fields: [fireEvac.fileId],
+		references: [files.id],
+	}),
 }));
 
 export const guardianChecklistLinksRelations = relations(
@@ -873,6 +920,10 @@ export const hrFilesRelations = relations(hrFiles, ({one, many}) => ({
 		references: [employees.id],
 	}),
 	logs: many(hrFileLogs),
+	file: one(files, {
+		fields: [hrFiles.fileId],
+		references: [files.id],
+	}),
 }));
 
 export const hrFileLogsRelations = relations(hrFileLogs, ({one}) => ({
