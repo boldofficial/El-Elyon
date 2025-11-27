@@ -1,8 +1,8 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '../../../../../../lib/db-helpers';
-import {createEmployee, generateInviteLink} from '../../../../../../db/mutations/employees';
-import {getEmployeeByClerkId} from '../../../../../../db/queries/employees'; // Assuming this function exists
+import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {createEmployee, generateInviteLink} from '@/db/mutations/employees';
+import {getEmployeeByClerkId} from '@/db/queries/employees'; // Assuming this function exists
 
 export async function POST(request: Request) {
     const {userId} = await auth();
