@@ -1,7 +1,7 @@
-// src/app/api/care/isp-files/generate-upload-url/route.ts
+// src/app/api/hr/generate-upload-url/route.ts
 import {NextRequest, NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminOrSupervisorAccess} from '@/lib/db-helpers';
+import {requireAdminAccess} from '@/lib/db-helpers';
 import {generateUploadUrl, generateFileKey} from '@/lib/aws-s3';
 
 export async function POST(req: NextRequest) {
@@ -11,18 +11,18 @@ export async function POST(req: NextRequest) {
 			return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 		}
 
-		await requireAdminOrSupervisorAccess(userId);
+		await requireAdminAccess(userId);
 
-		const {filename, contentType} = await req.json();
+		const {filename, contentType, fileType} = await req.json();
 
-		if (!filename || !contentType) {
+		if (!filename || !contentType || !fileType) {
 			return NextResponse.json(
-				{error: 'filename and contentType are required'},
+				{error: 'filename, contentType, and fileType are required'},
 				{status: 400}
 			);
 		}
 
-		const fileKey = generateFileKey('isp-files', filename);
+		const fileKey = generateFileKey(`hr/${fileType}`, filename);
 		const uploadUrl = await generateUploadUrl(fileKey, contentType);
 
 		return NextResponse.json({
