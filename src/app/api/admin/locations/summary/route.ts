@@ -1,8 +1,8 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess} from '../../../../../../lib/db-helpers';
-import {db} from '../../../../../../db/index';
-import {residents, kiosks, roles} from '../../../../../../db/schema';
+import {requireAdminAccess} from '@/lib/db-helpers';
+import {db} from '@/db/index';
+import {residents, kiosks, roles} from '@/db/schema';
 
 export async function GET() {
     const {userId} = await auth();

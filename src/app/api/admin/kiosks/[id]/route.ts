@@ -5,7 +5,7 @@ import {updateKiosk, deleteKiosk} from '@/db/mutations/kiosks';
 
 export async function PATCH(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -15,7 +15,7 @@ export async function PATCH(
 	try {
 		await requireAdminAccess(userId);
 
-		const kioskId = params.id;
+		const {id: kioskId} = await params;
 		if (!kioskId) {
 			return NextResponse.json({error: 'Kiosk ID is required'}, {status: 400});
 		}
@@ -50,7 +50,7 @@ export async function PATCH(
 
 export async function DELETE(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -60,7 +60,7 @@ export async function DELETE(
 	try {
 		await requireAdminAccess(userId);
 
-		const kioskId = params.id;
+		const {id: kioskId} = await params;
 		if (!kioskId) {
 			return NextResponse.json({error: 'Kiosk ID is required'}, {status: 400});
 		}

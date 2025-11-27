@@ -6,7 +6,7 @@ import {updateKioskLabel} from '@/db/mutations/kiosks';
 // PATCH /api/admin/kiosks/[id]/label - Update kiosk device label
 export async function PATCH(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -16,7 +16,7 @@ export async function PATCH(
 	try {
 		await requireAdminAccess(userId);
 
-		const kioskId = params.id;
+		const {id: kioskId} = await params;
 		if (!kioskId) {
 			return NextResponse.json({error: 'Kiosk ID is required'}, {status: 400});
 		}

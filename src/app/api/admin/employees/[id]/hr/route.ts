@@ -35,7 +35,7 @@ export async function GET(
 // PATCH - Update employee HR information
 export async function PATCH(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -45,7 +45,7 @@ export async function PATCH(
 	try {
 		await requireAdminAccess(userId);
 
-		const employeeId = params.id;
+		const {id: employeeId} = await params;
 		const body = await request.json();
 
 		const updated = await updateEmployeeHRDocs(employeeId, {
