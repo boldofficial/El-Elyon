@@ -1,3 +1,4 @@
+// src/components/public/GuardianChecklistPublic.tsx
 'use client';
 
 import React, {useState, useEffect} from 'react';
@@ -6,10 +7,34 @@ interface GuardianChecklistPublicProps {
 	token: string;
 }
 
+interface ChecklistData {
+	link: {
+		id: string;
+		completed: boolean;
+		expiresAt: string;
+	};
+	template: {
+		id: string;
+		name: string;
+		description?: string;
+		questions: Array<{
+			id: string;
+			text: string;
+			type: 'yes_no' | 'text' | 'rating';
+			required: boolean;
+		}>;
+	};
+	residentName: string;
+	expired: boolean;
+	completed: boolean;
+}
+
 export default function GuardianChecklistPublic({
 	token,
 }: GuardianChecklistPublicProps) {
-	const [checklistData, setChecklistData] = useState<any>(null);
+	const [checklistData, setChecklistData] = useState<ChecklistData | null>(
+		null
+	);
 	const [loading, setLoading] = useState(true);
 	const [responses, setResponses] = useState<Record<string, any>>({});
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -17,22 +42,28 @@ export default function GuardianChecklistPublic({
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
-		async function fetchChecklist() {
-			try {
-				const res = await fetch(
-					`/api/guardian-checklists/by-token?token=${token}`
-				);
-				const data = await res.json();
-				setChecklistData(data);
-			} catch (err) {
-				console.error('Error fetching checklist:', err);
-			} finally {
-				setLoading(false);
-			}
-		}
-
 		fetchChecklist();
 	}, [token]);
+
+	const fetchChecklist = async () => {
+		try {
+			const res = await fetch(
+				`/api/guardian-checklists/by-token?token=${token}`
+			);
+
+			if (!res.ok) {
+				throw new Error('Failed to fetch checklist');
+			}
+
+			const data = await res.json();
+			setChecklistData(data);
+		} catch (err) {
+			console.error('Error fetching checklist:', err);
+			setError('Failed to load checklist');
+		} finally {
+			setLoading(false);
+		}
+	};
 
 	if (loading) {
 		return (
@@ -99,9 +130,13 @@ export default function GuardianChecklistPublic({
 
 		// Validate required questions
 		const requiredQuestions =
-			checklistData.template?.questions.filter((q: any) => q.required) || [];
+			checklistData.template?.questions.filter((q) => q.required) || [];
 		for (const q of requiredQuestions) {
-			if (!responses[q.id]) {
+			if (
+				!responses[q.id] &&
+				responses[q.id] !== false &&
+				responses[q.id] !== 0
+			) {
 				setError(`Please answer: ${q.text}`);
 				return;
 			}
@@ -123,7 +158,8 @@ export default function GuardianChecklistPublic({
 			});
 
 			if (!res.ok) {
-				throw new Error('Failed to submit responses');
+				const errorData = await res.json();
+				throw new Error(errorData.error || 'Failed to submit responses');
 			}
 
 			setSubmitted(true);
@@ -153,86 +189,82 @@ export default function GuardianChecklistPublic({
 					</div>
 
 					<form onSubmit={handleSubmit} className="space-y-6">
-						{checklistData.template.questions.map(
-							(question: any, index: number) => (
-								<div
-									key={question.id}
-									className="border-b border-gray-200 pb-6">
-									<label className="block text-sm font-medium text-gray-900 mb-3">
-										{index + 1}. {question.text}
-										{question.required && (
-											<span className="text-red-500 ml-1">*</span>
-										)}
-									</label>
-
-									{question.type === 'yes_no' && (
-										<div className="flex gap-4">
-											<label className="flex items-center">
-												<input
-													type="radio"
-													name={question.id}
-													value="yes"
-													checked={responses[question.id] === true}
-													onChange={() =>
-														setResponses({...responses, [question.id]: true})
-													}
-													className="mr-2"
-												/>
-												<span>Yes</span>
-											</label>
-											<label className="flex items-center">
-												<input
-													type="radio"
-													name={question.id}
-													value="no"
-													checked={responses[question.id] === false}
-													onChange={() =>
-														setResponses({...responses, [question.id]: false})
-													}
-													className="mr-2"
-												/>
-												<span>No</span>
-											</label>
-										</div>
+						{checklistData.template.questions.map((question, index) => (
+							<div key={question.id} className="border-b border-gray-200 pb-6">
+								<label className="block text-sm font-medium text-gray-900 mb-3">
+									{index + 1}. {question.text}
+									{question.required && (
+										<span className="text-red-500 ml-1">*</span>
 									)}
+								</label>
 
-									{question.type === 'text' && (
-										<textarea
-											value={responses[question.id] || ''}
-											onChange={(e) =>
-												setResponses({
-													...responses,
-													[question.id]: e.target.value,
-												})
-											}
-											className="w-full border border-gray-300 rounded-md px-3 py-2"
-											rows={3}
-											placeholder="Your answer..."
-										/>
-									)}
+								{question.type === 'yes_no' && (
+									<div className="flex gap-4">
+										<label className="flex items-center">
+											<input
+												type="radio"
+												name={question.id}
+												value="yes"
+												checked={responses[question.id] === true}
+												onChange={() =>
+													setResponses({...responses, [question.id]: true})
+												}
+												className="mr-2"
+											/>
+											<span>Yes</span>
+										</label>
+										<label className="flex items-center">
+											<input
+												type="radio"
+												name={question.id}
+												value="no"
+												checked={responses[question.id] === false}
+												onChange={() =>
+													setResponses({...responses, [question.id]: false})
+												}
+												className="mr-2"
+											/>
+											<span>No</span>
+										</label>
+									</div>
+								)}
 
-									{question.type === 'rating' && (
-										<div className="flex gap-2">
-											{[1, 2, 3, 4, 5].map((rating) => (
-												<button
-													key={rating}
-													type="button"
-													onClick={() =>
-														setResponses({...responses, [question.id]: rating})
-													}
-													className={`w-12 h-12 rounded-full border-2 font-medium ${
-														responses[question.id] === rating
-															? 'bg-blue-600 text-white border-blue-600'
-															: 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
-													}`}>
-													{rating}
-												</button>
-											))}
-										</div>
-									)}
-								</div>
-							)
-						)}
+								{question.type === 'text' && (
+									<textarea
+										value={responses[question.id] || ''}
+										onChange={(e) =>
+											setResponses({
+												...responses,
+												[question.id]: e.target.value,
+											})
+										}
+										className="w-full border border-gray-300 rounded-md px-3 py-2"
+										rows={3}
+										placeholder="Your answer..."
+									/>
+								)}
+
+								{question.type === 'rating' && (
+									<div className="flex gap-2">
+										{[1, 2, 3, 4, 5].map((rating) => (
+											<button
+												key={rating}
+												type="button"
+												onClick={() =>
+													setResponses({...responses, [question.id]: rating})
+												}
+												className={`w-12 h-12 rounded-full border-2 font-medium ${
+													responses[question.id] === rating
+														? 'bg-blue-600 text-white border-blue-600'
+														: 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
+												}`}>
+												{rating}
+											</button>
+										))}
+									</div>
+								)}
+							</div>
+						))}
 
 						{error && (
 							<div className="bg-red-50 border border-red-200 rounded-md p-4">
