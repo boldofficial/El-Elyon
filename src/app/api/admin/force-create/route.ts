@@ -5,8 +5,9 @@ import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {getEmployeeByClerkId} from '@/db/queries/employees';
 import {createEmployee, updateEmployee} from '@/db/mutations/employees';
-import {getRoleByClerkId, createRole, updateRole} from '@/db/queries/roles';
+import {getRoleByClerkId} from '@/db/queries/roles';
 import {getClerkUser} from '@/lib/clerk';
+import { createRole, updateRole } from '@/db/mutations/roles';
 
 export async function POST() {
 	try {
