@@ -3,7 +3,7 @@ import {headers} from 'next/headers';
 import {NextResponse} from 'next/server';
 import {getUserByClerkId} from '@/db/queries/users';
 import {
-	createEmployee,
+	// createEmployee,
 	updateEmployee,
 	deleteEmployee,
 } from '@/db/mutations/employees';
@@ -39,8 +39,7 @@ export async function POST(req: Request) {
 		});
 	}
 
-	// Get body - THIS IS THE FIX!
-	// Don't stringify it again - it's already a string from req.text()
+	// Get body
 	const payload = await req.text();
 
 	console.log('📦 Payload length:', payload.length);
@@ -52,7 +51,6 @@ export async function POST(req: Request) {
 
 	// Verify payload with headers
 	try {
-		// Pass the raw payload string directly - DON'T JSON.stringify it!
 		evt = wh.verify(payload, {
 			'svix-id': svix_id,
 			'svix-timestamp': svix_timestamp,
@@ -127,7 +125,7 @@ async function handleUserCreated(userData: any) {
 			name,
 			createdAt: new Date(userData.created_at),
 		});
-		console.log('✅ User created');
+		console.log('✅ User created:', clerkUserId);
 	}
 
 	// Check if employee exists
@@ -138,7 +136,7 @@ async function handleUserCreated(userData: any) {
 	const isFirstUser = admins.length === 0;
 	const finalRole = isFirstUser ? 'admin' : metadata.role || 'staff';
 
-	// ✅ CRITICAL FIX: Admins get undefined assignedDeviceId (no device restriction)
+	// Admins get undefined assignedDeviceId (no device restriction)
 	const assignedDeviceId =
 		finalRole === 'admin' ? undefined : metadata.assignedDeviceId;
 
@@ -149,6 +147,7 @@ async function handleUserCreated(userData: any) {
 		isFirstUser,
 	});
 
+	// ✅ FIX: Don't call createEmployee if employee exists OR if this is a webhook-created user
 	if (existingEmployee) {
 		console.log('ℹ️  Employee already exists, updating');
 		await updateEmployee(
@@ -158,25 +157,38 @@ async function handleUserCreated(userData: any) {
 				email,
 				role: finalRole as 'admin' | 'supervisor' | 'staff',
 				locations: metadata.locations || [],
-				assignedDeviceId, // undefined for admins
+				assignedDeviceId,
 			},
 			clerkUserId
 		);
 	} else {
+		// ✅ FIX: Create employee record directly in database without calling createEmployee
+		// This avoids the circular dependency where createEmployee tries to create a Clerk user
 		console.log(
-			`${isFirstUser ? '🎖️  Creating first admin' : '👤 Creating employee'}`
+			`${isFirstUser ? '🎖️  Creating first admin employee record' : '👤 Creating employee record'}`
 		);
-		await createEmployee(
-			{
+
+		const {db} = await import('@/db/index');
+		const {employees} = await import('@/db/schema');
+
+		const [newEmployee] = await db
+			.insert(employees)
+			.values({
 				name,
 				email,
+				workEmail: email,
 				role: finalRole as 'admin' | 'supervisor' | 'staff',
 				locations: metadata.locations || [],
-				assignedDeviceId, // ✅ undefined for admins
-			},
-			clerkUserId
-		);
-		console.log('✅ Employee created');
+				assignedDeviceId,
+				clerkUserId,
+				createdAt: new Date(),
+				createdBy: clerkUserId,
+				employmentStatus: 'active',
+				hasAcceptedInvite: true,
+			})
+			.returning();
+
+		console.log('✅ Employee created:', newEmployee.id);
 	}
 
 	// Check if role exists
@@ -216,6 +228,7 @@ async function handleUserUpdated(userData: any) {
 			name,
 			updatedAt: new Date(),
 		});
+		console.log('✅ User updated:', clerkUserId);
 	}
 
 	// Update employee
@@ -226,7 +239,7 @@ async function handleUserUpdated(userData: any) {
 			(employee.role as 'admin' | 'supervisor' | 'staff') ||
 			'staff';
 
-		// FIX: Admins get undefined assignedDeviceId
+		// Admins get undefined assignedDeviceId
 		const assignedDeviceId =
 			currentRole === 'admin'
 				? undefined
@@ -243,6 +256,7 @@ async function handleUserUpdated(userData: any) {
 			},
 			clerkUserId
 		);
+		console.log('✅ Employee updated:', clerkUserId);
 	}
 
 	// Update role
@@ -252,6 +266,7 @@ async function handleUserUpdated(userData: any) {
 			role: metadata.role,
 			locations: metadata.locations,
 		});
+		console.log('✅ Role updated for', clerkUserId);
 	}
 
 	console.log('✅ User updated');
@@ -266,10 +281,15 @@ async function handleUserDeleted(userData: any) {
 	const employee = await getEmployeeByClerkId(clerkUserId);
 
 	await deleteUser(clerkUserId);
+	console.log('✅ User deleted:', clerkUserId);
+
 	if (employee) {
 		await deleteEmployee(employee.id, clerkUserId);
+		console.log('✅ Employee deleted:', employee.id);
 	}
+
 	await deleteRole(clerkUserId);
+	console.log('✅ Role deleted for', clerkUserId);
 
 	console.log('✅ User deleted');
 }
