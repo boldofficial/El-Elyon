@@ -80,3 +80,18 @@ export async function requireAdminAccess(clerkUserId: string) {
 	}
 	return userRole;
 }
+
+export async function requireAdminOrSupervisorAccess(clerkUserId: string) {
+	const userRole = await getUserRoleDoc(clerkUserId);
+	if (!userRole || !['admin', 'supervisor'].includes(userRole.role || '')) {
+		await logAudit({
+			clerkUserId: clerkUserId,
+			event: 'access_denied',
+			details: 'admin_or_supervisor_access_required',
+			deviceId: 'system',
+			location: '',
+		});
+		throw new Error('Admin or Supervisor access required');
+	}
+	return userRole;
+}
