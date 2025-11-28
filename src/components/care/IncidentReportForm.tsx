@@ -40,8 +40,9 @@ export default function IncidentReportForm({
 	onCancel,
 }: IncidentReportFormProps) {
 	const [submitting, setSubmitting] = useState(false);
+	const [uploading, setUploading] = useState(false);
 	const [formData, setFormData] = useState({
-		incidentDate: new Date().toISOString().slice(0, 16), // datetime-local format
+		incidentDate: new Date().toISOString().slice(0, 16),
 		incidentType: 'Other',
 		severity: 'medium',
 		description: '',
@@ -49,8 +50,86 @@ export default function IncidentReportForm({
 		witnessNames: '',
 		followUpRequired: false,
 		followUpNotes: '',
-		attachments: [] as string[], // Explicitly define as string[]
+		attachments: [] as string[],
 	});
+	const [uploadedFiles, setUploadedFiles] = useState<
+		Array<{name: string; key: string}>
+	>([]);
+
+	// ADDED: File upload handler for incident attachments
+	const handleFileUpload = async (files: FileList) => {
+		setUploading(true);
+		const uploadedKeys: string[] = [];
+		const uploadedFilesList: Array<{name: string; key: string}> = [];
+
+		try {
+			for (let i = 0; i < files.length; i++) {
+				const file = files[i];
+
+				// Validate file size (10MB max per file)
+				if (file.size > 10 * 1024 * 1024) {
+					toast.error(`File ${file.name} exceeds 10MB limit`);
+					continue;
+				}
+
+				// Get presigned upload URL
+				const urlResponse = await fetch(
+					'/api/care/incidents/generate-upload-url',
+					{
+						method: 'POST',
+						headers: {'Content-Type': 'application/json'},
+						body: JSON.stringify({
+							filename: file.name,
+							contentType: file.type,
+						}),
+					}
+				);
+
+				if (!urlResponse.ok) {
+					toast.error(`Failed to prepare upload for ${file.name}`);
+					continue;
+				}
+
+				const {uploadUrl, fileKey} = await urlResponse.json();
+
+				// Upload file to S3
+				const uploadResponse = await fetch(uploadUrl, {
+					method: 'PUT',
+					body: file,
+					headers: {'Content-Type': file.type},
+				});
+
+				if (!uploadResponse.ok) {
+					toast.error(`Failed to upload ${file.name}`);
+					continue;
+				}
+
+				uploadedKeys.push(fileKey);
+				uploadedFilesList.push({name: file.name, key: fileKey});
+			}
+
+			setUploadedFiles((prev) => [...prev, ...uploadedFilesList]);
+			setFormData((prev) => ({
+				...prev,
+				attachments: [...prev.attachments, ...uploadedKeys],
+			}));
+
+			toast.success(`${uploadedKeys.length} file(s) uploaded successfully`);
+		} catch (error) {
+			console.error('Upload error:', error);
+			toast.error('Failed to upload files');
+		} finally {
+			setUploading(false);
+		}
+	};
+
+	const handleRemoveFile = (index: number) => {
+		setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+		setFormData((prev) => ({
+			...prev,
+			attachments: prev.attachments.filter((_, i) => i !== index),
+		}));
+	};
 
 	const handleChange = (
 		e: React.ChangeEvent<
@@ -78,12 +157,12 @@ export default function IncidentReportForm({
 		setSubmitting(true);
 
 		try {
-			const res = await fetch(`/api/care/incidents`, { // Updated endpoint
+			const res = await fetch(`/api/care/incidents`, {
 				method: 'POST',
 				headers: {'Content-Type': 'application/json'},
 				body: JSON.stringify({
 					...formData,
-					residentId, // Pass residentId in the body
+					residentId,
 					location,
 				}),
 			});
@@ -129,8 +208,8 @@ export default function IncidentReportForm({
 						Incident Type <span className="text-red-500">*</span>
 					</label>
 					<select
-            id="incidentType"
-            title="Incident Type"
+						id="incidentType"
+						title="Incident Type"
 						name="incidentType"
 						value={formData.incidentType}
 						onChange={handleChange}
@@ -263,7 +342,7 @@ export default function IncidentReportForm({
 					)}
 				</div>
 
-				{/* Attachments (Placeholder for file upload) */}
+				{/* FIXED: Attachments with real file upload */}
 				<div>
 					<label className="block text-sm font-medium text-gray-700 mb-2">
 						Attachments
@@ -271,28 +350,42 @@ export default function IncidentReportForm({
 					<input
 						type="file"
 						multiple
+						accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+						disabled={uploading}
 						onChange={(e) => {
-							// For simplicity, just store file names or IDs for now.
-							// Actual file upload logic (to S3, etc.) would be integrated here.
-							// This example assumes `attachments` is an array of strings (file IDs).
-							const files = Array.from(e.target.files || []).map(file => file.name); // Placeholder
-							setFormData((prev) => ({...prev, attachments: files}));
+							if (e.target.files) {
+								handleFileUpload(e.target.files);
+							}
 						}}
 						className="w-full border rounded px-3 py-2 text-sm text-gray-700
-            file:mr-4 file:py-2 file:px-4
-            file:rounded-full file:border-0
-            file:text-sm file:font-semibold
-            file:bg-blue-50 file:text-blue-700
-            hover:file:bg-blue-100"
+							file:mr-4 file:py-2 file:px-4
+							file:rounded-full file:border-0
+							file:text-sm file:font-semibold
+							file:bg-blue-50 file:text-blue-700
+							hover:file:bg-blue-100
+							disabled:opacity-50"
 					/>
-					{formData.attachments && formData.attachments.length > 0 && (
-						<div className="mt-2 text-sm text-gray-600">
-							<p className="font-medium">Selected Files:</p>
-							<ul className="list-disc ml-5">
-								{formData.attachments.map((file, index) => (
-									<li key={index}>{file}</li>
-								))}
-							</ul>
+					{uploading && (
+						<p className="text-sm text-blue-600 mt-2">Uploading files...</p>
+					)}
+					{uploadedFiles.length > 0 && (
+						<div className="mt-3 space-y-2">
+							<p className="text-sm font-medium text-gray-700">
+								Uploaded Files:
+							</p>
+							{uploadedFiles.map((file, index) => (
+								<div
+									key={index}
+									className="flex items-center justify-between bg-gray-50 p-2 rounded">
+									<span className="text-sm text-gray-700">📎 {file.name}</span>
+									<button
+										type="button"
+										onClick={() => handleRemoveFile(index)}
+										className="text-red-600 hover:text-red-800 text-sm">
+										Remove
+									</button>
+								</div>
+							))}
 						</div>
 					)}
 				</div>
@@ -309,7 +402,7 @@ export default function IncidentReportForm({
 					)}
 					<button
 						type="submit"
-						disabled={submitting}
+						disabled={submitting || uploading}
 						className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">
 						{submitting ? 'Submitting...' : 'Submit Incident Report'}
 					</button>
