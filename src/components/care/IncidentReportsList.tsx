@@ -14,7 +14,10 @@ interface IncidentReport {
 	description: string;
 	reportedByName: string;
 	actionTaken?: string;
+	witnessNames?: string; // Added
 	followUpRequired: boolean;
+	followUpNotes?: string; // Added
+	attachments?: string[]; // Added
 	createdAt: Date;
 }
 
@@ -46,7 +49,7 @@ export default function IncidentReportsList({
 
 	async function fetchReports() {
 		try {
-			const res = await fetch(`/api/care/residents/${residentId}/incidents`);
+			const res = await fetch(`/api/care/incidents?residentId=${residentId}`); // Updated endpoint
 			if (!res.ok) throw new Error('Failed to fetch');
 
 			const data = await res.json();
@@ -122,6 +125,45 @@ export default function IncidentReportsList({
 							</p>
 						</div>
 					)}
+
+					{selectedReport.followUpNotes && (
+						<div>
+							<h4 className="font-semibold mb-1">Follow-up Notes</h4>
+							<p className="text-gray-700 whitespace-pre-wrap">
+								{selectedReport.followUpNotes}
+							</p>
+						</div>
+					)}
+
+					{selectedReport.witnessNames && (
+						<div>
+							<h4 className="font-semibold mb-1">Witnesses</h4>
+							<p className="text-gray-700 whitespace-pre-wrap">
+								{selectedReport.witnessNames}
+							</p>
+						</div>
+					)}
+
+					{selectedReport.attachments &&
+						selectedReport.attachments.length > 0 && (
+							<div>
+								<h4 className="font-semibold mb-1">Attachments</h4>
+								<ul className="list-disc ml-5 text-gray-700">
+									{selectedReport.attachments.map((fileId, index) => (
+										<li key={index}>
+											{/* In a real app, you'd fetch file details or generate a download link */}
+											<a
+												href={`/api/files/download/${fileId}`}
+												target="_blank"
+												rel="noopener noreferrer"
+												className="text-blue-600 hover:underline">
+												{fileId} (Download)
+											</a>
+										</li>
+									))}
+								</ul>
+							</div>
+						)}
 				</div>
 			</div>
 		);
