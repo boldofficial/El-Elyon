@@ -31,6 +31,7 @@ export default function EmployeeTrainingManagement({
 }: EmployeeTrainingManagementProps) {
 	const [trainings, setTrainings] = useState<Training[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [uploading, setUploading] = useState<string | null>(null);
 	const [showAddForm, setShowAddForm] = useState(false);
 	const [editingTraining, setEditingTraining] = useState<Training | null>(null);
 	const [addFormData, setAddFormData] = useState({
@@ -38,7 +39,7 @@ export default function EmployeeTrainingManagement({
 		trainingYear: new Date().getFullYear(),
 		completed: false,
 		completedDate: '',
-		certificateFileId: '', // Placeholder for file upload
+		certificateFileId: '',
 		notes: '',
 	});
 	const [editFormData, setEditFormData] = useState({
@@ -46,9 +47,59 @@ export default function EmployeeTrainingManagement({
 		trainingYear: new Date().getFullYear(),
 		completed: false,
 		completedDate: '',
-		certificateFileId: '', // Placeholder for file upload
+		certificateFileId: '',
 		notes: '',
 	});
+
+	// ADDED: File upload handler for training certificates
+	const handleCertificateUpload = async (file: File) => {
+		setUploading('certificate');
+		try {
+			const urlResponse = await fetch('/api/hr/generate-upload-url', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({
+					filename: file.name,
+					contentType: file.type,
+					fileType: 'training_certificates',
+				}),
+			});
+
+			if (!urlResponse.ok) throw new Error('Failed to get upload URL');
+			const {uploadUrl, fileKey} = await urlResponse.json();
+
+			const uploadResponse = await fetch(uploadUrl, {
+				method: 'PUT',
+				body: file,
+				headers: {'Content-Type': file.type},
+			});
+
+			if (!uploadResponse.ok) throw new Error('Failed to upload file');
+
+			toast.success('Certificate uploaded successfully');
+			return fileKey;
+		} catch (error) {
+			console.error('Upload error:', error);
+			toast.error('Failed to upload certificate');
+			return null;
+		} finally {
+			setUploading(null);
+		}
+	};
+
+	// ADDED: Download certificate handler
+	const handleDownloadCertificate = async (fileKey: string) => {
+		try {
+			const res = await fetch(`/api/hr/download-url?fileKey=${fileKey}`);
+			if (!res.ok) throw new Error('Failed to get download URL');
+
+			const {downloadUrl} = await res.json();
+			window.open(downloadUrl, '_blank');
+		} catch (error) {
+			console.error('Download error:', error);
+			toast.error('Failed to download certificate');
+		}
+	};
 
 	useEffect(() => {
 		fetchTrainings();
@@ -69,7 +120,9 @@ export default function EmployeeTrainingManagement({
 	}
 
 	const handleAddChange = (
-		e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+		e: React.ChangeEvent<
+			HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+		>
 	) => {
 		const {name, value, type, checked} = e.target as HTMLInputElement;
 		setAddFormData((prev) => ({
@@ -79,7 +132,9 @@ export default function EmployeeTrainingManagement({
 	};
 
 	const handleEditChange = (
-		e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+		e: React.ChangeEvent<
+			HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+		>
 	) => {
 		const {name, value, type, checked} = e.target as HTMLInputElement;
 		setEditFormData((prev) => ({
@@ -97,13 +152,15 @@ export default function EmployeeTrainingManagement({
 				body: JSON.stringify({
 					...addFormData,
 					trainingYear: Number(addFormData.trainingYear),
-					completedDate: addFormData.completedDate ? new Date(addFormData.completedDate) : undefined,
+					completedDate: addFormData.completedDate
+						? new Date(addFormData.completedDate)
+						: undefined,
 				}),
 			});
 
 			if (!res.ok) throw new Error('Failed to add training');
 			toast.success('Training added successfully');
-			setAddFormData({ // Reset form
+			setAddFormData({
 				trainingName: '',
 				trainingYear: new Date().getFullYear(),
 				completed: false,
@@ -112,7 +169,7 @@ export default function EmployeeTrainingManagement({
 				notes: '',
 			});
 			setShowAddForm(false);
-			fetchTrainings(); // Refresh list
+			fetchTrainings();
 		} catch (error) {
 			console.error('Error adding training:', error);
 			toast.error('Failed to add training');
@@ -131,14 +188,16 @@ export default function EmployeeTrainingManagement({
 					trainingId: editingTraining.id,
 					...editFormData,
 					trainingYear: Number(editFormData.trainingYear),
-					completedDate: editFormData.completedDate ? new Date(editFormData.completedDate) : undefined,
+					completedDate: editFormData.completedDate
+						? new Date(editFormData.completedDate)
+						: undefined,
 				}),
 			});
 
 			if (!res.ok) throw new Error('Failed to update training');
 			toast.success('Training updated successfully');
 			setEditingTraining(null);
-			fetchTrainings(); // Refresh list
+			fetchTrainings();
 		} catch (error) {
 			console.error('Error updating training:', error);
 			toast.error('Failed to update training');
@@ -146,7 +205,8 @@ export default function EmployeeTrainingManagement({
 	};
 
 	const handleDeleteTraining = async (trainingId: string) => {
-		if (!window.confirm('Are you sure you want to delete this training?')) return;
+		if (!window.confirm('Are you sure you want to delete this training?'))
+			return;
 		try {
 			const res = await fetch(`/api/admin/employees/${employeeId}/trainings`, {
 				method: 'DELETE',
@@ -156,7 +216,7 @@ export default function EmployeeTrainingManagement({
 
 			if (!res.ok) throw new Error('Failed to delete training');
 			toast.success('Training deleted successfully');
-			fetchTrainings(); // Refresh list
+			fetchTrainings();
 		} catch (error) {
 			console.error('Error deleting training:', error);
 			toast.error('Failed to delete training');
@@ -176,7 +236,7 @@ export default function EmployeeTrainingManagement({
 
 			if (!res.ok) throw new Error('Failed to toggle completion');
 			toast.success('Training completion status updated');
-			fetchTrainings(); // Refresh list
+			fetchTrainings();
 		} catch (error) {
 			console.error('Error toggling training completion:', error);
 			toast.error('Failed to update completion status');
@@ -199,7 +259,7 @@ export default function EmployeeTrainingManagement({
 					onClick={() => {
 						setShowAddForm(!showAddForm);
 						setEditingTraining(null);
-						setAddFormData({ // Reset form when toggling
+						setAddFormData({
 							trainingName: '',
 							trainingYear: new Date().getFullYear(),
 							completed: false,
@@ -271,18 +331,37 @@ export default function EmployeeTrainingManagement({
 								/>
 							</div>
 						)}
+						{/* FIXED: Certificate file upload */}
 						<div>
 							<label className="block text-sm font-medium text-gray-700 mb-1">
-								Certificate (File ID)
+								Certificate
 							</label>
 							<input
-								type="text" // In a real app, this would be a file upload component
-								name="certificateFileId"
-								value={addFormData.certificateFileId}
-								onChange={handleAddChange}
-								placeholder="e.g., file-id-123"
-								className="w-full border rounded px-3 py-2"
+								type="file"
+								accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+								disabled={uploading === 'certificate'}
+								onChange={async (e) => {
+									const file = e.target.files?.[0];
+									if (file) {
+										const fileKey = await handleCertificateUpload(file);
+										if (fileKey) {
+											setAddFormData((prev) => ({
+												...prev,
+												certificateFileId: fileKey,
+											}));
+										}
+									}
+								}}
+								className="w-full border rounded px-3 py-2 disabled:opacity-50"
 							/>
+							{uploading === 'certificate' && (
+								<p className="text-sm text-blue-600 mt-1">Uploading...</p>
+							)}
+							{addFormData.certificateFileId && (
+								<p className="text-sm text-green-600 mt-1">
+									✓ Certificate uploaded
+								</p>
+							)}
 						</div>
 						<div>
 							<label className="block text-sm font-medium text-gray-700 mb-1">
@@ -298,7 +377,8 @@ export default function EmployeeTrainingManagement({
 						</div>
 						<button
 							type="submit"
-							className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+							disabled={uploading === 'certificate'}
+							className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50">
 							Add Training
 						</button>
 					</form>
@@ -307,7 +387,9 @@ export default function EmployeeTrainingManagement({
 
 			{editingTraining && (
 				<div className="bg-blue-50 p-4 rounded mb-4 border border-blue-200">
-					<h3 className="text-lg font-semibold mb-3">Edit Training: {editingTraining.trainingName}</h3>
+					<h3 className="text-lg font-semibold mb-3">
+						Edit Training: {editingTraining.trainingName}
+					</h3>
 					<form onSubmit={handleUpdateSubmit} className="space-y-4">
 						<div>
 							<label className="block text-sm font-medium text-gray-700 mb-1">
@@ -363,18 +445,42 @@ export default function EmployeeTrainingManagement({
 								/>
 							</div>
 						)}
+						{/* FIXED: Certificate file upload for edit */}
 						<div>
 							<label className="block text-sm font-medium text-gray-700 mb-1">
-								Certificate (File ID)
+								Certificate
 							</label>
 							<input
-								type="text" // In a real app, this would be a file upload component
-								name="certificateFileId"
-								value={editFormData.certificateFileId}
-								onChange={handleEditChange}
-								placeholder="e.g., file-id-123"
-								className="w-full border rounded px-3 py-2"
+								type="file"
+								accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+								disabled={uploading === 'certificate'}
+								onChange={async (e) => {
+									const file = e.target.files?.[0];
+									if (file) {
+										const fileKey = await handleCertificateUpload(file);
+										if (fileKey) {
+											setEditFormData((prev) => ({
+												...prev,
+												certificateFileId: fileKey,
+											}));
+										}
+									}
+								}}
+								className="w-full border rounded px-3 py-2 disabled:opacity-50"
 							/>
+							{uploading === 'certificate' && (
+								<p className="text-sm text-blue-600 mt-1">Uploading...</p>
+							)}
+							{editFormData.certificateFileId && (
+								<button
+									type="button"
+									onClick={() =>
+										handleDownloadCertificate(editFormData.certificateFileId)
+									}
+									className="text-blue-600 hover:underline text-sm mt-1">
+									📄 View Current Certificate
+								</button>
+							)}
 						</div>
 						<div>
 							<label className="block text-sm font-medium text-gray-700 mb-1">
@@ -391,7 +497,8 @@ export default function EmployeeTrainingManagement({
 						<div className="flex gap-2 mt-4">
 							<button
 								type="submit"
-								className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+								disabled={uploading === 'certificate'}
+								className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">
 								Update Training
 							</button>
 							<button
@@ -409,7 +516,7 @@ export default function EmployeeTrainingManagement({
 			<div className="overflow-x-auto">
 				{trainings.length === 0 ? (
 					<div className="text-center py-8 text-gray-500">
-						No trainings added yet. Click &ldquo;+ Add Training&ldquo; to start.
+						No trainings added yet. Click &quot; + Add Training&quot; to start.
 					</div>
 				) : (
 					<table className="w-full">
@@ -419,6 +526,7 @@ export default function EmployeeTrainingManagement({
 								<th className="px-4 py-2 text-left">Year</th>
 								<th className="px-4 py-2 text-left">Status</th>
 								<th className="px-4 py-2 text-left">Completed Date</th>
+								<th className="px-4 py-2 text-left">Certificate</th>
 								<th className="px-4 py-2 text-left">Actions</th>
 							</tr>
 						</thead>
@@ -443,6 +551,19 @@ export default function EmployeeTrainingManagement({
 											? new Date(training.completedDate).toLocaleDateString()
 											: '-'}
 									</td>
+									<td className="px-4 py-2">
+										{training.certificateFileId ? (
+											<button
+												onClick={() =>
+													handleDownloadCertificate(training.certificateFileId!)
+												}
+												className="text-blue-600 hover:underline text-sm">
+												📄 View
+											</button>
+										) : (
+											'-'
+										)}
+									</td>
 									<td className="px-4 py-2 flex gap-2">
 										<button
 											onClick={() => {
@@ -452,7 +573,9 @@ export default function EmployeeTrainingManagement({
 													trainingYear: training.trainingYear,
 													completed: training.completed,
 													completedDate: training.completedDate
-														? new Date(training.completedDate).toISOString().split('T')[0]
+														? new Date(training.completedDate)
+																.toISOString()
+																.split('T')[0]
 														: '',
 													certificateFileId: training.certificateFileId || '',
 													notes: training.notes || '',
