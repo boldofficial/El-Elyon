@@ -49,6 +49,7 @@ export default function IncidentReportForm({
 		witnessNames: '',
 		followUpRequired: false,
 		followUpNotes: '',
+		attachments: [] as string[], // Explicitly define as string[]
 	});
 
 	const handleChange = (
@@ -77,11 +78,12 @@ export default function IncidentReportForm({
 		setSubmitting(true);
 
 		try {
-			const res = await fetch(`/api/care/residents/${residentId}/incidents`, {
+			const res = await fetch(`/api/care/incidents`, { // Updated endpoint
 				method: 'POST',
 				headers: {'Content-Type': 'application/json'},
 				body: JSON.stringify({
 					...formData,
+					residentId, // Pass residentId in the body
 					location,
 				}),
 			});
@@ -257,6 +259,40 @@ export default function IncidentReportForm({
 								placeholder="Describe what follow-up actions are needed..."
 								className="w-full border rounded px-3 py-2"
 							/>
+						</div>
+					)}
+				</div>
+
+				{/* Attachments (Placeholder for file upload) */}
+				<div>
+					<label className="block text-sm font-medium text-gray-700 mb-2">
+						Attachments
+					</label>
+					<input
+						type="file"
+						multiple
+						onChange={(e) => {
+							// For simplicity, just store file names or IDs for now.
+							// Actual file upload logic (to S3, etc.) would be integrated here.
+							// This example assumes `attachments` is an array of strings (file IDs).
+							const files = Array.from(e.target.files || []).map(file => file.name); // Placeholder
+							setFormData((prev) => ({...prev, attachments: files}));
+						}}
+						className="w-full border rounded px-3 py-2 text-sm text-gray-700
+            file:mr-4 file:py-2 file:px-4
+            file:rounded-full file:border-0
+            file:text-sm file:font-semibold
+            file:bg-blue-50 file:text-blue-700
+            hover:file:bg-blue-100"
+					/>
+					{formData.attachments && formData.attachments.length > 0 && (
+						<div className="mt-2 text-sm text-gray-600">
+							<p className="font-medium">Selected Files:</p>
+							<ul className="list-disc ml-5">
+								{formData.attachments.map((file, index) => (
+									<li key={index}>{file}</li>
+								))}
+							</ul>
 						</div>
 					)}
 				</div>
