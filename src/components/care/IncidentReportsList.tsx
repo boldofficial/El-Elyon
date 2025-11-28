@@ -14,10 +14,10 @@ interface IncidentReport {
 	description: string;
 	reportedByName: string;
 	actionTaken?: string;
-	witnessNames?: string; // Added
+	witnessNames?: string;
 	followUpRequired: boolean;
-	followUpNotes?: string; // Added
-	attachments?: string[]; // Added
+	followUpNotes?: string;
+	attachments?: string[];
 	createdAt: Date;
 }
 
@@ -49,7 +49,7 @@ export default function IncidentReportsList({
 
 	async function fetchReports() {
 		try {
-			const res = await fetch(`/api/care/incidents?residentId=${residentId}`); // Updated endpoint
+			const res = await fetch(`/api/care/incidents?residentId=${residentId}`);
 			if (!res.ok) throw new Error('Failed to fetch');
 
 			const data = await res.json();
@@ -61,6 +61,22 @@ export default function IncidentReportsList({
 			setLoading(false);
 		}
 	}
+
+	// ADDED: Download attachment handler
+	const handleDownloadAttachment = async (fileKey: string) => {
+		try {
+			const res = await fetch(
+				`/api/care/incidents/download-url?fileKey=${fileKey}`
+			);
+			if (!res.ok) throw new Error('Failed to get download URL');
+
+			const {downloadUrl} = await res.json();
+			window.open(downloadUrl, '_blank');
+		} catch (error) {
+			console.error('Download error:', error);
+			toast.error('Failed to download attachment');
+		}
+	};
 
 	if (loading) {
 		return (
@@ -144,24 +160,33 @@ export default function IncidentReportsList({
 						</div>
 					)}
 
+					{/* FIXED: Display and download attachments */}
 					{selectedReport.attachments &&
 						selectedReport.attachments.length > 0 && (
 							<div>
-								<h4 className="font-semibold mb-1">Attachments</h4>
-								<ul className="list-disc ml-5 text-gray-700">
-									{selectedReport.attachments.map((fileId, index) => (
-										<li key={index}>
-											{/* In a real app, you'd fetch file details or generate a download link */}
-											<a
-												href={`/api/files/download/${fileId}`}
-												target="_blank"
-												rel="noopener noreferrer"
-												className="text-blue-600 hover:underline">
-												{fileId} (Download)
-											</a>
-										</li>
-									))}
-								</ul>
+								<h4 className="font-semibold mb-2">Attachments</h4>
+								<div className="space-y-2">
+									{selectedReport.attachments.map((fileKey, index) => {
+										// Extract filename from key (format: incident-attachments/timestamp-random-filename)
+										const filename =
+											fileKey.split('/').pop() || `attachment-${index + 1}`;
+
+										return (
+											<div
+												key={index}
+												className="flex items-center justify-between bg-gray-50 p-3 rounded border">
+												<span className="text-sm text-gray-700">
+													📎 {filename.replace(/^\d+-[a-z0-9]+-/, '')}
+												</span>
+												<button
+													onClick={() => handleDownloadAttachment(fileKey)}
+													className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+													Download
+												</button>
+											</div>
+										);
+									})}
+								</div>
 							</div>
 						)}
 				</div>
@@ -205,11 +230,18 @@ export default function IncidentReportsList({
 
 						<div className="flex justify-between items-center text-xs text-gray-500">
 							<span>Reported by: {report.reportedByName}</span>
-							{report.followUpRequired && (
-								<span className="text-yellow-600 font-medium">
-									Follow-up required
-								</span>
-							)}
+							<div className="flex items-center gap-2">
+								{report.attachments && report.attachments.length > 0 && (
+									<span className="text-blue-600">
+										📎 {report.attachments.length}
+									</span>
+								)}
+								{report.followUpRequired && (
+									<span className="text-yellow-600 font-medium">
+										Follow-up required
+									</span>
+								)}
+							</div>
 						</div>
 					</div>
 				))
