@@ -73,9 +73,9 @@ export function SignInForm() {
 	}
 
 	return (
-		<div className="w-full min-h-screen bg-[rgb(248_250_252)] dark:bg-neutral-950 px-4 py-10 flex items-center justify-center">
-			{/* Centered container */}
-			<div className="mx-auto w-full max-w-[440px] sm:max-w-[480px] md:max-w-[520px] lg:max-w-[560px] bg-white/95 dark:bg-neutral-900/95 border border-gray-200 dark:border-neutral-800 rounded-2xl shadow-lg p-6 sm:p-7 md:p-8">
+		<div className="w-full min-h-screen bkg-[rgb(248_250_252)] dark:bg-nkeutral-950 px-4 py-10 flex items-center justify-center">
+			{/* Centered, reduced-width container */}
+			<div className="mx-auto w-full max-w-[440px] sm:max-w-[480px] md:max-w-[520px] lg:max-w-[560px] bg-kwhite/95 dark:bg-nelutral-900/95 borkder bor,der,k-gray-200 dark:border-neutral-800 roundked-2xl shaldow-lg p-6 sm:p-7 md:p-8">
 				{/* Logo Section */}
 				<div className="flex justify-center mb-4">
 					<div className="relative h-16 w-auto">
