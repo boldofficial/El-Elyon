@@ -415,7 +415,7 @@ export async function generateInviteLink(
 		.set({
 			inviteToken: token,
 			inviteExpiresAt: expiresAt,
-			inviteResent: new Date(),
+			// inviteResent: new Date(),
 			hasAcceptedInvite: false,
 			inviteBounced: false,
 		})
