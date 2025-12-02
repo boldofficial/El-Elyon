@@ -3,7 +3,7 @@ import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
 import {updateRole, deleteRole} from '@/db/mutations/roles';
 
-export async function PATCH(request: Request, {params}: {params: {id: string}}) {
+export async function PATCH(request: Request, {params}: {params: Promise<{id: string}>}) {
     const {userId} = await auth();
     if (!userId) {
         return NextResponse.json({error: 'Unauthorized'}, {status: 401});
@@ -12,7 +12,7 @@ export async function PATCH(request: Request, {params}: {params: {id: string}}) 
     try {
         await requireAdminAccess(userId);
 
-        const targetClerkUserId = params.id;
+        const {id: targetClerkUserId} = await params;
         if (!targetClerkUserId) {
             return NextResponse.json({error: 'User ID is required'}, {status: 400});
         }
@@ -50,7 +50,7 @@ export async function PATCH(request: Request, {params}: {params: {id: string}}) 
     }
 }
 
-export async function DELETE(request: Request, {params}: {params: {id: string}}) {
+export async function DELETE(request: Request, {params}: {params: Promise<{id: string}>}) {
     const {userId} = await auth();
     if (!userId) {
         return NextResponse.json({error: 'Unauthorized'}, {status: 401});
@@ -59,7 +59,7 @@ export async function DELETE(request: Request, {params}: {params: {id: string}})
     try {
         await requireAdminAccess(userId);
 
-        const targetClerkUserId = params.id;
+        const {id: targetClerkUserId} = await params;
         if (!targetClerkUserId) {
             return NextResponse.json({error: 'User ID is required'}, {status: 400});
         }
