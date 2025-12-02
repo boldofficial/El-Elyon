@@ -13,7 +13,7 @@ import {updateGuardian, deleteGuardian} from '@/db/mutations/guardians';
 
 export async function PATCH(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -23,7 +23,7 @@ export async function PATCH(
 	try {
 		await requireCareAccess(userId);
 
-		const guardianId = params.id;
+		const {id: guardianId} = await params;
 		if (!guardianId) {
 			return NextResponse.json(
 				{error: 'Guardian ID is required'},
@@ -68,7 +68,7 @@ export async function PATCH(
 
 export async function DELETE(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -78,7 +78,7 @@ export async function DELETE(
 	try {
 		await requireAdminAccess(userId); // Only admin can delete guardians
 
-		const guardianId = params.id;
+		const {id: guardianId} = await params;
 		if (!guardianId) {
 			return NextResponse.json(
 				{error: 'Guardian ID is required'},
