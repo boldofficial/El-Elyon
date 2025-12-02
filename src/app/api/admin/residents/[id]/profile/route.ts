@@ -10,7 +10,7 @@ import {residents} from '@/db/schema';
 import {eq} from 'drizzle-orm';
 
 // GET - Get resident profile
-export async function GET(request: Request, {params}: {params: {id: string}}) {
+export async function GET(request: Request, {params}: {params: Promise<{id: string}>}) {
 	const {userId} = await auth();
 	if (!userId) {
 		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
@@ -19,7 +19,7 @@ export async function GET(request: Request, {params}: {params: {id: string}}) {
 	try {
 		await requireAdminAccess(userId);
 
-		const residentId = params.id;
+		const {id: residentId} = await params;
 		const resident = await db.query.residents.findFirst({
 			where: eq(residents.id, residentId),
 		});
@@ -38,7 +38,7 @@ export async function GET(request: Request, {params}: {params: {id: string}}) {
 // PATCH - Update resident profile
 export async function PATCH(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -48,7 +48,7 @@ export async function PATCH(
 	try {
 		await requireAdminAccess(userId);
 
-		const residentId = params.id;
+		const {id: residentId} = await params;
 		const body = await request.json();
 
 		const updated = await updateResident(residentId, {
