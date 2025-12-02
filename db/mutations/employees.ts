@@ -25,8 +25,7 @@ import {
 	getClerkUserByEmail,
 } from '@/lib/clerk';
 import {
-	// sendInviteEmail,
-
+	sendEmployeeInviteEmail,
 	sendWelcomeEmailWithCredentials,
 } from '@/lib/emails';
 import {auth} from '@clerk/nextjs/server';
@@ -327,6 +326,14 @@ export async function updateEmployee(
 		role: 'admin' | 'supervisor' | 'staff';
 		locations: string[];
 		assignedDeviceId?: string;
+		// NEW HR FIELDS
+		dateOfHire?: Date;
+		tbTestFileId?: string;
+		tbTestExpiresAt?: Date;
+		backgroundCheckFileId?: string;
+		backgroundCheckExpiresAt?: Date;
+		applicationFormFileId?: string;
+		personalBio?: string;
 	},
 	clerkUserId: string
 ) {
@@ -347,6 +354,13 @@ export async function updateEmployee(
 			locations: args.locations,
 			updatedAt: new Date(),
 			assignedDeviceId: args.assignedDeviceId,
+			dateOfHire: args.dateOfHire,
+			tbTestFileId: args.tbTestFileId,
+			tbTestExpiresAt: args.tbTestExpiresAt,
+			backgroundCheckFileId: args.backgroundCheckFileId,
+			backgroundCheckExpiresAt: args.backgroundCheckExpiresAt,
+			applicationFormFileId: args.applicationFormFileId,
+			personalBio: args.personalBio,
 		})
 		.where(eq(employees.id, args.employeeId));
 
@@ -417,10 +431,15 @@ export async function generateInviteLink(
 
 	// Send invite email
 	try {
-		await sendInviteEmail({
-			employeeId: employee.id,
+		const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001';
+		const inviteUrl = `${baseUrl}/?invite=${token}`;
+
+		await sendEmployeeInviteEmail({
 			email: employee.email || employee.workEmail || '',
-			inviteToken: token,
+			name: employee.name,
+			inviteUrl: inviteUrl,
+			role: employee.role as 'admin' | 'supervisor' | 'staff', // Assuming employee.role is one of these
+			locations: employee.locations || [],
 		});
 		console.log(
 			'📧 Sent invite email for employee:',

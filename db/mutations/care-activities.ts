@@ -1,146 +1,187 @@
-// src/db/mutations/care-activities.ts
-
 import {db} from '../index';
-import {residentLogs, residentLogActivities, incidentReports} from '../schema';
+import {residentLogActivities, residentLogs, residents} from '../schema';
 import {eq} from 'drizzle-orm';
+import {requireCareAccess} from '@/lib/db-helpers';
+import {logAudit} from './audit';
+import {InferSelectModel} from 'drizzle-orm';
 
-export async function createResidentLog(data: {
-	residentId: string;
-	logType: string;
-	content?: string;
-	location: string;
-	shiftId?: string;
-	authorId: string;
-	authorName: string;
-	template?: string;
-}) {
-	const [log] = await db
-		.insert(residentLogs)
-		.values({
-			...data,
-			createdAt: new Date(),
-			timestamp: new Date(),
-		})
-		.returning();
+type ResidentLogActivitySelect = InferSelectModel<typeof residentLogActivities>;
+type ResidentLogActivityInsert = typeof residentLogActivities.$inferInsert;
 
-	return log;
-}
+export async function createResidentLogActivity(
+	clerkUserId: string,
+	data: {
+		logId: string;
+		activityType: string;
+		completed?: boolean;
+		notes?: string;
+	}
+) {
+	await requireCareAccess(clerkUserId);
 
-export async function createLogActivity(data: {
-	logId: string;
-	activityType: string;
-	completed: boolean;
-	notes?: string;
-}) {
-	const [activity] = await db
+	const residentLog = await db.query.residentLogs.findFirst({
+		where: eq(residentLogs.id, data.logId),
+	});
+
+	if (!residentLog) {
+		throw new Error('Resident log not found');
+	}
+
+	const resident = await db.query.residents.findFirst({
+		where: eq(residents.id, residentLog.residentId),
+	});
+
+	if (!resident) {
+		throw new Error('Resident not found for log');
+	}
+
+
+	const [newActivity] = await db
 		.insert(residentLogActivities)
 		.values({
 			...data,
+			completed: data.completed ?? false,
 			timestamp: new Date(),
 		})
 		.returning();
 
-	return activity;
-}
+	if (!newActivity) {
+		throw new Error('Failed to create resident log activity');
+	}
 
-export async function createResidentLogWithActivities(data: {
-	residentId: string;
-	logType: string;
-	content?: string;
-	location: string;
-	shiftId?: string;
-	authorId: string;
-	authorName: string;
-	template?: string;
-	activities?: Array<{
-		activityType: string;
-		completed: boolean;
-		notes?: string;
-	}>;
-}) {
-	// Create the log
-	const log = await createResidentLog({
-		residentId: data.residentId,
-		logType: data.logType,
-		content: data.content,
-		location: data.location,
-		shiftId: data.shiftId,
-		authorId: data.authorId,
-		authorName: data.authorName,
-		template: data.template,
+	await logAudit({
+		clerkUserId,
+		event: 'create_resident_log_activity',
+		details: `logId=${data.logId}, activityType=${data.activityType}`,
+		deviceId: 'system',
+		location: resident.location, // Assuming resident has location
 	});
 
-	// Create activities if provided
-	if (data.activities && data.activities.length > 0) {
-		const activities = await Promise.all(
-			data.activities.map((activity) =>
-				createLogActivity({
-					logId: log.id,
-					activityType: activity.activityType,
-					completed: activity.completed,
-					notes: activity.notes,
-				})
-			)
-		);
-
-		return {log, activities};
-	}
-
-	return {log, activities: []};
+	return newActivity;
 }
 
-export async function createIncidentReport(data: {
-	residentId: string;
-	reportedBy: string;
-	reportedByName: string;
-	incidentDate: Date;
-	incidentType: string;
-	severity: string;
-	location: string;
-	description: string;
-	actionTaken?: string;
-	witnessNames?: string;
-	followUpRequired?: boolean;
-	followUpNotes?: string;
-	attachments?: string[];
-}) {
-	const [report] = await db
-		.insert(incidentReports)
-		.values({
-			...data,
-			createdAt: new Date(),
-		})
-		.returning();
-
-	return report;
-}
-
-export async function updateIncidentReport(
-	reportId: string,
-	data: {
-		incidentDate?: Date;
-		incidentType?: string;
-		severity?: string;
-		description?: string;
-		actionTaken?: string;
-		witnessNames?: string;
-		followUpRequired?: boolean;
-		followUpNotes?: string;
-		attachments?: string[];
-	}
+export async function updateResidentLogActivity(
+	clerkUserId: string,
+	activityId: string,
+	data: Partial<ResidentLogActivityInsert>
 ) {
-	const [updated] = await db
-		.update(incidentReports)
+	await requireCareAccess(clerkUserId);
+
+	const existingActivity = await db.query.residentLogActivities.findFirst({
+		where: eq(residentLogActivities.id, activityId),
+	});
+
+	if (!existingActivity) {
+		throw new Error('Resident log activity not found');
+	}
+
+	const residentLog = await db.query.residentLogs.findFirst({
+		where: eq(residentLogs.id, existingActivity.logId),
+	});
+	const resident = residentLog
+		? await db.query.residents.findFirst({where: eq(residents.id, residentLog.residentId)})
+		: undefined;
+
+	const [updatedActivity] = await db
+		.update(residentLogActivities)
 		.set({
 			...data,
-			updatedAt: new Date(),
+			timestamp: new Date(), // Update timestamp on modification
 		})
-		.where(eq(incidentReports.id, reportId))
+		.where(eq(residentLogActivities.id, activityId))
 		.returning();
 
-	return updated;
+	if (!updatedActivity) {
+		throw new Error('Failed to update resident log activity');
+	}
+
+	await logAudit({
+		clerkUserId,
+		event: 'update_resident_log_activity',
+		details: `activityId=${activityId}, logId=${existingActivity.logId}`,
+		deviceId: 'system',
+		location: resident?.location || '',
+	});
+
+	return updatedActivity;
 }
 
-export async function deleteIncidentReport(reportId: string) {
-	await db.delete(incidentReports).where(eq(incidentReports.id, reportId));
+export async function toggleResidentLogActivityCompletion(
+	clerkUserId: string,
+	activityId: string,
+	completed: boolean
+) {
+	await requireCareAccess(clerkUserId);
+
+	const existingActivity = await db.query.residentLogActivities.findFirst({
+		where: eq(residentLogActivities.id, activityId),
+	});
+
+	if (!existingActivity) {
+		throw new Error('Resident log activity not found');
+	}
+
+	const residentLog = await db.query.residentLogs.findFirst({
+		where: eq(residentLogs.id, existingActivity.logId),
+	});
+	const resident = residentLog
+		? await db.query.residents.findFirst({where: eq(residents.id, residentLog.residentId)})
+		: undefined;
+
+	const [updatedActivity] = await db
+		.update(residentLogActivities)
+		.set({
+			completed: completed,
+			timestamp: new Date(),
+		})
+		.where(eq(residentLogActivities.id, activityId))
+		.returning();
+
+	if (!updatedActivity) {
+		throw new Error('Failed to toggle resident log activity completion');
+	}
+
+	await logAudit({
+		clerkUserId,
+		event: 'toggle_resident_log_activity_completion',
+		details: `activityId=${activityId}, completed=${completed}`,
+		deviceId: 'system',
+		location: resident?.location || '',
+	});
+
+	return updatedActivity;
+}
+
+export async function deleteResidentLogActivity(
+	clerkUserId: string,
+	activityId: string
+) {
+	await requireCareAccess(clerkUserId);
+
+	const existingActivity = await db.query.residentLogActivities.findFirst({
+		where: eq(residentLogActivities.id, activityId),
+	});
+
+	if (!existingActivity) {
+		throw new Error('Resident log activity not found');
+	}
+
+	const residentLog = await db.query.residentLogs.findFirst({
+		where: eq(residentLogs.id, existingActivity.logId),
+	});
+	const resident = residentLog
+		? await db.query.residents.findFirst({where: eq(residents.id, residentLog.residentId)})
+		: undefined;
+
+	await db.delete(residentLogActivities).where(eq(residentLogActivities.id, activityId));
+
+	await logAudit({
+		clerkUserId,
+		event: 'delete_resident_log_activity',
+		details: `activityId=${activityId}, logId=${existingActivity.logId}`,
+		deviceId: 'system',
+		location: resident?.location || '',
+	});
+
+	return {success: true};
 }
