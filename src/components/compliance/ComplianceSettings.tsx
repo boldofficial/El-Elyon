@@ -2,7 +2,6 @@ import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
 
 export default function ComplianceSettings() {
-	// State
 	const [overview, setOverview] = useState<any[]>([]);
 	const [selectedIds, setSelectedIds] = useState<string[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
@@ -13,7 +12,6 @@ export default function ComplianceSettings() {
 	const [typeFilter, setTypeFilter] = useState<string>('all');
 	const [locationFilter, setLocationFilter] = useState<string>('all');
 
-	// Fetch compliance overview
 	const fetchOverview = async () => {
 		setIsFetching(true);
 		try {
@@ -29,12 +27,10 @@ export default function ComplianceSettings() {
 		}
 	};
 
-	// Initial load
 	useEffect(() => {
 		fetchOverview();
 	}, []);
 
-	// Bulk actions
 	const handleSelect = (id: string) => {
 		setSelectedIds((ids) =>
 			ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]
@@ -61,8 +57,9 @@ export default function ComplianceSettings() {
 				throw new Error(error.error || 'Failed to send reminders');
 			}
 
+			const result = await response.json();
 			toast.success(
-				`Compliance reminder emails are being sent to all admins and supervisors for ${selectedIds.length} item(s)!`
+				`Successfully sent ${result.sent} compliance reminder emails!`
 			);
 			setSelectedIds([]);
 		} catch (e: any) {
@@ -72,6 +69,7 @@ export default function ComplianceSettings() {
 		}
 	};
 
+	// Export function now downloads CSV file
 	const handleExport = async () => {
 		if (selectedIds.length === 0) return;
 		setIsLoading(true);
@@ -87,7 +85,27 @@ export default function ComplianceSettings() {
 				throw new Error(error.error || 'Failed to export list');
 			}
 
-			toast.success('Exported compliance list!');
+			// Get CSV data as blob
+			const blob = await response.blob();
+
+			// Get filename from Content-Disposition header or use default
+			const contentDisposition = response.headers.get('Content-Disposition');
+			const filenameMatch = contentDisposition?.match(/filename="(.+)"/);
+			const filename = filenameMatch
+				? filenameMatch[1]
+				: `compliance-export-${new Date().toISOString().split('T')[0]}.csv`;
+
+			// Create download link
+			const url = window.URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = filename;
+			document.body.appendChild(a);
+			a.click();
+			window.URL.revokeObjectURL(url);
+			document.body.removeChild(a);
+
+			toast.success('Compliance list exported successfully!');
 			setSelectedIds([]);
 		} catch (e: any) {
 			toast.error(e.message || 'Failed to export list');
@@ -96,7 +114,6 @@ export default function ComplianceSettings() {
 		}
 	};
 
-	// Status color
 	const getStatusColor = (status: string) => {
 		switch (status) {
 			case 'ok':
@@ -110,10 +127,8 @@ export default function ComplianceSettings() {
 		}
 	};
 
-	// Format date
 	const formatDate = (date: number) => new Date(date).toLocaleDateString();
 
-	// Filter overview items
 	const filteredOverview = overview.filter((item: any) => {
 		if (statusFilter !== 'all' && item.status !== statusFilter) return false;
 		if (typeFilter !== 'all' && item.type !== typeFilter) return false;
@@ -163,7 +178,7 @@ export default function ComplianceSettings() {
 							{isLoading && (
 								<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
 							)}
-							Send Reminders
+							Send Reminders ({selectedIds.length})
 						</button>
 						<button
 							onClick={handleExport}
@@ -172,7 +187,7 @@ export default function ComplianceSettings() {
 							{isLoading && (
 								<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
 							)}
-							Export List
+							Export CSV ({selectedIds.length})
 						</button>
 					</div>
 				</div>
