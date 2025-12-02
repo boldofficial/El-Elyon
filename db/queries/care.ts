@@ -315,7 +315,7 @@ export async function searchLogs(
 		const searchTerm = query.toLowerCase();
 		logs = logs.filter(
 			(log) =>
-				log.content.toLowerCase().includes(searchTerm) ||
+				log.content?.toLowerCase().includes(searchTerm) ||
 				log.template?.toLowerCase().includes(searchTerm)
 		);
 	}
