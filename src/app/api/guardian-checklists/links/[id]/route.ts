@@ -4,14 +4,18 @@ import {auth} from '@clerk/nextjs/server';
 import {getChecklistLink} from '@/db/queries/guardian-checklists';
 import {cancelChecklistLink} from '@/db/mutations/guardian-checklists';
 
-export async function GET(req: NextRequest, {params}: {params: {id: string}}) {
+export async function GET(
+	req: NextRequest,
+	{params}: {params: Promise<{id: string}>}
+) {
 	try {
 		const {userId} = await auth();
 		if (!userId) {
 			return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 		}
 
-		const link = await getChecklistLink(userId, params.id);
+		const {id} = await params;
+		const link = await getChecklistLink(userId, id);
 		return NextResponse.json(link);
 	} catch (error: any) {
 		console.error('Error getting link:', error);
@@ -21,7 +25,7 @@ export async function GET(req: NextRequest, {params}: {params: {id: string}}) {
 
 export async function DELETE(
 	req: NextRequest,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	try {
 		const {userId} = await auth();
@@ -29,7 +33,8 @@ export async function DELETE(
 			return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 		}
 
-		await cancelChecklistLink(userId, params.id);
+		const {id} = await params;
+		await cancelChecklistLink(userId, id);
 		return NextResponse.json({success: true});
 	} catch (error: any) {
 		console.error('Error canceling link:', error);
