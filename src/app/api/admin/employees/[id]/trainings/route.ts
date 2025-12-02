@@ -8,13 +8,16 @@ import {
 	updateEmployeeTraining,
 	deleteEmployeeTraining,
 	toggleTrainingCompletion,
-} from '@/db/mutations/employee-hr'; // Assuming these are in employee-hr or a new training file
+} from '@/db/mutations/employee-hr';
 import {db} from '@/db/index';
 import {employeeTrainings} from '@/db/schema';
 import {eq, and} from 'drizzle-orm';
 
 // GET - List employee trainings
-export async function GET(request: Request, {params}: {params: {id: string}}) {
+export async function GET(
+	request: Request,
+	{params}: {params: Promise<{id: string}>}
+) {
 	const {userId} = await auth();
 	if (!userId) {
 		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
@@ -23,7 +26,7 @@ export async function GET(request: Request, {params}: {params: {id: string}}) {
 	try {
 		await requireAdminAccess(userId);
 
-		const employeeId = params.id;
+		const {id: employeeId} = await params;
 		const trainings = await db.query.employeeTrainings.findMany({
 			where: eq(employeeTrainings.employeeId, employeeId),
 			orderBy: (trainings, {desc}) => [desc(trainings.trainingYear)],
@@ -39,7 +42,7 @@ export async function GET(request: Request, {params}: {params: {id: string}}) {
 // POST - Create a new employee training
 export async function POST(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -49,7 +52,7 @@ export async function POST(
 	try {
 		await requireAdminAccess(userId);
 
-		const employeeId = params.id;
+		const {id: employeeId} = await params;
 		const body = await request.json();
 
 		const newTraining = await createEmployeeTraining({
@@ -57,7 +60,9 @@ export async function POST(
 			trainingName: body.trainingName,
 			trainingYear: body.trainingYear,
 			completed: body.completed,
-			completedDate: body.completedDate ? new Date(body.completedDate) : undefined,
+			completedDate: body.completedDate
+				? new Date(body.completedDate)
+				: undefined,
 			certificateFileId: body.certificateFileId,
 			notes: body.notes,
 			createdBy: userId,
@@ -81,7 +86,7 @@ export async function POST(
 // PATCH - Update an existing employee training or toggle completion
 export async function PATCH(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -91,9 +96,9 @@ export async function PATCH(
 	try {
 		await requireAdminAccess(userId);
 
-		const employeeId = params.id;
+		const {id: employeeId} = await params;
 		const body = await request.json();
-		const trainingId = body.trainingId; // Expect trainingId in the body for update/toggle
+		const trainingId = body.trainingId;
 
 		if (!trainingId) {
 			return NextResponse.json(
@@ -104,7 +109,6 @@ export async function PATCH(
 
 		let updatedTraining;
 		if (typeof body.completed === 'boolean') {
-			// If 'completed' field is provided, it's a toggle request
 			updatedTraining = await toggleTrainingCompletion(
 				trainingId,
 				body.completed,
@@ -118,11 +122,12 @@ export async function PATCH(
 				location: '',
 			});
 		} else {
-			// Otherwise, it's a general update
 			updatedTraining = await updateEmployeeTraining(trainingId, {
 				trainingName: body.trainingName,
 				trainingYear: body.trainingYear,
-				completedDate: body.completedDate ? new Date(body.completedDate) : undefined,
+				completedDate: body.completedDate
+					? new Date(body.completedDate)
+					: undefined,
 				certificateFileId: body.certificateFileId,
 				notes: body.notes,
 				updatedBy: userId,
@@ -146,7 +151,7 @@ export async function PATCH(
 // DELETE - Delete an employee training
 export async function DELETE(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -156,8 +161,8 @@ export async function DELETE(
 	try {
 		await requireAdminAccess(userId);
 
-		const employeeId = params.id; // Not directly used for delete, but good for context
-		const {trainingId} = await request.json(); // Expect trainingId in body for DELETE
+		const {id: employeeId} = await params;
+		const {trainingId} = await request.json();
 
 		if (!trainingId) {
 			return NextResponse.json(

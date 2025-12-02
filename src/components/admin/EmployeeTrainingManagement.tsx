@@ -51,7 +51,6 @@ export default function EmployeeTrainingManagement({
 		notes: '',
 	});
 
-	// ADDED: File upload handler for training certificates
 	const handleCertificateUpload = async (file: File) => {
 		setUploading('certificate');
 		try {
@@ -87,7 +86,6 @@ export default function EmployeeTrainingManagement({
 		}
 	};
 
-	// ADDED: Download certificate handler
 	const handleDownloadCertificate = async (fileKey: string) => {
 		try {
 			const res = await fetch(`/api/hr/download-url?fileKey=${fileKey}`);
@@ -181,6 +179,7 @@ export default function EmployeeTrainingManagement({
 		if (!editingTraining) return;
 
 		try {
+			// UPDATED: Use the [trainingId] route for updates
 			const res = await fetch(
 				`/api/admin/employees/${employeeId}/trainings/${editingTraining.id}`,
 				{
@@ -210,6 +209,7 @@ export default function EmployeeTrainingManagement({
 		if (!window.confirm('Are you sure you want to delete this training?'))
 			return;
 		try {
+			// UPDATED: Use the [trainingId] route for deletes
 			const res = await fetch(
 				`/api/admin/employees/${employeeId}/trainings/${trainingId}`,
 				{
@@ -229,13 +229,14 @@ export default function EmployeeTrainingManagement({
 
 	const handleToggleCompletion = async (training: Training) => {
 		try {
+			// UPDATED: Use the [trainingId] route for toggling completion
 			const res = await fetch(
 				`/api/admin/employees/${employeeId}/trainings/${training.id}`,
 				{
 					method: 'PATCH',
 					headers: {'Content-Type': 'application/json'},
 					body: JSON.stringify({
-						completed: !training.completed,
+						toggleCompletion: !training.completed,
 					}),
 				}
 			);
@@ -337,7 +338,6 @@ export default function EmployeeTrainingManagement({
 								/>
 							</div>
 						)}
-						{/* FIXED: Certificate file upload */}
 						<div>
 							<label className="block text-sm font-medium text-gray-700 mb-1">
 								Certificate
@@ -451,7 +451,6 @@ export default function EmployeeTrainingManagement({
 								/>
 							</div>
 						)}
-						{/* FIXED: Certificate file upload for edit */}
 						<div>
 							<label className="block text-sm font-medium text-gray-700 mb-1">
 								Certificate
@@ -518,7 +517,6 @@ export default function EmployeeTrainingManagement({
 				</div>
 			)}
 
-			{/* Training List */}
 			<div className="overflow-x-auto">
 				{trainings.length === 0 ? (
 					<div className="text-center py-8 text-gray-500">

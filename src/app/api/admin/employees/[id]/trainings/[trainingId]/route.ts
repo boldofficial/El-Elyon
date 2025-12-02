@@ -1,6 +1,4 @@
-// src/app/api/admin/employees/[id]/trainings/[trainingId]/route.ts
-
-
+//  src/app/api/admin/employees/[id]/trainings/[trainingId]/route.ts
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
@@ -13,7 +11,7 @@ import {
 // PATCH - Update training record
 export async function PATCH(
 	request: Request,
-	{params}: {params: {id: string; trainingId: string}}
+	{params}: {params: Promise<{id: string; trainingId: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -23,7 +21,7 @@ export async function PATCH(
 	try {
 		await requireAdminAccess(userId);
 
-		const {id: employeeId, trainingId} = params;
+		const {id: employeeId, trainingId} = await params;
 		const body = await request.json();
 
 		// Check if this is just a completion toggle
@@ -33,6 +31,13 @@ export async function PATCH(
 				body.toggleCompletion,
 				userId
 			);
+			await logAudit({
+				clerkUserId: userId,
+				event: 'TOGGLE_EMPLOYEE_TRAINING_COMPLETION',
+				details: `Toggled training ${trainingId} completion for employee ${employeeId}`,
+				deviceId: 'system',
+				location: '',
+			});
 			return NextResponse.json(updated);
 		}
 
@@ -52,7 +57,7 @@ export async function PATCH(
 		await logAudit({
 			clerkUserId: userId,
 			event: 'UPDATE_EMPLOYEE_TRAINING',
-			details: `Updated training ${trainingId}`,
+			details: `Updated training ${trainingId} for employee ${employeeId}`,
 			deviceId: 'system',
 			location: '',
 		});
@@ -67,7 +72,7 @@ export async function PATCH(
 // DELETE - Delete training record
 export async function DELETE(
 	request: Request,
-	{params}: {params: {id: string; trainingId: string}}
+	{params}: {params: Promise<{id: string; trainingId: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -77,13 +82,13 @@ export async function DELETE(
 	try {
 		await requireAdminAccess(userId);
 
-		const {id: employeeId, trainingId} = params;
+		const {id: employeeId, trainingId} = await params;
 		await deleteEmployeeTraining(trainingId);
 
 		await logAudit({
 			clerkUserId: userId,
 			event: 'DELETE_EMPLOYEE_TRAINING',
-			details: `Deleted training ${trainingId}`,
+			details: `Deleted training ${trainingId} for employee ${employeeId}`,
 			deviceId: 'system',
 			location: '',
 		});
