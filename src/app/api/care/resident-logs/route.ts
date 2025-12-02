@@ -1,3 +1,5 @@
+// src/app/api/care/resident-logs/route.ts
+
 import {auth} from '@clerk/nextjs/server';
 import {NextRequest, NextResponse} from 'next/server';
 import {db} from '@/db/index';

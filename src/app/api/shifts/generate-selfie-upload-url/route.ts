@@ -1,3 +1,5 @@
+// src/app/api/shifts/generate-selfie-upload-url/route.ts
+
 import {NextRequest, NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {generateSelfieUploadUrl} from '@/db/mutations/care';

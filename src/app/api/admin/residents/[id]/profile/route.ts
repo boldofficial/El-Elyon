@@ -4,7 +4,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
-import {updateResidentProfile} from '@/db/mutations/residents';
+import {updateResident} from '@/db/mutations/residents';
 import {db} from '@/db/index';
 import {residents} from '@/db/schema';
 import {eq} from 'drizzle-orm';
@@ -51,9 +51,10 @@ export async function PATCH(
 		const residentId = params.id;
 		const body = await request.json();
 
-		const updated = await updateResidentProfile(residentId, {
+		const updated = await updateResident(residentId, {
 			name: body.name,
 			dateOfBirth: body.dateOfBirth,
+			dob: body.dob, // Include dob if it's separate from dateOfBirth
 			phone: body.phone,
 			placementDate: body.placementDate
 				? new Date(body.placementDate)

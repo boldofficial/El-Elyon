@@ -1,6 +1,8 @@
+// src/app/api/uploads/fire-evac-url/route.ts
+
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, requireCareAccess, logAudit} from '../../../../../lib/db-helpers'; // Path adjusted for uploads directory
+import {requireAdminAccess, requireCareAccess, logAudit} from '@/lib/db-helpers'; // Path adjusted for uploads directory
 
 export async function GET(request: Request) {
     const {userId} = await auth();

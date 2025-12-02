@@ -1,40 +1,45 @@
-// ==========================================
 // src/app/api/admin/employees/[id]/trainings/route.ts
-// ==========================================
+
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
 import {
 	createEmployeeTraining,
 	updateEmployeeTraining,
-} from '@/db/mutations/employee-hr';
-import {listEmployeeTrainings} from '@/db/queries/employee-hr';
+	deleteEmployeeTraining,
+	toggleTrainingCompletion,
+} from '@/db/mutations/employee-hr'; // Assuming these are in employee-hr or a new training file
+import {db} from '@/db/index';
+import {employeeTrainings} from '@/db/schema';
+import {eq, and} from 'drizzle-orm';
 
-// GET - List all trainings for an employee
-export async function GET(
-	request: Request,
-	{params}: {params: Promise<{id: string}>}
-) {
+// GET - List employee trainings
+export async function GET(request: Request, {params}: {params: {id: string}}) {
 	const {userId} = await auth();
 	if (!userId) {
 		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 	}
 
 	try {
-		const {id: employeeId} = await params;
-		const trainings = await listEmployeeTrainings(employeeId, userId);
+		await requireAdminAccess(userId);
+
+		const employeeId = params.id;
+		const trainings = await db.query.employeeTrainings.findMany({
+			where: eq(employeeTrainings.employeeId, employeeId),
+			orderBy: (trainings, {desc}) => [desc(trainings.trainingYear)],
+		});
 
 		return NextResponse.json(trainings);
 	} catch (error: any) {
-		console.error('Error fetching trainings:', error);
+		console.error('Error fetching employee trainings:', error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}
 }
 
-// POST - Create new training 
+// POST - Create a new employee training
 export async function POST(
 	request: Request,
-	{params}: {params: Promise<{id: string}>}
+	{params}: {params: {id: string}}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -44,17 +49,15 @@ export async function POST(
 	try {
 		await requireAdminAccess(userId);
 
-		const {id: employeeId} = await params;
+		const employeeId = params.id;
 		const body = await request.json();
 
-		const training = await createEmployeeTraining({
+		const newTraining = await createEmployeeTraining({
 			employeeId,
 			trainingName: body.trainingName,
 			trainingYear: body.trainingYear,
-			completed: body.completed ?? false,
-			completedDate: body.completedDate
-				? new Date(body.completedDate)
-				: undefined,
+			completed: body.completed,
+			completedDate: body.completedDate ? new Date(body.completedDate) : undefined,
 			certificateFileId: body.certificateFileId,
 			notes: body.notes,
 			createdBy: userId,
@@ -63,14 +66,119 @@ export async function POST(
 		await logAudit({
 			clerkUserId: userId,
 			event: 'CREATE_EMPLOYEE_TRAINING',
-			details: `Created training ${body.trainingName} for employee ${employeeId}`,
+			details: `Created training ${newTraining.id} for employee ${employeeId}`,
 			deviceId: 'system',
 			location: '',
 		});
 
-		return NextResponse.json(training, {status: 201});
+		return NextResponse.json(newTraining, {status: 201});
 	} catch (error: any) {
-		console.error('Error creating training:', error);
+		console.error('Error creating employee training:', error);
+		return NextResponse.json({error: error.message}, {status: 500});
+	}
+}
+
+// PATCH - Update an existing employee training or toggle completion
+export async function PATCH(
+	request: Request,
+	{params}: {params: {id: string}}
+) {
+	const {userId} = await auth();
+	if (!userId) {
+		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
+	}
+
+	try {
+		await requireAdminAccess(userId);
+
+		const employeeId = params.id;
+		const body = await request.json();
+		const trainingId = body.trainingId; // Expect trainingId in the body for update/toggle
+
+		if (!trainingId) {
+			return NextResponse.json(
+				{error: 'Training ID is required for PATCH'},
+				{status: 400}
+			);
+		}
+
+		let updatedTraining;
+		if (typeof body.completed === 'boolean') {
+			// If 'completed' field is provided, it's a toggle request
+			updatedTraining = await toggleTrainingCompletion(
+				trainingId,
+				body.completed,
+				userId
+			);
+			await logAudit({
+				clerkUserId: userId,
+				event: 'TOGGLE_EMPLOYEE_TRAINING_COMPLETION',
+				details: `Toggled training ${trainingId} completion to ${body.completed} for employee ${employeeId}`,
+				deviceId: 'system',
+				location: '',
+			});
+		} else {
+			// Otherwise, it's a general update
+			updatedTraining = await updateEmployeeTraining(trainingId, {
+				trainingName: body.trainingName,
+				trainingYear: body.trainingYear,
+				completedDate: body.completedDate ? new Date(body.completedDate) : undefined,
+				certificateFileId: body.certificateFileId,
+				notes: body.notes,
+				updatedBy: userId,
+			});
+			await logAudit({
+				clerkUserId: userId,
+				event: 'UPDATE_EMPLOYEE_TRAINING',
+				details: `Updated training ${trainingId} for employee ${employeeId}`,
+				deviceId: 'system',
+				location: '',
+			});
+		}
+
+		return NextResponse.json(updatedTraining);
+	} catch (error: any) {
+		console.error('Error updating employee training:', error);
+		return NextResponse.json({error: error.message}, {status: 500});
+	}
+}
+
+// DELETE - Delete an employee training
+export async function DELETE(
+	request: Request,
+	{params}: {params: {id: string}}
+) {
+	const {userId} = await auth();
+	if (!userId) {
+		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
+	}
+
+	try {
+		await requireAdminAccess(userId);
+
+		const employeeId = params.id; // Not directly used for delete, but good for context
+		const {trainingId} = await request.json(); // Expect trainingId in body for DELETE
+
+		if (!trainingId) {
+			return NextResponse.json(
+				{error: 'Training ID is required for DELETE'},
+				{status: 400}
+			);
+		}
+
+		await deleteEmployeeTraining(trainingId);
+
+		await logAudit({
+			clerkUserId: userId,
+			event: 'DELETE_EMPLOYEE_TRAINING',
+			details: `Deleted training ${trainingId} for employee ${employeeId}`,
+			deviceId: 'system',
+			location: '',
+		});
+
+		return NextResponse.json({success: true});
+	} catch (error: any) {
+		console.error('Error deleting employee training:', error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}
 }

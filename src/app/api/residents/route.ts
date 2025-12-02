@@ -24,9 +24,30 @@ export async function GET() {
 						residentsList.map((r) => ({
 								id: r.id,
 								name: r.name,
-								location: r.location,
 								dateOfBirth: r.dateOfBirth,
+								dob: r.dob, // Assuming dob is an alternative or additional date field
+								location: r.location,
+								phone: r.phone,
+								placementDate: r.placementDate,
+								sex: r.sex,
+								weight: r.weight,
+								height: r.height,
+								hairColor: r.hairColor,
+								diagnostics: r.diagnostics,
+								supportBroker: r.supportBroker,
+								importantRelationships: r.importantRelationships,
+								fundingAgency: r.fundingAgency,
+								caseManagerName: r.caseManagerName,
+								caseManagerPhone: r.caseManagerPhone,
+								caseManagerEmail: r.caseManagerEmail,
+								vocationalAgency: r.vocationalAgency,
+								vocationalAgencyAddress: r.vocationalAgencyAddress,
+								guardianIds: r.guardianIds,
+								medicalInfo: r.medicalInfo,
+								careNotes: r.careNotes,
 								profileImageId: r.profileImageId,
+								createdAt: r.createdAt,
+								createdBy: r.createdBy,
 						}))
 				);
 		} catch (error: any) {
@@ -34,3 +55,7 @@ export async function GET() {
 				return NextResponse.json({error: error.message}, {status: 500});
 		}
 }
+
+
+///
+
