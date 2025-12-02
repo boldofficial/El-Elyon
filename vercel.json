@@ -1,0 +1,12 @@
+{
+	"crons": [
+		{
+			"path": "/api/cron/generate-compliance-alerts",
+			"schedule": "0 9 * * 1"
+		},
+		{
+			"path": "/api/cron/send-compliance-alert-emails",
+			"schedule": "0 10 * * 1"
+		}
+	]
+}
