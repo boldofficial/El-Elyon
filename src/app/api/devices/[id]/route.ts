@@ -7,7 +7,7 @@ import {updateDeviceById, deleteDeviceById} from '@/db/mutations/devices';
 // PATCH /api/devices/[id] - Update device (admin only)
 export async function PATCH(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -17,7 +17,7 @@ export async function PATCH(
 	try {
 		await requireAdminAccess(userId);
 
-		const deviceId = params.id;
+		const {id: deviceId} = await params;
 		if (!deviceId) {
 			return NextResponse.json({error: 'Device ID is required'}, {status: 400});
 		}
@@ -62,7 +62,7 @@ export async function PATCH(
 // DELETE /api/devices/[id] - Delete device (admin only)
 export async function DELETE(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -72,7 +72,7 @@ export async function DELETE(
 	try {
 		await requireAdminAccess(userId);
 
-		const deviceId = params.id;
+		const {id: deviceId} = await params;
 		if (!deviceId) {
 			return NextResponse.json({error: 'Device ID is required'}, {status: 400});
 		}
