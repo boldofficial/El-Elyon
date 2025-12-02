@@ -1,3 +1,5 @@
+// src/lib/emails.ts
+
 import {Resend} from 'resend';
 import {db} from '@/db/index';
 import {
