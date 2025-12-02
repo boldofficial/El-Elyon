@@ -2,39 +2,35 @@
 // src/app/api/care/incidents/[reportId]/route.ts
 // ==========================================
 
-import {NextResponse} from 'next/server';
-import {auth} from '@clerk/nextjs/server';
-import {requireCareAccess, logAudit} from '@/lib/db-helpers';
-import {getIncidentReport} from '@/db/queries/incident-reports';
-import { deleteIncidentReport, updateIncidentReport } from '@/db/mutations/incident-reports';
-// import {
-// 	updateIncidentReport,
-// 	deleteIncidentReport,
-// } from '@/db/mutations/care-activities';
+import {NextResponse} from "next/server";
+import {auth} from "@clerk/nextjs/server";
+import {requireCareAccess, logAudit} from "@/lib/db-helpers";
+import {getIncidentReport} from "@/db/queries/incident-reports";
+import { deleteIncidentReport, updateIncidentReport } from "@/db/mutations/incident-reports";
 
 // GET - Get single incident report
 export async function GET(
 	request: Request,
-	{params}: {params: {reportId: string}}
+	{params}: {params: Promise<{reportId: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
-		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
+		return NextResponse.json({error: "Unauthorized"}, {status: 401});
 	}
 
 	try {
 		await requireCareAccess(userId);
 
-		const reportId = params.reportId;
+		const {reportId} = await params;
 		const report = await getIncidentReport(reportId, userId);
 
 		if (!report) {
-			return NextResponse.json({error: 'Report not found'}, {status: 404});
+			return NextResponse.json({error: "Report not found"}, {status: 404});
 		}
 
 		return NextResponse.json(report);
 	} catch (error: any) {
-		console.error('Error fetching incident report:', error);
+		console.error("Error fetching incident report:", error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}
 }
@@ -42,17 +38,17 @@ export async function GET(
 // PATCH - Update incident report
 export async function PATCH(
 	request: Request,
-	{params}: {params: {reportId: string}}
+	{params}: {params: Promise<{reportId: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
-		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
+		return NextResponse.json({error: "Unauthorized"}, {status: 401});
 	}
 
 	try {
 		await requireCareAccess(userId);
 
-		const reportId = params.reportId;
+		const {reportId} = await params;
 		const body = await request.json();
 
 		const updated = await updateIncidentReport(userId, reportId, {
@@ -69,15 +65,15 @@ export async function PATCH(
 
 		await logAudit({
 			clerkUserId: userId,
-			event: 'UPDATE_INCIDENT_REPORT',
+			event: "UPDATE_INCIDENT_REPORT",
 			details: `Updated incident report ${reportId}`,
-			deviceId: 'system',
-			location: '',
+			deviceId: "system",
+			location: "",
 		});
 
 		return NextResponse.json(updated);
 	} catch (error: any) {
-		console.error('Error updating incident report:', error);
+		console.error("Error updating incident report:", error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}
 }
@@ -85,30 +81,30 @@ export async function PATCH(
 // DELETE - Delete incident report
 export async function DELETE(
 	request: Request,
-	{params}: {params: {reportId: string}}
+	{params}: {params: Promise<{reportId: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
-		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
+		return NextResponse.json({error: "Unauthorized"}, {status: 401});
 	}
 
 	try {
 		await requireCareAccess(userId);
 
-		const reportId = params.reportId;
+		const {reportId} = await params;
 		await deleteIncidentReport(userId, reportId);
 
 		await logAudit({
 			clerkUserId: userId,
-			event: 'DELETE_INCIDENT_REPORT',
+			event: "DELETE_INCIDENT_REPORT",
 			details: `Deleted incident report ${reportId}`,
-			deviceId: 'system',
-			location: '',
+			deviceId: "system",
+			location: "",
 		});
 
 		return NextResponse.json({success: true});
 	} catch (error: any) {
-		console.error('Error deleting incident report:', error);
+		console.error("Error deleting incident report:", error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}
 }
