@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { logAudit } from '@/db-helpers';
 import { updateUser } from '@/db/mutations/users';
 import { getUserByEmail } from '@/db/queries/users';
-import { sendPasswordResetEmail } from '@/emails';
 import { generateToken } from '@/utils';
+import { sendPasswordResetEmail } from '@/emails/auth';
 export async function POST(request: Request) {
   try {
     const { email } = await request.json();
