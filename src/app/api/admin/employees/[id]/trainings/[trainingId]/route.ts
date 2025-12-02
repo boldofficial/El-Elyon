@@ -1,6 +1,6 @@
-// ==========================================
-// src/app/api/admin/employees/trainings/[trainingId]/route.ts
-// ==========================================
+// src/app/api/admin/employees/[id]/trainings/[trainingId]/route.ts
+
+
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
@@ -13,7 +13,7 @@ import {
 // PATCH - Update training record
 export async function PATCH(
 	request: Request,
-	{params}: {params: Promise<{trainingId: string}>}
+	{params}: {params: {id: string; trainingId: string}}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -23,7 +23,7 @@ export async function PATCH(
 	try {
 		await requireAdminAccess(userId);
 
-		const {trainingId} = await params;
+		const {id: employeeId, trainingId} = params;
 		const body = await request.json();
 
 		// Check if this is just a completion toggle
@@ -67,7 +67,7 @@ export async function PATCH(
 // DELETE - Delete training record
 export async function DELETE(
 	request: Request,
-	{params}: {params: {trainingId: string}}
+	{params}: {params: {id: string; trainingId: string}}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -77,7 +77,7 @@ export async function DELETE(
 	try {
 		await requireAdminAccess(userId);
 
-		const trainingId = params.trainingId;
+		const {id: employeeId, trainingId} = params;
 		await deleteEmployeeTraining(trainingId);
 
 		await logAudit({

@@ -181,18 +181,20 @@ export default function EmployeeTrainingManagement({
 		if (!editingTraining) return;
 
 		try {
-			const res = await fetch(`/api/admin/employees/${employeeId}/trainings`, {
-				method: 'PATCH',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify({
-					trainingId: editingTraining.id,
-					...editFormData,
-					trainingYear: Number(editFormData.trainingYear),
-					completedDate: editFormData.completedDate
-						? new Date(editFormData.completedDate)
-						: undefined,
-				}),
-			});
+			const res = await fetch(
+				`/api/admin/employees/${employeeId}/trainings/${editingTraining.id}`,
+				{
+					method: 'PATCH',
+					headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({
+						...editFormData,
+						trainingYear: Number(editFormData.trainingYear),
+						completedDate: editFormData.completedDate
+							? new Date(editFormData.completedDate)
+							: undefined,
+					}),
+				}
+			);
 
 			if (!res.ok) throw new Error('Failed to update training');
 			toast.success('Training updated successfully');
@@ -208,11 +210,13 @@ export default function EmployeeTrainingManagement({
 		if (!window.confirm('Are you sure you want to delete this training?'))
 			return;
 		try {
-			const res = await fetch(`/api/admin/employees/${employeeId}/trainings`, {
-				method: 'DELETE',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify({trainingId}),
-			});
+			const res = await fetch(
+				`/api/admin/employees/${employeeId}/trainings/${trainingId}`,
+				{
+					method: 'DELETE',
+					headers: {'Content-Type': 'application/json'},
+				}
+			);
 
 			if (!res.ok) throw new Error('Failed to delete training');
 			toast.success('Training deleted successfully');
@@ -225,14 +229,16 @@ export default function EmployeeTrainingManagement({
 
 	const handleToggleCompletion = async (training: Training) => {
 		try {
-			const res = await fetch(`/api/admin/employees/${employeeId}/trainings`, {
-				method: 'PATCH',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify({
-					trainingId: training.id,
-					completed: !training.completed,
-				}),
-			});
+			const res = await fetch(
+				`/api/admin/employees/${employeeId}/trainings/${training.id}`,
+				{
+					method: 'PATCH',
+					headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({
+						completed: !training.completed,
+					}),
+				}
+			);
 
 			if (!res.ok) throw new Error('Failed to toggle completion');
 			toast.success('Training completion status updated');
