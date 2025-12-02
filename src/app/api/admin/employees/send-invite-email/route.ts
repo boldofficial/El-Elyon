@@ -1,7 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '../../../../../../lib/db-helpers';
-import {sendEmployeeInviteEmail} from '@/lib/emails'; // This function needs to be added to lib/emails.ts
+import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {sendEmployeeInviteEmail} from '@/lib/emails/employee';
 
 export async function POST(request: Request) {
     const {userId} = await auth();

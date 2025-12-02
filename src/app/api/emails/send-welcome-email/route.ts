@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendWelcomeEmailWithCredentials } from '@/lib/emails';
+import { sendWelcomeEmailWithCredentials } from '@/lib/emails/employee';
 import { requireAdminAccess } from '@/lib/db-helpers';
 import { auth } from '@clerk/nextjs/server';
 

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendPasswordChangeConfirmation } from '@/lib/emails';
+import { sendPasswordChangeConfirmation } from '@/lib/emails/auth';
 import { requireAdminAccess } from '@/lib/db-helpers';
 import { auth } from '@clerk/nextjs/server';
 

@@ -1,6 +1,6 @@
 // src/app/api/internal/send-guardian-checklist-email/route.ts
 import {NextRequest, NextResponse} from 'next/server';
-import {sendGuardianChecklistEmail} from '@/lib/emails';
+import {sendGuardianChecklistEmail} from '@/lib/emails/guardian';
 
 export async function POST(req: NextRequest) {
 	try {
