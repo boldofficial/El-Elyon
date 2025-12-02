@@ -4,6 +4,7 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
+import EmployeeTrainingManagement from './EmployeeTrainingManagement'; // Import the new component
 
 interface Employee {
 	id: string;
@@ -17,25 +18,14 @@ interface Employee {
 	personalBio?: string;
 }
 
-interface Training {
-	id: string;
-	trainingName: string;
-	trainingYear: number;
-	completed: boolean;
-	completedDate?: Date;
-	certificateFileId?: string;
-	notes?: string;
-}
-
 export default function EmployeeHRManagement({
 	employeeId,
 }: {
 	employeeId: string;
 }) {
 	const [employee, setEmployee] = useState<Employee | null>(null);
-	const [trainings, setTrainings] = useState<Training[]>([]);
 	const [loading, setLoading] = useState(true);
-	const [showTrainingForm, setShowTrainingForm] = useState(false);
+	const [trainingRefreshTrigger, setTrainingRefreshTrigger] = useState(0); // To trigger refresh of trainings
 
 	// File upload handler
 	const handleFileUpload = async (file: File, fileType: string) => {
@@ -65,26 +55,20 @@ export default function EmployeeHRManagement({
 	useEffect(() => {
 		async function fetchData() {
 			try {
-				const [empRes, trainRes] = await Promise.all([
-					fetch(`/api/admin/employees/${employeeId}/hr`),
-					fetch(`/api/admin/employees/${employeeId}/trainings`),
-				]);
-
+				const empRes = await fetch(`/api/admin/employees/${employeeId}/hr`);
+				if (!empRes.ok) throw new Error('Failed to fetch employee HR data');
 				const empData = await empRes.json();
-				const trainData = await trainRes.json();
-
 				setEmployee(empData);
-				setTrainings(trainData);
 			} catch (error) {
-				console.error('Error fetching data:', error);
-				toast.error('Failed to load employee data');
+				console.error('Error fetching employee HR data:', error);
+				toast.error('Failed to load employee HR data');
 			} finally {
 				setLoading(false);
 			}
 		}
 
 		fetchData();
-	}, [employeeId]);
+	}, [employeeId, trainingRefreshTrigger]); // Added trainingRefreshTrigger to re-fetch if trainings are updated externally
 
 	const handleUpdateHRInfo = async (data: Partial<Employee>) => {
 		try {
@@ -94,67 +78,15 @@ export default function EmployeeHRManagement({
 				body: JSON.stringify(data),
 			});
 
-			if (!res.ok) throw new Error('Failed to update');
+			if (!res.ok) throw new Error('Failed to update HR information');
 
 			const updated = await res.json();
 			setEmployee(updated);
 			toast.success('HR information updated');
+			setTrainingRefreshTrigger((prev) => prev + 1); // Trigger refresh of trainings
 		} catch (error) {
 			toast.error('Failed to update HR information');
 			console.error(error);
-		}
-	};
-
-	const handleToggleTrainingCompletion = async (
-		trainingId: string,
-		completed: boolean
-	) => {
-		try {
-			const res = await fetch(`/api/admin/employees/trainings/${trainingId}`, {
-				method: 'PATCH',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify({toggleCompletion: !completed}),
-			});
-
-			if (!res.ok) throw new Error('Failed to toggle');
-
-			// Refresh trainings
-			const trainRes = await fetch(
-				`/api/admin/employees/${employeeId}/trainings`
-			);
-			const trainData = await trainRes.json();
-			setTrainings(trainData);
-
-			toast.success('Training status updated');
-		} catch (error) {
-			toast.error('Failed to update training status');
-		}
-	};
-
-	const handleAddTraining = async (training: {
-		trainingName: string;
-		trainingYear: number;
-	}) => {
-		try {
-			const res = await fetch(`/api/admin/employees/${employeeId}/trainings`, {
-				method: 'POST',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify(training),
-			});
-
-			if (!res.ok) throw new Error('Failed to create');
-
-			// Refresh trainings
-			const trainRes = await fetch(
-				`/api/admin/employees/${employeeId}/trainings`
-			);
-			const trainData = await trainRes.json();
-			setTrainings(trainData);
-
-			setShowTrainingForm(false);
-			toast.success('Training added');
-		} catch (error) {
-			toast.error('Failed to add training');
 		}
 	};
 
@@ -191,7 +123,7 @@ export default function EmployeeHRManagement({
 							}
 							onChange={(e) =>
 								handleUpdateHRInfo({
-									dateOfHire: new Date(e.target.value),
+									dateOfHire: e.target.value ? new Date(e.target.value) : undefined,
 								})
 							}
 							className="border rounded px-3 py-2"
@@ -230,7 +162,7 @@ export default function EmployeeHRManagement({
 									}
 									onChange={(e) =>
 										handleUpdateHRInfo({
-											tbTestExpiresAt: new Date(e.target.value),
+											tbTestExpiresAt: e.target.value ? new Date(e.target.value) : undefined,
 										})
 									}
 									placeholder="Expiration date"
@@ -286,7 +218,7 @@ export default function EmployeeHRManagement({
 									}
 									onChange={(e) =>
 										handleUpdateHRInfo({
-											backgroundCheckExpiresAt: new Date(e.target.value),
+											backgroundCheckExpiresAt: e.target.value ? new Date(e.target.value) : undefined,
 										})
 									}
 									placeholder="Expiration date"
@@ -360,115 +292,11 @@ export default function EmployeeHRManagement({
 				</div>
 			</div>
 
-			{/* Training Documentation Section */}
-			<div className="bg-white rounded-lg shadow p-6">
-				<div className="flex justify-between items-center mb-4">
-					<h2 className="text-xl font-bold">Training Documentation</h2>
-					<button
-						onClick={() => setShowTrainingForm(!showTrainingForm)}
-						className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-						{showTrainingForm ? 'Cancel' : '+ Add Training'}
-					</button>
-				</div>
-
-				{showTrainingForm && (
-					<div className="bg-gray-50 p-4 rounded mb-4">
-						<form
-							onSubmit={(e) => {
-								e.preventDefault();
-								const formData = new FormData(e.currentTarget);
-								handleAddTraining({
-									trainingName: formData.get('trainingName') as string,
-									trainingYear: parseInt(
-										formData.get('trainingYear') as string
-									),
-								});
-							}}>
-							<div className="grid grid-cols-2 gap-4 mb-4">
-								<input
-									name="trainingName"
-									placeholder="Training name"
-									required
-									className="border rounded px-3 py-2"
-								/>
-								<input
-									name="trainingYear"
-									type="number"
-									placeholder="Year"
-									required
-									min="2000"
-									max="2100"
-									className="border rounded px-3 py-2"
-								/>
-							</div>
-							<button
-								type="submit"
-								className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
-								Add Training
-							</button>
-						</form>
-					</div>
-				)}
-
-				{/* Training List */}
-				<div className="overflow-x-auto">
-					<table className="w-full">
-						<thead className="bg-gray-50">
-							<tr>
-								<th className="px-4 py-2 text-left">Training Name</th>
-								<th className="px-4 py-2 text-left">Year</th>
-								<th className="px-4 py-2 text-left">Status</th>
-								<th className="px-4 py-2 text-left">Completed Date</th>
-								<th className="px-4 py-2 text-left">Actions</th>
-							</tr>
-						</thead>
-						<tbody>
-							{trainings.length === 0 ? (
-								<tr>
-									<td
-										colSpan={5}
-										className="px-4 py-8 text-center text-gray-500">
-										No trainings added yet
-									</td>
-								</tr>
-							) : (
-								trainings.map((training) => (
-									<tr key={training.id} className="border-t">
-										<td className="px-4 py-2">{training.trainingName}</td>
-										<td className="px-4 py-2">{training.trainingYear}</td>
-										<td className="px-4 py-2">
-											<button
-												onClick={() =>
-													handleToggleTrainingCompletion(
-														training.id,
-														training.completed
-													)
-												}
-												className={`px-3 py-1 rounded text-sm ${
-													training.completed
-														? 'bg-green-100 text-green-800'
-														: 'bg-gray-100 text-gray-800'
-												}`}>
-												{training.completed ? 'Completed' : 'Not Completed'}
-											</button>
-										</td>
-										<td className="px-4 py-2">
-											{training.completedDate
-												? new Date(training.completedDate).toLocaleDateString()
-												: '-'}
-										</td>
-										<td className="px-4 py-2">
-											<button className="text-blue-600 hover:text-blue-800 text-sm">
-												Edit
-											</button>
-										</td>
-									</tr>
-								))
-							)}
-						</tbody>
-					</table>
-				</div>
-			</div>
+			{/* Training Documentation Section - now handled by separate component */}
+			<EmployeeTrainingManagement
+				employeeId={employeeId}
+				refreshTrigger={trainingRefreshTrigger}
+			/>
 		</div>
 	);
 }

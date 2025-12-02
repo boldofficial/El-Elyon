@@ -80,7 +80,7 @@ export function SignInForm() {
 				<div className="flex justify-center mb-4">
 					<div className="relative h-16 w-auto">
 						<Image
-							src="/logo.png"
+							src="/logo.svg"
 							alt="El-Elyon Properties LLC Logo"
 							fill
 							style={{ objectFit: 'contain' }}
