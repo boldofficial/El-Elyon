@@ -3,14 +3,18 @@ import {NextRequest, NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {resendChecklistToGuardian} from '@/db/mutations/guardian-checklists';
 
-export async function POST(req: NextRequest, {params}: {params: {id: string}}) {
+export async function POST(
+	req: NextRequest,
+	{params}: {params: Promise<{id: string}>}
+) {
 	try {
 		const {userId} = await auth();
 		if (!userId) {
 			return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 		}
 
-		const result = await resendChecklistToGuardian(userId, params.id);
+		const {id} = await params;
+		const result = await resendChecklistToGuardian(userId, id);
 
 		// Trigger email sending
 		await fetch(
@@ -19,7 +23,7 @@ export async function POST(req: NextRequest, {params}: {params: {id: string}}) {
 				method: 'POST',
 				headers: {'Content-Type': 'application/json'},
 				body: JSON.stringify({
-					linkId: params.id,
+					linkId: id,
 					token: result.token,
 				}),
 			}
