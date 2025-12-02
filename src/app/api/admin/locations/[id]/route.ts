@@ -38,7 +38,7 @@ export async function GET(request: Request, {params}: {params: Promise<{id: stri
 // PATCH - Update location
 export async function PATCH(
 	request: Request,
-	{params}: {params: {id: string}}
+	{params}: {params: Promise<{id: string}>}
 ) {
 	const {userId} = await auth();
 	if (!userId) {
