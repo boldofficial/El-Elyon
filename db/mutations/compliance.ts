@@ -1,13 +1,26 @@
 // src/db/mutations/compliance.ts
 
-
 import {db} from '../index';
-import {complianceAlerts, isp, fireEvac, guardianChecklistLinks, config} from '../schema';
-import {eq, and, desc} from 'drizzle-orm';
-import {requireAdminAccess, getUserRoleDoc} from '@/lib/db-helpers';
+import {
+	complianceAlerts,
+	isp,
+	fireEvac,
+	guardianChecklistLinks,
+	config,
+	employees,
+	roles,
+} from '../schema';
+import {eq, inArray} from 'drizzle-orm';
+import {requireAdminAccess} from '@/lib/db-helpers';
 import {logAudit} from './audit';
+import {sendComplianceAlertEmail} from '@/lib/emails/compliance';
+import {sendGuardianChecklistEmail} from '@/lib/emails/guardian';
+import {getComplianceOverview} from '@/db/queries/compliance';
 
-// Internal: Create alert
+// ========================================
+// Internal Alert Creation
+// ========================================
+
 export async function internalCreateAlert(
 	type: 'isp' | 'fire_evac',
 	location: string,
@@ -17,112 +30,211 @@ export async function internalCreateAlert(
 	await db.insert(complianceAlerts).values({
 		type,
 		title: `${type} alert`,
-		description: details || `${type} alert for ${location} due soon`, // Adjusted description
+		description: details || `${type} alert for ${location} due soon`,
 		location,
 		status: 'active',
 		severity: 'medium',
 		active: true,
 		createdAt: new Date(),
+		// metadata: {
+		// 	dueDate: dueAt,
+		// },
 	});
 	return true;
 }
 
-// --- NEW: Send compliance reminders ---
-export async function sendComplianceReminders(clerkUserId: string, itemIds: string[]) {
+// ========================================
+// Send Compliance Reminders
+// ========================================
+
+export async function sendComplianceReminders(
+	clerkUserId: string,
+	itemIds: string[]
+) {
 	if (!clerkUserId) {
 		throw new Error('Not authenticated');
 	}
 
+	await requireAdminAccess(clerkUserId);
+
+	// Get the admin sending the reminder
+	const sendingAdmin = await db.query.employees.findFirst({
+		where: eq(employees.clerkUserId, clerkUserId),
+	});
+
+	if (!sendingAdmin) {
+		throw new Error('Admin employee record not found');
+	}
+
+	// Get all admin and supervisor recipients
+	const recipientRoles = await db.query.roles.findMany({
+		where: inArray(roles.role, ['admin', 'supervisor']),
+	});
+
+	const recipientClerkUserIds = recipientRoles
+		.map((r) => r.clerkUserId)
+		.filter((id): id is string => id !== null);
+
+	if (recipientClerkUserIds.length === 0) {
+		throw new Error('No admin/supervisor recipients found');
+	}
+
+	const recipients = await db.query.employees.findMany({
+		where: inArray(employees.clerkUserId, recipientClerkUserIds),
+	});
+
+	const validRecipients = recipients.filter((emp) => emp.workEmail);
+
+	// Get compliance items
+	const allItems = await getComplianceOverview(clerkUserId);
+	const selectedItems = allItems.filter((item) => itemIds.includes(item.id));
+
+	if (selectedItems.length === 0) {
+		throw new Error('No valid compliance items found');
+	}
+
+	// Group alerts by location
+	const alertsByLocation: Record<string, any[]> = {};
+	for (const item of selectedItems) {
+		if (!alertsByLocation[item.location]) {
+			alertsByLocation[item.location] = [];
+		}
+		alertsByLocation[item.location].push(item);
+	}
+
+	// Send emails
+	let sentCount = 0;
+	for (const recipient of validRecipients) {
+		if (!recipient.workEmail) continue;
+
+		try {
+			const result = await sendComplianceAlertEmail({
+				to: recipient.workEmail,
+				adminName: recipient.name,
+				alertsByLocation,
+				totalAlerts: selectedItems.length,
+			});
+
+			if (result.success) {
+				sentCount++;
+			}
+		} catch (error) {
+			console.error(`Failed to send to ${recipient.workEmail}:`, error);
+		}
+	}
+
 	await logAudit({
-		clerkUserId: clerkUserId as string, // Explicitly cast to string
+		clerkUserId,
 		event: 'send_compliance_reminders',
-		details: `itemCount=${itemIds.length}`,
+		details: `Sent ${sentCount} emails for ${itemIds.length} items`,
 		deviceId: 'system',
 		location: '',
 	});
 
-	// In a real Next.js app, this would trigger an external email service
-	// or a background job to send emails. For now, we'll just log it.
-	console.log(`Scheduled compliance reminder emails for ${itemIds.length} items by ${clerkUserId}`);
-
-	// You would typically call an internal API route or a job queue here
-	// For example:
-	// await fetch('/api/internal/send-compliance-reminders', {
-	//   method: 'POST',
-	//   body: JSON.stringify({ itemIds, clerkUserId }),
-	// });
-
-	return {sent: itemIds.length};
+	return {sent: sentCount, total: validRecipients.length};
 }
 
-// --- NEW: Export compliance list ---
-export async function exportComplianceList(clerkUserId: string, itemIds: string[]) {
+// ========================================
+// Export Compliance List
+// ========================================
+
+export async function exportComplianceList(
+	clerkUserId: string,
+	itemIds: string[]
+) {
 	if (!clerkUserId) {
 		throw new Error('Not authenticated');
 	}
 	await requireAdminAccess(clerkUserId);
 
+	// Get compliance items
+	const allItems = await getComplianceOverview(clerkUserId);
+	const selectedItems = allItems.filter((item) => itemIds.includes(item.id));
+
+	if (selectedItems.length === 0) {
+		throw new Error('No valid compliance items found');
+	}
+
+	// Generate CSV data
+	const csvHeader = 'Type,Resident,Location,Status,Due Date,Description\n';
+	const csvRows = selectedItems
+		.map(
+			(item: any) =>
+				`"${item.type}","${item.residentName}","${item.location}","${item.status}","${new Date(item.dueDate).toLocaleDateString()}","${item.description}"`
+		)
+		.join('\n');
+
+	const csvData = csvHeader + csvRows;
+
 	await logAudit({
 		clerkUserId,
 		event: 'export_compliance_list',
-		details: `itemCount=${itemIds.length}`,
+		details: `Exported ${itemIds.length} items`,
 		deviceId: 'system',
 		location: '',
 	});
 
-	// In a real Next.js app, this would trigger a process to generate and
-	// export the compliance list, possibly to a file storage service or email.
-	console.log(`Exported compliance list for ${itemIds.length} items by ${clerkUserId}`);
-
-	return {exported: itemIds.length};
+	return {
+		exported: itemIds.length,
+		csvData,
+		filename: `compliance-export-${new Date().toISOString().split('T')[0]}.csv`,
+	};
 }
 
-// --- NEW: Resend guardian checklist link ---
+// ========================================
+// Resend Guardian Checklist Link
+// ========================================
+
 export async function resendGuardianLink(clerkUserId: string, linkId: string) {
 	if (!clerkUserId) {
 		throw new Error('Not authenticated');
 	}
-	// Assuming only admins or authorized staff can resend links
-	await requireAdminAccess(clerkUserId); // Or a more granular check
+	await requireAdminAccess(clerkUserId);
 
 	const link = await db.query.guardianChecklistLinks.findFirst({
 		where: eq(guardianChecklistLinks.id, linkId),
 	});
 
-	if (!link) throw new Error('Link not found');
+	if (!link) {
+		throw new Error('Link not found');
+	}
 
-	const newExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days from now
-	await db.update(guardianChecklistLinks).set({expiresAt: newExpiresAt}).where(eq(guardianChecklistLinks.id, linkId));
+	// Extend expiration by 30 days
+	const newExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+	await db
+		.update(guardianChecklistLinks)
+		.set({expiresAt: newExpiresAt})
+		.where(eq(guardianChecklistLinks.id, linkId));
+
+	// Send email
+	try {
+		await sendGuardianChecklistEmail(linkId, link.token);
+	} catch (error) {
+		console.error('Error sending guardian checklist email:', error);
+		throw new Error('Failed to send checklist email');
+	}
 
 	await logAudit({
 		clerkUserId,
 		event: 'resend_guardian_link',
-		details: `linkId=${linkId}`,
+		details: `Resent link ${linkId} to ${link.guardianEmail}`,
 		deviceId: 'system',
 		location: '',
 	});
 
-	// In a real Next.js app, this would trigger an external email service
-	// or a background job to send emails. For now, we'll just log it.
-	console.log(`Resent guardian checklist link ${linkId} to ${link.guardianEmail}`);
-
-	// You would typically call an internal API route or a job queue here
-	// For example:
-	// await fetch('/api/internal/send-guardian-checklist-email', {
-	//   method: 'POST',
-	//   body: JSON.stringify({ linkId, token: link.token }),
-	// });
-
-	return {linkId, token: link.token};
+	return {linkId, token: link.token, sent: true};
 }
 
-// Mutation: When ISP is published, set due +6mo (called from existing publishIsp)
+// ========================================
+// ISP Due Date Management
+// ========================================
+
 export async function setIspDueDate(residentId: string, ispId: string) {
-	const dueAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30 * 6); // 6 months from now
+	const dueAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30 * 6); // 6 months
 	await db.update(isp).set({dueAt}).where(eq(isp.id, ispId));
 
 	await logAudit({
-		clerkUserId: null, // This mutation is called internally, so no direct clerkUserId
+		clerkUserId: null,
 		event: 'set_isp_due_date',
 		details: `ispId=${ispId} dueAt=${dueAt.toISOString()} residentId=${residentId}`,
 		deviceId: 'system',
@@ -131,46 +243,31 @@ export async function setIspDueDate(residentId: string, ispId: string) {
 	return true;
 }
 
-// Mutation: Generate upload URL for fire evac plan
-export async function generateFireEvacUploadUrl(clerkUserId: string | null) {
-	if (!clerkUserId) {
-		throw new Error('Not authenticated');
-	}
-	// Check if user has admin or supervisor access
-	const userRole = await getUserRoleDoc(clerkUserId);
-	if (!userRole || (!['admin', 'supervisor'].includes(userRole.role as string))) {
-		throw new Error(
-			'Forbidden: Only admins and supervisors can upload fire evacuation plans'
-		);
-	}
+// ========================================
+// Alert Schedule Management
+// ========================================
 
-	// In a real Next.js app, this would interact with a file storage service
-	// like AWS S3, Vercel Blob, or a custom backend.
-	// For now, return a a placeholder URL.
-	console.log('Placeholder: Generating fire evac plan upload URL');
-	return {
-		url: 'https://placeholder.com/upload-fire-evac-plan',
-		// You might also return a unique ID for the file, and other metadata
-		// that your frontend needs to upload the file.
-	};
-}
-
-// Mutation: Admin sets alert schedule
-export async function setAlertSchedule(clerkUserId: string, weekday: number, hour: number, minute: number) {
+export async function setAlertSchedule(
+	clerkUserId: string,
+	weekday: number,
+	hour: number,
+	minute: number
+) {
 	await requireAdminAccess(clerkUserId);
 
 	const configRecord = await db.query.config.findFirst();
 
 	if (configRecord) {
-		await db.update(config).set({
-			alertWeekday: weekday,
-			alertHour: hour,
-			alertMinute: minute,
-		}).where(eq(config.id, configRecord.id));
+		await db
+			.update(config)
+			.set({
+				alertWeekday: weekday,
+				alertHour: hour,
+				alertMinute: minute,
+			})
+			.where(eq(config.id, configRecord.id));
 	} else {
-		// If no config exists, create one (assuming a single config record)
 		await db.insert(config).values({
-			id: 'default-config', // Or generate a UUID
 			alertWeekday: weekday,
 			alertHour: hour,
 			alertMinute: minute,
@@ -187,21 +284,29 @@ export async function setAlertSchedule(clerkUserId: string, weekday: number, hou
 	return true;
 }
 
-// Mutation: Dismiss alert
+// ========================================
+// Dismiss Alert
+// ========================================
+
 export async function dismissAlert(clerkUserId: string, alertId: string) {
-	await requireAdminAccess(clerkUserId); // Assuming only admins can dismiss alerts
+	await requireAdminAccess(clerkUserId);
 
 	const alert = await db.query.complianceAlerts.findFirst({
 		where: eq(complianceAlerts.id, alertId),
 	});
 
-	if (!alert || !alert.active) throw new Error('Alert not found or not active');
+	if (!alert || !alert.active) {
+		throw new Error('Alert not found or not active');
+	}
 
-	await db.update(complianceAlerts).set({
-		active: false,
-		dismissedBy: clerkUserId,
-		dismissedAt: new Date(),
-	}).where(eq(complianceAlerts.id, alertId));
+	await db
+		.update(complianceAlerts)
+		.set({
+			active: false,
+			dismissedBy: clerkUserId,
+			dismissedAt: new Date(),
+		})
+		.where(eq(complianceAlerts.id, alertId));
 
 	await logAudit({
 		clerkUserId,
