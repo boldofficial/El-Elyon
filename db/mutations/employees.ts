@@ -27,7 +27,7 @@ import {
 import {
 	sendEmployeeInviteEmail,
 	sendWelcomeEmailWithCredentials,
-} from '@/lib/emails';
+} from '@/lib/emails/employee';
 import {auth} from '@clerk/nextjs/server';
 import {getUserRoleDoc, requireAdminAccess, logAudit} from '@/lib/db-helpers'; // Import from db-helpers
 import {checkForAdmins} from '../queries/roles';
