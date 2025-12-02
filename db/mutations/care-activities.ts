@@ -60,6 +60,69 @@ export async function createResidentLogActivity(
 	return newActivity;
 }
 
+export async function createResidentLogWithActivities(
+	data: {
+		residentId: string;
+		logType: string;
+		content?: string;
+		location: string;
+		shiftId?: string;
+		authorId: string;
+		authorName: string;
+		template?: string;
+		activities: Array<{
+			activityType: string;
+			completed?: boolean;
+			notes?: string;
+		}>;
+	}
+) {
+	await requireCareAccess(data.authorId); // Assuming authorId is the clerkUserId for access control
+
+	// 1. Create the resident log
+	const [newLog] = await db
+		.insert(residentLogs)
+		.values({
+			residentId: data.residentId,
+			logType: data.logType,
+			content: data.content,
+			location: data.location,
+			shiftId: data.shiftId,
+			authorId: data.authorId,
+			authorName: data.authorName,
+			template: data.template,
+			createdAt: new Date(),
+		})
+		.returning();
+
+	if (!newLog) {
+		throw new Error('Failed to create resident log');
+	}
+
+	// 2. Create associated activities
+	if (data.activities && data.activities.length > 0) {
+		const activitiesToInsert = data.activities.map((activity) => ({
+			logId: newLog.id,
+			activityType: activity.activityType,
+			completed: activity.completed ?? false,
+			notes: activity.notes,
+			timestamp: new Date(),
+		}));
+		await db.insert(residentLogActivities).values(activitiesToInsert);
+	}
+
+	// 3. Log audit
+	await logAudit({
+		clerkUserId: data.authorId,
+		event: 'create_resident_log_with_activities',
+		details: `logId=${newLog.id}, residentId=${data.residentId}, logType=${data.logType}`,
+		deviceId: 'system',
+		location: data.location,
+	});
+
+	return newLog;
+}
+
 export async function updateResidentLogActivity(
 	clerkUserId: string,
 	activityId: string,

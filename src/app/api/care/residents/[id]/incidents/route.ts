@@ -3,9 +3,9 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireCareAccess, logAudit} from '@/lib/db-helpers';
-import {createIncidentReport} from '@/db/mutations/care-activities';
 import {getResidentIncidentReports} from '@/db/queries/incident-reports';
-import {getClerkUser} from '@/lib/clerk';
+// import {getClerkUser} from '@/lib/clerk';
+import { createIncidentReport } from '@/db/mutations/incident-reports';
 
 // GET - List incident reports for a resident
 export async function GET(request: Request, {params}: {params: {id: string}}) {
@@ -40,14 +40,8 @@ export async function POST(request: Request, {params}: {params: {id: string}}) {
 		const residentId = params.id;
 		const body = await request.json();
 
-		// Get reporter name from Clerk
-		const clerkUser = await getClerkUser(userId);
-		const reportedByName = clerkUser?.name || 'Unknown User';
-
-		const report = await createIncidentReport({
+		const report = await createIncidentReport(userId, {
 			residentId,
-			reportedBy: userId,
-			reportedByName,
 			incidentDate: new Date(body.incidentDate),
 			incidentType: body.incidentType,
 			severity: body.severity,

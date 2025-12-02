@@ -6,10 +6,11 @@ import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireCareAccess, logAudit} from '@/lib/db-helpers';
 import {getIncidentReport} from '@/db/queries/incident-reports';
-import {
-	updateIncidentReport,
-	deleteIncidentReport,
-} from '@/db/mutations/care-activities';
+import { deleteIncidentReport, updateIncidentReport } from '@/db/mutations/incident-reports';
+// import {
+// 	updateIncidentReport,
+// 	deleteIncidentReport,
+// } from '@/db/mutations/care-activities';
 
 // GET - Get single incident report
 export async function GET(
@@ -54,7 +55,7 @@ export async function PATCH(
 		const reportId = params.reportId;
 		const body = await request.json();
 
-		const updated = await updateIncidentReport(reportId, {
+		const updated = await updateIncidentReport(userId, reportId, {
 			incidentDate: body.incidentDate ? new Date(body.incidentDate) : undefined,
 			incidentType: body.incidentType,
 			severity: body.severity,
@@ -95,7 +96,7 @@ export async function DELETE(
 		await requireCareAccess(userId);
 
 		const reportId = params.reportId;
-		await deleteIncidentReport(reportId);
+		await deleteIncidentReport(userId, reportId);
 
 		await logAudit({
 			clerkUserId: userId,
