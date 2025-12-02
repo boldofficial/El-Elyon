@@ -48,7 +48,7 @@ export async function createIncidentReport(
 		.values({
 			...data,
 			reportedBy: clerkUserId,
-			reportedByName: userRole.name, // Assuming userRole has a name property
+			// reportedByName: userRole.name, // Assuming userRole has a name property
 			createdAt: new Date(),
 		})
 		.returning();
