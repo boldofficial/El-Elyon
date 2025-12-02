@@ -96,12 +96,20 @@ export async function sendGuardianChecklistEmail(
 		});
 
 		if (error) {
-			throw new Error(`Failed to send email: ${JSON.stringify(error)}`);
+			console.error('❌ Resend API error:', error);
+			return {
+				success: false,
+				error: `Failed to send email: ${error.message || 'Unknown error'}`,
+			};
 		}
 
+		console.log('✅ Guardian checklist email sent successfully:', data?.id);
 		return {success: true, messageId: data?.id};
-	} catch (error: any) {
-		console.error('Error sending guardian checklist email:', error);
-		throw error;
+	} catch (error) {
+		console.error('❌ Exception while sending guardian checklist email:', error);
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : 'Unknown error occurred',
+		};
 	}
 }
