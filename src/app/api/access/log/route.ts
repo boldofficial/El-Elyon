@@ -22,6 +22,7 @@ export async function POST(req: Request) {
 			deviceId: 'web',
 			location: 'system',
 			details: details || null,
+			timestamp: new Date(),
 		});
 
 		return NextResponse.json({success: true});
