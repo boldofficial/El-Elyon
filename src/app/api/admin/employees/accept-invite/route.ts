@@ -22,35 +22,33 @@ export async function POST(req: NextRequest) {
 
 		const inviteDetails = await getInviteDetails(token);
 
-		if (!inviteDetails || !inviteDetails.valid || !inviteDetails.employee) {
+		if (!inviteDetails || inviteDetails.expired || inviteDetails.hasAcceptedInvite) {
 			await logAudit({
 				clerkUserId: (await auth()).userId,
 				event: 'accept_invite_failed',
-				details: `Invalid or expired token: ${token}`,
+				details: inviteDetails?.expired ? `Expired token: ${token}` : `Invalid or already accepted token: ${token}`,
 				deviceId: 'system',
 				location: 'server',
 			});
 			return NextResponse.json(
-				{error: inviteDetails?.message || 'Invalid or expired invite token'},
+				{error: inviteDetails?.expired ? 'Invite token has expired.' : 'Invalid or already accepted invite token.'},
 				{status: 400}
 			);
 		}
 
-		const {employee} = inviteDetails;
-
 		// 1. Update Clerk user's password
 		const client = await clerkClient();
-		await client.users.updateUser(employee.clerkUserId, {
+		await client.users.updateUser(inviteDetails.clerkUserId as string, {
 			password: password,
 		});
 
 		// 2. Accept invite in our database
-		const result = await acceptInvite(token, employee.clerkUserId); // Pass clerkUserId to acceptInvite
+		const result = await acceptInvite(token); // Pass clerkUserId to acceptInvite
 
 		await logAudit({
-			clerkUserId: employee.clerkUserId,
+			clerkUserId: inviteDetails.clerkUserId,
 			event: 'employee_invite_accepted',
-			details: `Employee ${employee.name} accepted invite with token ${token}`,
+			details: `Employee ${inviteDetails.name} accepted invite with token ${token}`,
 			deviceId: 'system', // Device ID not available here
 			location: 'server', // Location not available here
 		});
