@@ -79,7 +79,7 @@ export default function ComplianceAlerts() {
 	}
 
 	return (
-		<div className="space-y-6">
+		<div className="space-y-6 mb-6">
 			{/* Header */}
 			<div className="border-b border-gray-200 pb-4">
 				<h3 className="text-lg font-semibold">Active Compliance Alerts</h3>
