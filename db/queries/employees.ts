@@ -175,6 +175,7 @@ export async function getInviteDetails(token: string) {
 		expired,
 		hasAcceptedInvite: !!employee.hasAcceptedInvite,
 		expiresAt: employee.inviteExpiresAt,
+		clerkUserId: employee.clerkUserId,
 	};
 }
 
