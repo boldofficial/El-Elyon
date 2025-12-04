@@ -7,7 +7,7 @@ import {updateUser} from '@/db/mutations/users';
 import {updateEmployee} from '@/db/mutations/employees';
 
 import {getEmployeeByClerkId} from '@/db/queries/employees';
-import {getRoleByClerkId, updateRole} from '@/db/queries/roles';
+import {getRoleByClerkId} from '@/db/queries/roles';
 
 export async function PUT(req: Request) {
 	try {
