@@ -6,8 +6,8 @@ import {logAudit} from '@/db/mutations/audit';
 // POST /api/admin/employees/link-user - Link authenticated Clerk user to employee record and create role
 export async function POST(req: NextRequest) {
 	try {
-		const {userId, user} = await auth();
-		if (!userId || !user?.emailAddresses?.[0]?.emailAddress) {
+		const {userId, sessionClaims} = await auth();
+		if (!userId || !sessionClaims?.email) {
 			return new NextResponse('Unauthorized', {status: 401});
 		}
 
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 			return new NextResponse('Missing employeeId', {status: 400});
 		}
 
-		const userEmail = user.emailAddresses[0].emailAddress;
+		const userEmail = sessionClaims.email as string;
 		const result = await linkUserToEmployee(employeeId, userId, userEmail);
 		return NextResponse.json(result);
 	} catch (error: any) {
