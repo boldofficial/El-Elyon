@@ -6,7 +6,7 @@ import { auth, clerkClient } from '@clerk/nextjs/server';
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const clerkUser = await clerkClient.users.getUser(userId);
+    const client = await clerkClient();
+    const clerkUser = await client.users.getUser(userId);
     const authorName = clerkUser.firstName && clerkUser.lastName 
       ? `${clerkUser.firstName} ${clerkUser.lastName}` 
       : clerkUser.username || 'Unknown User';
