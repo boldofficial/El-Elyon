@@ -23,7 +23,7 @@ export async function GET() {
             (role: RoleSelect) =>
                 role.role === 'staff' &&
                 role.locations &&
-                role.locations.some((loc: string) => userRole.locations.includes(loc))
+                role.locations.some((loc: string) => (userRole.locations || []).includes(loc))
         );
 
         // Get user details and shift status for each team member
@@ -44,7 +44,7 @@ export async function GET() {
                     name: employee.name || 'Unknown',
                     role: role.role,
                     locations: role.locations
-                        ? role.locations.filter((loc: string) => userRole.locations.includes(loc))
+                        ? role.locations.filter((loc: string) => (userRole.locations || []).includes(loc))
                         : [],
                     isCurrentlyClocked,
                     lastClockIn,
