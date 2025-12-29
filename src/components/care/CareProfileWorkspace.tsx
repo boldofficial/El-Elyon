@@ -2,13 +2,26 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
+import {useUser} from '@clerk/nextjs';
 
 export default function CareProfileWorkspace() {
+	const {user: clerkUser} = useUser();
 	const [sessionInfo, setSessionInfo] = useState<any>(null);
-	const [pendingAcknowledgments, setPendingAcknowledgments] = useState<any[]>(
-		[]
-	);
+	const [pendingAcknowledgments, setPendingAcknowledgments] = useState<any[]>([]);
 	const [processingAck, setProcessingAck] = useState<string | null>(null);
+	
+	// Edit name state - separate first/last name
+	const [isEditingName, setIsEditingName] = useState(false);
+	const [editFirstName, setEditFirstName] = useState('');
+	const [editLastName, setEditLastName] = useState('');
+	const [isSavingName, setIsSavingName] = useState(false);
+	
+	// Change password state
+	const [isChangingPassword, setIsChangingPassword] = useState(false);
+	const [currentPassword, setCurrentPassword] = useState('');
+	const [newPassword, setNewPassword] = useState('');
+	const [confirmPassword, setConfirmPassword] = useState('');
+	const [isSavingPassword, setIsSavingPassword] = useState(false);
 
 	useEffect(() => {
 		async function fetchData() {
@@ -16,6 +29,12 @@ export default function CareProfileWorkspace() {
 				const sessionRes = await fetch('/api/access/session');
 				const session = await sessionRes.json();
 				setSessionInfo(session);
+				
+				// Parse name into first/last
+				const fullName = session?.user?.name || '';
+				const nameParts = fullName.split(' ');
+				setEditFirstName(nameParts[0] || '');
+				setEditLastName(nameParts.slice(1).join(' ') || '');
 
 				const ackRes = await fetch('/api/care/pending-acknowledgments');
 				const acks = await ackRes.json();
@@ -41,16 +60,105 @@ export default function CareProfileWorkspace() {
 
 			toast.success('ISP acknowledged successfully');
 
-			// Refresh acknowledgments
 			const ackRes = await fetch('/api/care/pending-acknowledgments');
 			const acks = await ackRes.json();
 			setPendingAcknowledgments(acks);
 		} catch (error) {
 			toast.error('Failed to acknowledge ISP');
-      console.error('Error acknowledging ISP:', error);
+			console.error('Error acknowledging ISP:', error);
 		} finally {
 			setProcessingAck(null);
 		}
+	};
+
+	const handleSaveName = async () => {
+		if (!editFirstName.trim()) {
+			toast.error('First name is required');
+			return;
+		}
+		if (!editLastName.trim()) {
+			toast.error('Last name is required');
+			return;
+		}
+
+		setIsSavingName(true);
+		try {
+			const res = await fetch('/api/users/update-profile', {
+				method: 'PUT',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({
+					firstName: editFirstName.trim(),
+					lastName: editLastName.trim(),
+				}),
+			});
+
+			const data = await res.json();
+
+			if (!res.ok) {
+				throw new Error(data.error || 'Failed to update name');
+			}
+
+			if (data.warning) {
+				toast.success('Name updated', {description: data.warning});
+			} else {
+				toast.success('Name updated successfully');
+			}
+			setIsEditingName(false);
+
+			// Refresh session info
+			const sessionRes = await fetch('/api/access/session');
+			const session = await sessionRes.json();
+			setSessionInfo(session);
+		} catch (error: any) {
+			toast.error(error.message || 'Failed to update name');
+		} finally {
+			setIsSavingName(false);
+		}
+	};
+
+	const handleChangePassword = async () => {
+		if (!currentPassword || !newPassword || !confirmPassword) {
+			toast.error('Please fill in all password fields');
+			return;
+		}
+
+		if (newPassword !== confirmPassword) {
+			toast.error('New passwords do not match');
+			return;
+		}
+
+		if (newPassword.length < 8) {
+			toast.error('Password must be at least 8 characters');
+			return;
+		}
+
+		setIsSavingPassword(true);
+		try {
+			await clerkUser?.updatePassword({
+				currentPassword,
+				newPassword,
+			});
+
+			toast.success('Password changed successfully');
+			setIsChangingPassword(false);
+			setCurrentPassword('');
+			setNewPassword('');
+			setConfirmPassword('');
+		} catch (error: any) {
+			console.error('Error changing password:', error);
+			const errorMessage = error?.errors?.[0]?.longMessage || error?.message || 'Failed to change password';
+			toast.error(errorMessage);
+		} finally {
+			setIsSavingPassword(false);
+		}
+	};
+
+	const cancelEditName = () => {
+		setIsEditingName(false);
+		const fullName = sessionInfo?.user?.name || '';
+		const nameParts = fullName.split(' ');
+		setEditFirstName(nameParts[0] || '');
+		setEditLastName(nameParts.slice(1).join(' ') || '');
 	};
 
 	return (
@@ -62,30 +170,97 @@ export default function CareProfileWorkspace() {
 				</p>
 			</div>
 
+			{/* User Information - Editable */}
 			<div className="bg-white rounded-lg shadow-sm border p-6">
-				<h3 className="text-lg font-semibold mb-4">User Information</h3>
+				<div className="flex items-center justify-between mb-4">
+					<h3 className="text-lg font-semibold">User Information</h3>
+					{!isEditingName && !isChangingPassword && (
+						<button
+							onClick={() => setIsEditingName(true)}
+							className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+						>
+							Edit Profile
+						</button>
+					)}
+				</div>
 
 				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+					{/* First Name Field */}
 					<div>
-						<label className="block text-sm font-medium text-gray-700">
-							Name
+						<label className="block text-sm font-medium text-gray-700 mb-1">
+							First Name
 						</label>
-						<p className="text-gray-900">
-							{sessionInfo?.user?.name || 'Not provided'}
-						</p>
+						{isEditingName ? (
+							<input
+								type="text"
+								value={editFirstName}
+								onChange={(e) => setEditFirstName(e.target.value)}
+								className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+								placeholder="Enter first name"
+							/>
+						) : (
+							<p className="text-gray-900">
+								{sessionInfo?.user?.name?.split(' ')[0] || 'Not provided'}
+							</p>
+						)}
 					</div>
 
+					{/* Last Name Field */}
 					<div>
-						<label className="block text-sm font-medium text-gray-700">
+						<label className="block text-sm font-medium text-gray-700 mb-1">
+							Last Name
+						</label>
+						{isEditingName ? (
+							<input
+								type="text"
+								value={editLastName}
+								onChange={(e) => setEditLastName(e.target.value)}
+								className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+								placeholder="Enter last name"
+							/>
+						) : (
+							<p className="text-gray-900">
+								{sessionInfo?.user?.name?.split(' ').slice(1).join(' ') || 'Not provided'}
+							</p>
+						)}
+					</div>
+
+					{/* Save/Cancel buttons for name editing */}
+					{isEditingName && (
+						<div className="md:col-span-2 flex space-x-2">
+							<button
+								onClick={handleSaveName}
+								disabled={isSavingName}
+								className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
+							>
+								{isSavingName ? 'Saving...' : 'Save Changes'}
+							</button>
+							<button
+								onClick={cancelEditName}
+								disabled={isSavingName}
+								className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-300"
+							>
+								Cancel
+							</button>
+						</div>
+					)}
+
+					{/* Email Field (Read-only) */}
+					<div>
+						<label className="block text-sm font-medium text-gray-700 mb-1">
 							Email
 						</label>
 						<p className="text-gray-900">
 							{sessionInfo?.user?.email || 'Not provided'}
 						</p>
+						<p className="text-xs text-gray-500 mt-1">
+							Contact admin to change email
+						</p>
 					</div>
 
+					{/* Role (Read-only) */}
 					<div>
-						<label className="block text-sm font-medium text-gray-700">
+						<label className="block text-sm font-medium text-gray-700 mb-1">
 							Role
 						</label>
 						<p className="text-gray-900 capitalize">
@@ -93,8 +268,9 @@ export default function CareProfileWorkspace() {
 						</p>
 					</div>
 
-					<div>
-						<label className="block text-sm font-medium text-gray-700">
+					{/* Assigned Locations (Read-only) */}
+					<div className="md:col-span-2">
+						<label className="block text-sm font-medium text-gray-700 mb-1">
 							Assigned Locations
 						</label>
 						<p className="text-gray-900">
@@ -104,8 +280,91 @@ export default function CareProfileWorkspace() {
 						</p>
 					</div>
 				</div>
+
+				{/* Password Section */}
+				<div className="mt-6 pt-6 border-t border-gray-200">
+					<div className="flex items-center justify-between mb-4">
+						<div>
+							<h4 className="font-semibold text-gray-900">Password</h4>
+							<p className="text-sm text-gray-600">
+								Change your account password
+							</p>
+						</div>
+						{!isChangingPassword && !isEditingName && (
+							<button
+								onClick={() => setIsChangingPassword(true)}
+								className="px-4 py-2 bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 text-sm font-medium"
+							>
+								Change Password
+							</button>
+						)}
+					</div>
+
+					{isChangingPassword && (
+						<div className="space-y-4 max-w-md">
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-1">
+									Current Password
+								</label>
+								<input
+									type="password"
+									value={currentPassword}
+									onChange={(e) => setCurrentPassword(e.target.value)}
+									className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+									placeholder="Enter current password"
+								/>
+							</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-1">
+									New Password
+								</label>
+								<input
+									type="password"
+									value={newPassword}
+									onChange={(e) => setNewPassword(e.target.value)}
+									className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+									placeholder="Enter new password (min 8 characters)"
+								/>
+							</div>
+							<div>
+								<label className="block text-sm font-medium text-gray-700 mb-1">
+									Confirm New Password
+								</label>
+								<input
+									type="password"
+									value={confirmPassword}
+									onChange={(e) => setConfirmPassword(e.target.value)}
+									className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+									placeholder="Confirm new password"
+								/>
+							</div>
+							<div className="flex space-x-2">
+								<button
+									onClick={handleChangePassword}
+									disabled={isSavingPassword}
+									className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50"
+								>
+									{isSavingPassword ? 'Changing...' : 'Change Password'}
+								</button>
+								<button
+									onClick={() => {
+										setIsChangingPassword(false);
+										setCurrentPassword('');
+										setNewPassword('');
+										setConfirmPassword('');
+									}}
+									disabled={isSavingPassword}
+									className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-md hover:bg-gray-300"
+								>
+									Cancel
+								</button>
+							</div>
+						</div>
+					)}
+				</div>
 			</div>
 
+			{/* Required Acknowledgments */}
 			<div className="bg-white rounded-lg shadow-sm border">
 				<div className="px-6 py-4 border-b border-gray-200">
 					<h3 className="text-lg font-semibold">Required Acknowledgments</h3>
@@ -161,6 +420,7 @@ export default function CareProfileWorkspace() {
 				)}
 			</div>
 
+			{/* Profile Guidelines */}
 			<div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
 				<h3 className="font-semibold text-blue-900 mb-3">Profile Guidelines</h3>
 				<ul className="space-y-2 text-sm text-blue-800">
