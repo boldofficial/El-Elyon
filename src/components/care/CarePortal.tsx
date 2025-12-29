@@ -11,13 +11,11 @@ import CareProfileWorkspace from './CareProfileWorkspace';
 import SupervisorComplianceWorkspace from '../supervisor/SupervisorComplianceWorkspace';
 import SupervisorTeamWorkspace from '../supervisor/SupervisorTeamWorkspace';
 import CarePortalResidentDetails from './CarePortalResidentDetails';
-// NEW IMPORT
 
 export default function CarePortal() {
 	const [activeView, setActiveView] = useState('shift');
 	const [sessionInfo, setSessionInfo] = useState<any>(null);
 	const [currentShift, setCurrentShift] = useState<any>(null);
-	// NEW STATE for resident detail view
 	const [selectedResident, setSelectedResident] = useState<any>(null);
 
 	useEffect(() => {
@@ -49,12 +47,12 @@ export default function CarePortal() {
 			icon: '🏠',
 			description: 'Location-scoped list',
 		},
-		{id: 'logs', label: 'Logs', icon: '📝', description: 'Create & view logs'},
+		{id: 'logs', label: 'Logs', icon: '📝', description: 'Create & view logs', hasNotification: true},
 		{
 			id: 'profile',
 			label: 'My Profile',
 			icon: '👤',
-			description: 'Credentials & acknowledgments',
+			description: 'Credentials & acknowledgm...',
 		},
 	];
 
@@ -70,7 +68,7 @@ export default function CarePortal() {
 
 	const handleNavigation = async (viewId: string) => {
 		setActiveView(viewId);
-		setSelectedResident(null); // Clear selected resident when changing views
+		setSelectedResident(null);
 		await fetch('/api/access/log', {
 			method: 'POST',
 			headers: {'Content-Type': 'application/json'},
@@ -81,7 +79,6 @@ export default function CarePortal() {
 		});
 	};
 
-	// NEW: Handle resident selection from residents list
 	const handleResidentSelect = (resident: any) => {
 		setSelectedResident(resident);
 		setActiveView('resident-details');
@@ -92,7 +89,6 @@ export default function CarePortal() {
 			return <CareShiftWorkspace />;
 		}
 
-		// NEW: Show resident details when a resident is selected
 		if (activeView === 'resident-details' && selectedResident) {
 			return (
 				<div>
@@ -144,84 +140,97 @@ export default function CarePortal() {
 
 	return (
 		<div className="flex h-screen bg-gray-50">
-			<div className="w-64 bg-white shadow-sm border-r flex flex-col">
-				<div className="p-6 border-b">
-					<h1 className="text-xl font-bold text-gray-900">Care Portal</h1>
+			{/* Dark Navy Sidebar */}
+			<div className="w-64 flex flex-col" style={{backgroundColor: '#1e3a5f'}}>
+				{/* Header with title, email, and role badge */}
+				<div className="p-6 border-b border-white/10">
+					<h1 className="text-xl font-bold text-white">Care Portal</h1>
 					{sessionInfo?.user && (
-						<div className="mt-2 text-sm text-gray-600">
-							{sessionInfo.user.name}
+						<div className="mt-2">
+							<p className="text-sm text-blue-200 truncate">
+								{sessionInfo.user.email || sessionInfo.user.name}
+							</p>
 							{sessionInfo.role && (
-								<span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-									{sessionInfo.role.charAt(0).toUpperCase() +
-										sessionInfo.role.slice(1)}
+								<span 
+									className="mt-2 inline-flex items-center px-3 py-1 rounded text-xs font-semibold text-white"
+									style={{backgroundColor: '#20a39e'}}
+								>
+									{sessionInfo.role.charAt(0).toUpperCase() + sessionInfo.role.slice(1)}
 								</span>
 							)}
 						</div>
 					)}
 				</div>
 
-				<nav className="flex-1 p-4 space-y-2">
-					<div className="space-y-1">
-						{navigationItems.map((item) => (
-							<button
-								key={item.id}
-								onClick={() => handleNavigation(item.id)}
-								className={`w-full flex items-center px-3 py-3 text-left rounded-lg transition-colors ${
-									activeView === item.id
-										? 'bg-blue-50 text-blue-700 border border-blue-200'
-										: 'text-gray-700 hover:bg-gray-50'
-								} ${!isClockedIn && item.id !== 'shift' ? 'opacity-50 cursor-not-allowed' : ''}`}
-								disabled={!isClockedIn && item.id !== 'shift'}>
-								<span className="text-lg mr-3">{item.icon}</span>
-								<div className="flex-1 min-w-0">
-									<div className="font-medium">{item.label}</div>
-									<div className="text-xs text-gray-500 truncate">
-										{item.description}
-									</div>
+				{/* Navigation */}
+				<nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+					{navigationItems.map((item) => (
+						<button
+							key={item.id}
+							onClick={() => handleNavigation(item.id)}
+							className={`w-full flex items-center px-3 py-3 text-left rounded-lg transition-all ${
+								activeView === item.id
+									? 'text-white'
+									: 'text-blue-200 hover:bg-white/10'
+							} ${!isClockedIn && item.id !== 'shift' ? 'opacity-50 cursor-not-allowed' : ''}`}
+							style={activeView === item.id ? {backgroundColor: '#3b82f6'} : {}}
+							disabled={!isClockedIn && item.id !== 'shift'}>
+							<span className="text-lg mr-3">{item.icon}</span>
+							<div className="flex-1 min-w-0">
+								<div className="font-medium flex items-center">
+									{item.label}
+									{item.hasNotification && (
+										<span className="ml-2 w-2.5 h-2.5 bg-red-500 rounded-full"></span>
+									)}
 								</div>
-							</button>
-						))}
-					</div>
+								<div className={`text-xs truncate ${activeView === item.id ? 'text-blue-100' : 'text-blue-300'}`}>
+									{item.description}
+								</div>
+							</div>
+						</button>
+					))}
 
+					{/* Supervisor Tools Section */}
 					{isSupervisor && (
-						<div className="pt-4 border-t">
-							<div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+						<div className="pt-4 mt-4 border-t border-white/10">
+							<div className="text-xs font-semibold text-blue-300 uppercase tracking-wider mb-3 px-3">
 								Supervisor Tools
 							</div>
-							<div className="space-y-1">
-								{supervisorItems.map((item) => (
-									<button
-										key={item.id}
-										onClick={() => handleNavigation(item.id)}
-										className={`w-full flex items-center px-3 py-3 text-left rounded-lg transition-colors ${
-											activeView === item.id
-												? 'bg-purple-50 text-purple-700 border border-purple-200'
-												: 'text-gray-700 hover:bg-gray-50'
-										} ${!isClockedIn ? 'opacity-50 cursor-not-allowed' : ''}`}
-										disabled={!isClockedIn}>
-										<span className="text-lg mr-3">{item.icon}</span>
-										<div className="flex-1 min-w-0">
-											<div className="font-medium">{item.label}</div>
-											<div className="text-xs text-gray-500 truncate">
-												{item.description}
-											</div>
+							{supervisorItems.map((item) => (
+								<button
+									key={item.id}
+									onClick={() => handleNavigation(item.id)}
+									className={`w-full flex items-center px-3 py-3 text-left rounded-lg transition-all ${
+										activeView === item.id
+											? 'text-white'
+											: 'text-blue-200 hover:bg-white/10'
+									} ${!isClockedIn ? 'opacity-50 cursor-not-allowed' : ''}`}
+									style={activeView === item.id ? {backgroundColor: '#3b82f6'} : {}}
+									disabled={!isClockedIn}>
+									<span className="text-lg mr-3">{item.icon}</span>
+									<div className="flex-1 min-w-0">
+										<div className="font-medium">{item.label}</div>
+										<div className={`text-xs truncate ${activeView === item.id ? 'text-blue-100' : 'text-blue-300'}`}>
+											{item.description}
 										</div>
-									</button>
-								))}
-							</div>
+									</div>
+								</button>
+							))}
 						</div>
 					)}
 				</nav>
 
-				<div className="p-4 border-t">
-					<SignOutButton />
+				{/* Sign Out Button */}
+				<div className="p-4 border-t border-white/10">
+					<SignOutButton  />
 				</div>
 			</div>
 
+			{/* Main Content */}
 			<main className="flex-1 overflow-y-auto">
 				<div className="p-8">
 					{!isClockedIn && (
-						<div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-center font-medium">
+						<div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-center font-medium">
 							You must clock in to access the rest of the Care Portal.
 						</div>
 					)}
