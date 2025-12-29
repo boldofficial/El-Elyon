@@ -4,7 +4,11 @@ import React, {useState, useEffect} from 'react';
 import SelfieCapture from '../shared/SelfieCapture';
 import {toast} from 'sonner';
 
-export default function CareShiftWorkspace() {
+interface CareShiftWorkspaceProps {
+	onShiftChange?: () => void;
+}
+
+export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspaceProps) {
 	const [sessionInfo, setSessionInfo] = useState<any>(null);
 	const [currentShift, setCurrentShift] = useState<any>(null);
 	const [isSelfieEnforced, setIsSelfieEnforced] = useState(false);
@@ -78,6 +82,9 @@ export default function CareShiftWorkspace() {
 			const shiftRes = await fetch('/api/shifts/current');
 			const shift = await shiftRes.json();
 			setCurrentShift(shift);
+
+			// Notify parent to update sidebar
+			onShiftChange?.();
 		} catch (error: any) {
 			toast.error(error.message || 'Failed to clock in');
 		} finally {
@@ -105,6 +112,9 @@ export default function CareShiftWorkspace() {
 
 			toast.success('Clocked out successfully');
 			setCurrentShift(null);
+
+			// Notify parent to update sidebar
+			onShiftChange?.();
 		} catch (error: any) {
 			toast.error(error.message || 'Failed to clock out');
 		} finally {
@@ -149,6 +159,9 @@ export default function CareShiftWorkspace() {
 				const shift = await shiftRes.json();
 				setCurrentShift(shift);
 			}
+
+			// Notify parent to update sidebar
+			onShiftChange?.();
 		} catch (error: any) {
 			toast.error(error.message || 'Failed to process selfie action');
 		} finally {

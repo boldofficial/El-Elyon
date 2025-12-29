@@ -9,7 +9,15 @@ export async function POST(req: NextRequest) {
 			return new NextResponse('Unauthorized', {status: 401});
 		}
 
-		const {selfieStorageId} = await req.json();
+		// Handle empty body (when selfie is not required)
+		let selfieStorageId: string | undefined;
+		try {
+			const body = await req.json();
+			selfieStorageId = body.selfieStorageId;
+		} catch {
+			// Empty body or invalid JSON - selfie not required
+			selfieStorageId = undefined;
+		}
 
 		const result = await clockOut(userId, selfieStorageId);
 		return NextResponse.json(result, {status: 200});
@@ -18,3 +26,4 @@ export async function POST(req: NextRequest) {
 		return new NextResponse(error.message, {status: 500});
 	}
 }
+

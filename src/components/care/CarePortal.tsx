@@ -18,6 +18,17 @@ export default function CarePortal() {
 	const [currentShift, setCurrentShift] = useState<any>(null);
 	const [selectedResident, setSelectedResident] = useState<any>(null);
 
+	// Refetch shift data - called after clock-in/out
+	const refetchShift = async () => {
+		try {
+			const shiftRes = await fetch('/api/shifts/current');
+			const shift = await shiftRes.json();
+			setCurrentShift(shift);
+		} catch (error) {
+			console.error('Error fetching shift:', error);
+		}
+	};
+
 	useEffect(() => {
 		async function fetchData() {
 			try {
@@ -25,9 +36,7 @@ export default function CarePortal() {
 				const session = await sessionRes.json();
 				setSessionInfo(session);
 
-				const shiftRes = await fetch('/api/shifts/current');
-				const shift = await shiftRes.json();
-				setCurrentShift(shift);
+				await refetchShift();
 			} catch (error) {
 				console.error('Error fetching care portal data:', error);
 			}
@@ -86,7 +95,7 @@ export default function CarePortal() {
 
 	const renderContent = () => {
 		if (!isClockedIn) {
-			return <CareShiftWorkspace />;
+			return <CareShiftWorkspace onShiftChange={refetchShift} />;
 		}
 
 		if (activeView === 'resident-details' && selectedResident) {
@@ -112,7 +121,7 @@ export default function CarePortal() {
 
 		switch (activeView) {
 			case 'shift':
-				return <CareShiftWorkspace />;
+				return <CareShiftWorkspace onShiftChange={refetchShift} />;
 			case 'residents':
 				return (
 					<CareResidentsWorkspace onResidentSelect={handleResidentSelect} />
