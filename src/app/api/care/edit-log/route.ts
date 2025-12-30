@@ -4,7 +4,7 @@ import { editResidentLog } from '@/db/mutations/care';
 import { logAudit } from '@/lib/db-helpers';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 
-export async function POST(req: NextRequest) {
+async function handleEditLog(req: NextRequest) {
   try {
     const { userId } = await auth();
     if (!userId) {
@@ -37,8 +37,8 @@ export async function POST(req: NextRequest) {
       clerkUserId: userId,
       event: 'resident.log.edited',
       details: `Edited log for resident ${residentId} (Log ID: ${logId})`,
-      deviceId: 'system', // Placeholder, ideally from request headers
-      location: userRole.locations?.[0] || '', // Placeholder, ideally from request headers or user's primary location
+      deviceId: 'system',
+      location: userRole.locations?.[0] || '',
     });
 
     return NextResponse.json(updatedLog);
@@ -46,4 +46,12 @@ export async function POST(req: NextRequest) {
     console.error('Error editing resident log:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
+
+export async function POST(req: NextRequest) {
+  return handleEditLog(req);
+}
+
+export async function PATCH(req: NextRequest) {
+  return handleEditLog(req);
 }

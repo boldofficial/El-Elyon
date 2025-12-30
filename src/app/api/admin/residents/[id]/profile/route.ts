@@ -3,7 +3,7 @@
 // ==========================================
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {requireAdminOrSupervisorAccess, logAudit} from '@/lib/db-helpers';
 import {updateResident} from '@/db/mutations/residents';
 import {db} from '@/db/index';
 import {residents} from '@/db/schema';
@@ -17,7 +17,7 @@ export async function GET(request: Request, {params}: {params: Promise<{id: stri
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		await requireAdminOrSupervisorAccess(userId);
 
 		const {id: residentId} = await params;
 		const resident = await db.query.residents.findFirst({
@@ -46,7 +46,7 @@ export async function PATCH(
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		await requireAdminOrSupervisorAccess(userId);
 
 		const {id: residentId} = await params;
 		const body = await request.json();
