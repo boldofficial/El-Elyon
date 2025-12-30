@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import {toast} from 'sonner';
 import EmployeeTrainingManagement from './EmployeeTrainingManagement';
 
@@ -29,6 +29,21 @@ export default function EmployeeHRManagement({
 	const [personalBio, setPersonalBio] = useState('');
 	const [isSavingBio, setIsSavingBio] = useState(false);
 
+	// Refs for file inputs
+	const tbTestRef = useRef<HTMLInputElement>(null);
+	const bgCheckRef = useRef<HTMLInputElement>(null);
+	const appFormRef = useRef<HTMLInputElement>(null);
+	
+	// State to track if file is selected (for showing X button)
+	const [hasTbFile, setHasTbFile] = useState(false);
+	const [hasBgFile, setHasBgFile] = useState(false);
+	const [hasAppFile, setHasAppFile] = useState(false);
+	
+	// State to track uploaded file IDs (for deletion)
+	const [uploadedTbFileId, setUploadedTbFileId] = useState<string | null>(null);
+	const [uploadedBgFileId, setUploadedBgFileId] = useState<string | null>(null);
+	const [uploadedAppFileId, setUploadedAppFileId] = useState<string | null>(null);
+
 	// File upload handler
 	const handleFileUpload = async (file: File, fileType: string) => {
 		const formData = new FormData();
@@ -50,6 +65,21 @@ export default function EmployeeHRManagement({
 			console.error('Upload error:', error);
 			toast.error('Failed to upload file');
 			return null;
+		}
+	};
+
+	// File delete handler
+	const handleDeleteFile = async (fileId: string, fileType: string) => {
+		try {
+			const res = await fetch(`/api/uploads?fileId=${fileId}&fileType=${fileType}`, {
+				method: 'DELETE',
+			});
+
+			if (!res.ok) throw new Error('Delete failed');
+			return true;
+		} catch (error) {
+			console.error('Delete error:', error);
+			return false;
 		}
 	};
 
@@ -160,20 +190,44 @@ export default function EmployeeHRManagement({
 						</label>
 						<div className="space-y-2">
 							<div className="flex gap-2">
-								<input
-									type="file"
-									accept=".pdf,.doc,.docx"
-									onChange={async (e) => {
-										const file = e.target.files?.[0];
-										if (file) {
-											const uploaded = await handleFileUpload(file, 'tb_test');
-											if (uploaded) {
-												handleUpdateHRInfo({tbTestFileId: uploaded.fileId});
+									<div className="relative flex-1">
+									<input
+										ref={tbTestRef}
+										type="file"
+										accept=".pdf,.doc,.docx"
+										onChange={async (e) => {
+											const file = e.target.files?.[0];
+											setHasTbFile(!!file);
+											if (file) {
+												const uploaded = await handleFileUpload(file, 'tb_test');
+												if (uploaded) {
+													setUploadedTbFileId(uploaded.fileId);
+													handleUpdateHRInfo({tbTestFileId: uploaded.fileId});
+												}
 											}
-										}
-									}}
-									className="border rounded px-3 py-2 flex-1"
-								/>
+										}}
+										className="border rounded px-3 py-2 w-full pr-8"
+									/>
+									{hasTbFile && (
+										<button
+											type="button"
+											onClick={async () => { 
+												if (tbTestRef.current) tbTestRef.current.value = ''; 
+												setHasTbFile(false);
+												const fileIdToDelete = uploadedTbFileId || employee?.tbTestFileId;
+												if (fileIdToDelete) {
+													await handleDeleteFile(fileIdToDelete, 'tb_test');
+													await handleUpdateHRInfo({tbTestFileId: undefined}, false);
+													setUploadedTbFileId(null);
+													toast.success('Uploaded file deleted');
+												}
+											}}
+											className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg font-bold"
+											title="Clear file">
+											×
+										</button>
+									)}
+								</div>
 								<input
 									type="date"
 									value={
@@ -211,25 +265,49 @@ export default function EmployeeHRManagement({
 						</label>
 						<div className="space-y-2">
 							<div className="flex gap-2">
-								<input
-									type="file"
-									accept=".pdf,.doc,.docx"
-									onChange={async (e) => {
-										const file = e.target.files?.[0];
-										if (file) {
-											const uploaded = await handleFileUpload(
-												file,
-												'background_check'
-											);
-											if (uploaded) {
-												handleUpdateHRInfo({
-													backgroundCheckFileId: uploaded.fileId,
-												});
+									<div className="relative flex-1">
+									<input
+										ref={bgCheckRef}
+										type="file"
+										accept=".pdf,.doc,.docx"
+										onChange={async (e) => {
+											const file = e.target.files?.[0];
+											setHasBgFile(!!file);
+											if (file) {
+												const uploaded = await handleFileUpload(
+													file,
+													'background_check'
+												);
+												if (uploaded) {
+													setUploadedBgFileId(uploaded.fileId);
+													handleUpdateHRInfo({
+														backgroundCheckFileId: uploaded.fileId,
+													});
+												}
 											}
-										}
-									}}
-									className="border rounded px-3 py-2 flex-1"
-								/>
+										}}
+										className="border rounded px-3 py-2 w-full pr-8"
+									/>
+									{hasBgFile && (
+										<button
+											type="button"
+											onClick={async () => { 
+												if (bgCheckRef.current) bgCheckRef.current.value = ''; 
+												setHasBgFile(false);
+												const fileIdToDelete = uploadedBgFileId || employee?.backgroundCheckFileId;
+												if (fileIdToDelete) {
+													await handleDeleteFile(fileIdToDelete, 'background_check');
+													await handleUpdateHRInfo({backgroundCheckFileId: undefined}, false);
+													setUploadedBgFileId(null);
+													toast.success('Uploaded file deleted');
+												}
+											}}
+											className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg font-bold"
+											title="Clear file">
+											×
+										</button>
+									)}
+								</div>
 								<input
 									type="date"
 									value={
@@ -266,25 +344,51 @@ export default function EmployeeHRManagement({
 							Application Form
 						</label>
 						<div className="space-y-2">
-							<input
-								type="file"
-								accept=".pdf,.doc,.docx"
-								onChange={async (e) => {
-									const file = e.target.files?.[0];
-									if (file) {
-										const uploaded = await handleFileUpload(
-											file,
-											'application_form'
-										);
-										if (uploaded) {
-											handleUpdateHRInfo({
-												applicationFormFileId: uploaded.fileId,
-											});
-										}
-									}
-								}}
-								className="border rounded px-3 py-2 w-full"
-							/>
+							<div className="flex gap-2">
+									<div className="relative flex-1">
+									<input
+										ref={appFormRef}
+										type="file"
+										accept=".pdf,.doc,.docx"
+										onChange={async (e) => {
+											const file = e.target.files?.[0];
+											setHasAppFile(!!file);
+											if (file) {
+												const uploaded = await handleFileUpload(
+													file,
+													'application_form'
+												);
+												if (uploaded) {
+													setUploadedAppFileId(uploaded.fileId);
+													handleUpdateHRInfo({
+														applicationFormFileId: uploaded.fileId,
+													});
+												}
+											}
+										}}
+										className="border rounded px-3 py-2 w-full pr-8"
+									/>
+									{hasAppFile && (
+										<button
+											type="button"
+											onClick={async () => { 
+												if (appFormRef.current) appFormRef.current.value = ''; 
+												setHasAppFile(false);
+												const fileIdToDelete = uploadedAppFileId || employee?.applicationFormFileId;
+												if (fileIdToDelete) {
+													await handleDeleteFile(fileIdToDelete, 'application_form');
+													await handleUpdateHRInfo({applicationFormFileId: undefined}, false);
+													setUploadedAppFileId(null);
+													toast.success('Uploaded file deleted');
+												}
+											}}
+											className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg font-bold"
+											title="Clear file">
+											×
+										</button>
+									)}
+								</div>
+							</div>
 							{employee.applicationFormFileId && (
 								<a
 									href={`/api/uploads?fileId=${employee.applicationFormFileId}&fileType=application_form`}

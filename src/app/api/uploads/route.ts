@@ -144,3 +144,47 @@ export async function GET(request: Request) {
 	}
 }
 
+// DELETE - Delete file
+export async function DELETE(request: Request) {
+	const {userId} = await auth();
+	if (!userId) {
+		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
+	}
+
+	try {
+		const {searchParams} = new URL(request.url);
+		const fileId = searchParams.get('fileId');
+		const fileType = searchParams.get('fileType');
+
+		if (!fileId || !fileType) {
+			return NextResponse.json(
+				{error: 'Missing fileId or fileType'},
+				{status: 400}
+			);
+		}
+
+		const filepath = join(process.cwd(), 'uploads', fileType, fileId);
+
+		if (!existsSync(filepath)) {
+			return NextResponse.json({error: 'File not found'}, {status: 404});
+		}
+
+		// Delete the file
+		const {unlink} = await import('fs/promises');
+		await unlink(filepath);
+
+		// Log the deletion
+		await logAudit({
+			clerkUserId: userId,
+			event: 'FILE_DELETE',
+			details: `Deleted file ${fileId} (${fileType})`,
+			deviceId: 'system',
+			location: '',
+		});
+
+		return NextResponse.json({success: true, message: 'File deleted'});
+	} catch (error: any) {
+		console.error('Error deleting file:', error);
+		return NextResponse.json({error: error.message}, {status: 500});
+	}
+}
