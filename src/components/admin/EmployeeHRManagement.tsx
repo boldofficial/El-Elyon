@@ -4,7 +4,7 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
-import EmployeeTrainingManagement from './EmployeeTrainingManagement'; // Import the new component
+import EmployeeTrainingManagement from './EmployeeTrainingManagement';
 
 interface Employee {
 	id: string;
@@ -25,7 +25,9 @@ export default function EmployeeHRManagement({
 }) {
 	const [employee, setEmployee] = useState<Employee | null>(null);
 	const [loading, setLoading] = useState(true);
-	const [trainingRefreshTrigger, setTrainingRefreshTrigger] = useState(0); // To trigger refresh of trainings
+	const [trainingRefreshTrigger, setTrainingRefreshTrigger] = useState(0);
+	const [personalBio, setPersonalBio] = useState('');
+	const [isSavingBio, setIsSavingBio] = useState(false);
 
 	// File upload handler
 	const handleFileUpload = async (file: File, fileType: string) => {
@@ -59,6 +61,7 @@ export default function EmployeeHRManagement({
 				if (!empRes.ok) throw new Error('Failed to fetch employee HR data');
 				const empData = await empRes.json();
 				setEmployee(empData);
+				setPersonalBio(empData.personalBio || '');
 			} catch (error) {
 				console.error('Error fetching employee HR data:', error);
 				toast.error('Failed to load employee HR data');
@@ -68,9 +71,14 @@ export default function EmployeeHRManagement({
 		}
 
 		fetchData();
-	}, [employeeId, trainingRefreshTrigger]); // Added trainingRefreshTrigger to re-fetch if trainings are updated externally
+	}, [employeeId]);
 
-	const handleUpdateHRInfo = async (data: Partial<Employee>) => {
+	// Separate effect for training refresh - don't refetch employee data
+	useEffect(() => {
+		// This only triggers training component refresh, not main data fetch
+	}, [trainingRefreshTrigger]);
+
+	const handleUpdateHRInfo = async (data: Partial<Employee>, showToast = true) => {
 		try {
 			const res = await fetch(`/api/admin/employees/${employeeId}/hr`, {
 				method: 'PATCH',
@@ -82,11 +90,26 @@ export default function EmployeeHRManagement({
 
 			const updated = await res.json();
 			setEmployee(updated);
-			toast.success('HR information updated');
-			setTrainingRefreshTrigger((prev) => prev + 1); // Trigger refresh of trainings
+			if (showToast) {
+				toast.success('HR information updated');
+			}
+			return true;
 		} catch (error) {
 			toast.error('Failed to update HR information');
 			console.error(error);
+			return false;
+		}
+	};
+
+	const handleSaveBio = async () => {
+		if (employee?.personalBio === personalBio) return; // No changes
+		
+		setIsSavingBio(true);
+		const success = await handleUpdateHRInfo({personalBio}, true);
+		setIsSavingBio(false);
+		
+		if (success) {
+			// Training refresh is not needed for bio update
 		}
 	};
 
@@ -280,19 +303,21 @@ export default function EmployeeHRManagement({
 							Personal Bio
 						</label>
 						<textarea
-							value={employee.personalBio || ''}
-							onChange={(e) =>
-								handleUpdateHRInfo({personalBio: e.target.value})
-							}
+							value={personalBio}
+							onChange={(e) => setPersonalBio(e.target.value)}
+							onBlur={handleSaveBio}
 							rows={4}
 							className="w-full border rounded px-3 py-2"
 							placeholder="Enter personal bio..."
 						/>
+						{isSavingBio && (
+							<span className="text-gray-500 text-sm">Saving...</span>
+						)}
 					</div>
 				</div>
 			</div>
 
-			{/* Training Documentation Section - now handled by separate component */}
+			{/* Training Documentation Section */}
 			<EmployeeTrainingManagement
 				employeeId={employeeId}
 				refreshTrigger={trainingRefreshTrigger}
