@@ -220,7 +220,7 @@ export async function createResidentWithAuth(
 
 					// Trigger email sending
 					await fetch(
-						`${process.env.NEXT_PUBLIC_SITE_URL}/api/internal/send-guardian-checklist-email`,
+						`${process.env.NEXT_PUBLIC_SITE_URL}/api/internal/compliance/send-guardian-checklist-email`,
 						{
 							method: 'POST',
 							headers: {'Content-Type': 'application/json'},
