@@ -269,9 +269,9 @@ export default function AdminDashboard({onNavigate}: AdminDashboardProps) {
 							</p>
 						) : (
 							<div className="space-y-4">
-								{recentLogs.slice(0, 5).map((log) => (
+								{recentLogs.slice(0, 5).map((log, index) => (
 									<div
-										key={log._id}
+										key={`${log._id}-${log._creationTime}-${index}`}
 										className="border-l-4 border-blue-200 pl-4"
 									>
 										<div className="flex items-start justify-between">
