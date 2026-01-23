@@ -91,7 +91,7 @@ function generateEmailHTML(
 								.map(
 									(alert) => `
 								<li>
-									<strong>${alert.title}</strong>
+									<strong>${alert.itemName}</strong>
 									<br>
 									<span style="font-size: 14px; color: #6b7280;">${alert.description}</span>
 								</li>
@@ -116,7 +116,7 @@ function generateEmailHTML(
 								.map(
 									(alert) => `
 								<li>
-									<strong>${alert.title}</strong>
+									<strong>${alert.itemName}</strong>
 									<br>
 									<span style="font-size: 14px; color: #6b7280;">${alert.description}</span>
 								</li>

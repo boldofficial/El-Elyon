@@ -100,7 +100,7 @@ export async function sendWelcomeEmailWithCredentials(args: {
                 </ol>
               </div>
 
-              <div style="text-align: center;">
+              <div style="text-align: center; color: #ffffff">
                 <a href="${loginUrl}" class="button">Login to Your Account</a>
               </div>
 

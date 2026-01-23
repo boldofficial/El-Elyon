@@ -39,6 +39,14 @@ export async function PUT(
 	}
 }
 
+// PATCH /api/admin/employees/[id] - Update employee (Admin only) - alias for PUT
+export async function PATCH(
+	req: Request,
+	context: {params: Promise<{id: string}>}
+) {
+	return PUT(req, context);
+}
+
 // DELETE /api/admin/employees/[id] - Delete employee (Admin only)
 export async function DELETE(
 	req: Request,
@@ -65,3 +73,4 @@ export async function DELETE(
 		return new NextResponse(error.message, {status: 500});
 	}
 }
+

@@ -102,39 +102,64 @@ export async function updateClerkUser(
 		lastName?: string;
 	}
 ) {
-	try {
-		const client = await clerkClient();
-		const updateData: any = {};
+	const maxRetries = 3;
+	let lastError: any;
 
-		if (args.email) {
-			updateData.emailAddress = [args.email];
-		}
-		if (args.firstName !== undefined) {
-			updateData.firstName = args.firstName;
-		}
-		if (args.lastName !== undefined) {
-			updateData.lastName = args.lastName;
-		}
+	for (let attempt = 1; attempt <= maxRetries; attempt++) {
+		try {
+			const client = await clerkClient();
+			const updateData: any = {};
 
-		const user = await client.users.updateUser(userId, updateData);
+			if (args.email) {
+				updateData.emailAddress = [args.email];
+			}
+			if (args.firstName !== undefined) {
+				updateData.firstName = args.firstName;
+			}
+			if (args.lastName !== undefined) {
+				updateData.lastName = args.lastName;
+			}
 
-		return {
-			success: true,
-			email: user.emailAddresses[0]?.emailAddress,
-			name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
-		};
-	} catch (error: any) {
-		console.error('Error updating Clerk user:', error);
-		if (error.errors) {
-			const errorMessages = error.errors
-				.map((e: any) => e.longMessage || e.message)
-				.join(', ');
-			throw new Error(`Failed to update Clerk user: ${errorMessages}`);
+			const user = await client.users.updateUser(userId, updateData);
+
+			return {
+				success: true,
+				email: user.emailAddresses[0]?.emailAddress,
+				name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+			};
+		} catch (error: any) {
+			lastError = error;
+			console.error(`Clerk update attempt ${attempt}/${maxRetries} failed:`, error.message || error);
+
+			// Only retry on network/fetch errors, not on validation errors
+			const isNetworkError = error.message?.includes('fetch') ||
+				error.message?.includes('network') ||
+				error.message?.includes('timeout') ||
+				error.code === 'ECONNRESET' ||
+				error.code === 'ETIMEDOUT';
+
+			if (!isNetworkError || attempt === maxRetries) {
+				break;
+			}
+
+			// Exponential backoff: 1s, 2s, 4s
+			const delay = Math.pow(2, attempt - 1) * 1000;
+			console.log(`Retrying in ${delay}ms...`);
+			await new Promise(resolve => setTimeout(resolve, delay));
 		}
-		throw new Error(
-			`Failed to update Clerk user: ${error instanceof Error ? error.message : String(error)}`
-		);
 	}
+
+	// All retries failed
+	console.error('Error updating Clerk user after retries:', lastError);
+	if (lastError?.errors) {
+		const errorMessages = lastError.errors
+			.map((e: any) => e.longMessage || e.message)
+			.join(', ');
+		throw new Error(`Failed to update Clerk user: ${errorMessages}`);
+	}
+	throw new Error(
+		`Failed to update Clerk user: ${lastError instanceof Error ? lastError.message : String(lastError)}`
+	);
 }
 
 export async function deleteClerkUser(clerkUserId: string) {

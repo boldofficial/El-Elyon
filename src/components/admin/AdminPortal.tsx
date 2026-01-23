@@ -34,11 +34,25 @@ export default function AdminPortal() {
 				const userData = await userRes.json();
 				setCurrentUser(userData);
 
-				const deviceRes = await fetch(
-					`/api/devices/check?deviceId=${deviceId}`
-				);
-				const deviceData = await deviceRes.json();
-				setDeviceCheck(deviceData);
+				// Device check is optional - only fetch if endpoint is available
+				try {
+					const deviceRes = await fetch(
+						`/api/devices/check?deviceId=${deviceId}`
+					);
+					
+					// Only parse JSON if response is OK and has content
+					if (deviceRes.ok && deviceRes.headers.get('content-type')?.includes('application/json')) {
+						const deviceData = await deviceRes.json();
+						setDeviceCheck(deviceData);
+					} else {
+						console.warn('Device check endpoint not available or returned invalid response');
+						setDeviceCheck(null);
+					}
+				} catch (deviceError) {
+					// Device check is optional, so we don't fail the entire load
+					console.warn('Device check failed:', deviceError);
+					setDeviceCheck(null);
+				}
 			} catch (error) {
 				console.error('Error fetching admin data:', error);
 			}

@@ -2,15 +2,14 @@ import {Webhook} from 'svix';
 import {headers} from 'next/headers';
 import {NextResponse} from 'next/server';
 import {getUserByClerkId} from '@/db/queries/users';
-import {
-	// createEmployee,
-	updateEmployee,
-	deleteEmployee,
-} from '@/db/mutations/employees';
+import {deleteEmployee} from '@/db/mutations/employees';
 import {getEmployeeByClerkId} from '@/db/queries/employees';
 import {getRoleByClerkId, checkForAdmins} from '@/db/queries/roles';
 import {createUser, deleteUser, updateUser} from '@/db/mutations/users';
 import {updateRole, createRole, deleteRole} from '@/db/mutations/roles';
+import {db} from '@/db/index';
+import {employees} from '@/db/schema';
+import {eq} from 'drizzle-orm';
 
 export async function POST(req: Request) {
 	const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
@@ -150,17 +149,19 @@ async function handleUserCreated(userData: any) {
 	// ✅ FIX: Don't call createEmployee if employee exists OR if this is a webhook-created user
 	if (existingEmployee) {
 		console.log('ℹ️  Employee already exists, updating');
-		await updateEmployee(
-			{
-				employeeId: existingEmployee.id,
+		// Direct DB update - webhook syncs all data from Clerk
+		await db
+			.update(employees)
+			.set({
 				name,
 				email,
+				workEmail: email,
 				role: finalRole as 'admin' | 'supervisor' | 'staff',
-				locations: metadata.locations || [],
+				locations: metadata.locations || existingEmployee.locations || [],
 				assignedDeviceId,
-			},
-			clerkUserId
-		);
+				updatedAt: new Date(),
+			})
+			.where(eq(employees.id, existingEmployee.id));
 	} else {
 		// ✅ FIX: Create employee record directly in database without calling createEmployee
 		// This avoids the circular dependency where createEmployee tries to create a Clerk user
@@ -168,8 +169,6 @@ async function handleUserCreated(userData: any) {
 			`${isFirstUser ? '🎖️  Creating first admin employee record' : '👤 Creating employee record'}`
 		);
 
-		const {db} = await import('@/db/index');
-		const {employees} = await import('@/db/schema');
 
 		const [newEmployee] = await db
 			.insert(employees)
@@ -231,7 +230,7 @@ async function handleUserUpdated(userData: any) {
 		console.log('✅ User updated:', clerkUserId);
 	}
 
-	// Update employee
+	// Update employee - direct DB update like updateUser and updateRole
 	const employee = await getEmployeeByClerkId(clerkUserId);
 	if (employee) {
 		const currentRole =
@@ -245,17 +244,19 @@ async function handleUserUpdated(userData: any) {
 				? undefined
 				: metadata.assignedDeviceId || employee.assignedDeviceId || undefined;
 
-		await updateEmployee(
-			{
-				employeeId: employee.id,
+		// Direct DB update - webhook syncs all data from Clerk
+		await db
+			.update(employees)
+			.set({
 				name,
 				email,
+				workEmail: email,
 				role: currentRole,
 				locations: metadata.locations || employee.locations || [],
 				assignedDeviceId,
-			},
-			clerkUserId
-		);
+				updatedAt: new Date(),
+			})
+			.where(eq(employees.id, employee.id));
 		console.log('✅ Employee updated:', clerkUserId);
 	}
 
