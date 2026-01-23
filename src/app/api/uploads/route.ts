@@ -2,10 +2,13 @@
 
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {writeFile, mkdir} from 'fs/promises';
-import {join} from 'path';
-import {existsSync} from 'fs';
 import {logAudit} from '@/lib/db-helpers';
+import {
+	uploadFile,
+	generateFileKey,
+	generateDownloadUrl,
+	deleteFile,
+} from '@/lib/aws-s3';
 
 // POST - Upload file
 export async function POST(request: Request) {
@@ -48,37 +51,29 @@ export async function POST(request: Request) {
 			);
 		}
 
-		// Generate unique filename
-		const timestamp = Date.now();
-		const randomString = Math.random().toString(36).substring(7);
-		const extension = file.name.split('.').pop();
-		const filename = `${fileType}_${timestamp}_${randomString}.${extension}`;
+		// Generate unique key for S3
+		const fileKey = generateFileKey(fileType || 'general', file.name);
 
-		// Ensure upload directory exists
-		const uploadDir = join(process.cwd(), 'uploads', fileType || 'general');
-		if (!existsSync(uploadDir)) {
-			await mkdir(uploadDir, {recursive: true});
-		}
-
-		// Convert file to buffer and save
+		// Convert file to buffer
 		const bytes = await file.arrayBuffer();
 		const buffer = Buffer.from(bytes);
-		const filepath = join(uploadDir, filename);
 
-		await writeFile(filepath, buffer);
+		// Upload to S3
+		await uploadFile(fileKey, buffer, file.type);
 
 		// Log the upload
 		await logAudit({
 			clerkUserId: userId,
 			event: 'FILE_UPLOAD',
-			details: `Uploaded ${file.name} (${fileType})`,
+			details: `Uploaded ${file.name} (${fileType}) to S3`,
 			deviceId: 'system',
 			location: '',
 		});
 
-		// Return file ID (filename) for storage in database
+		// Return file ID (key) for storage in database
+		// NOTE: We return the fileKey as the fileId
 		return NextResponse.json({
-			fileId: filename,
+			fileId: fileKey,
 			fileName: file.name,
 			fileSize: file.size,
 			contentType: file.type,
@@ -90,7 +85,7 @@ export async function POST(request: Request) {
 	}
 }
 
-// GET - Download file
+// GET - Download file (Redirect to Presigned URL)
 export async function GET(request: Request) {
 	const {userId} = await auth();
 	if (!userId) {
@@ -99,47 +94,22 @@ export async function GET(request: Request) {
 
 	try {
 		const {searchParams} = new URL(request.url);
-		const fileId = searchParams.get('fileId');
-		const fileType = searchParams.get('fileType');
+		const fileId = searchParams.get('fileId'); // This is the S3 Key
+		// fileType might be passed but is part of the key now, so strictly not needed for lookup if fileId is the full key.
+		// However, legacy usage or if fileId was just filename would need it.
+		// Our new POST returns full key as fileId.
 
-		if (!fileId || !fileType) {
-			return NextResponse.json(
-				{error: 'Missing fileId or fileType'},
-				{status: 400}
-			);
+		if (!fileId) {
+			return NextResponse.json({error: 'Missing fileId'}, {status: 400});
 		}
 
-		const filepath = join(process.cwd(), 'uploads', fileType, fileId);
+		// Generate presigned URL
+		const url = await generateDownloadUrl(fileId);
 
-		if (!existsSync(filepath)) {
-			return NextResponse.json({error: 'File not found'}, {status: 404});
-		}
-
-		// Read file and return
-		const {readFile} = await import('fs/promises');
-		const fileBuffer = await readFile(filepath);
-
-		// Determine content type from extension
-		const ext = fileId.split('.').pop();
-		const contentTypeMap: Record<string, string> = {
-			pdf: 'application/pdf',
-			doc: 'application/msword',
-			docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-			jpg: 'image/jpeg',
-			jpeg: 'image/jpeg',
-			png: 'image/png',
-		};
-
-		const contentType = contentTypeMap[ext || ''] || 'application/octet-stream';
-
-		return new NextResponse(fileBuffer, {
-			headers: {
-				'Content-Type': contentType,
-				'Content-Disposition': `attachment; filename="${fileId}"`,
-			},
-		});
+		// Redirect the user to the presigned URL
+		return NextResponse.redirect(url);
 	} catch (error: any) {
-		console.error('Error downloading file:', error);
+		console.error('Error getting file URL:', error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}
 }
@@ -153,31 +123,20 @@ export async function DELETE(request: Request) {
 
 	try {
 		const {searchParams} = new URL(request.url);
-		const fileId = searchParams.get('fileId');
-		const fileType = searchParams.get('fileType');
+		const fileId = searchParams.get('fileId'); // S3 Key
 
-		if (!fileId || !fileType) {
-			return NextResponse.json(
-				{error: 'Missing fileId or fileType'},
-				{status: 400}
-			);
+		if (!fileId) {
+			return NextResponse.json({error: 'Missing fileId'}, {status: 400});
 		}
 
-		const filepath = join(process.cwd(), 'uploads', fileType, fileId);
-
-		if (!existsSync(filepath)) {
-			return NextResponse.json({error: 'File not found'}, {status: 404});
-		}
-
-		// Delete the file
-		const {unlink} = await import('fs/promises');
-		await unlink(filepath);
+		// Delete from S3
+		await deleteFile(fileId);
 
 		// Log the deletion
 		await logAudit({
 			clerkUserId: userId,
 			event: 'FILE_DELETE',
-			details: `Deleted file ${fileId} (${fileType})`,
+			details: `Deleted file ${fileId}`,
 			deviceId: 'system',
 			location: '',
 		});

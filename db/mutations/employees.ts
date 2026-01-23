@@ -141,8 +141,8 @@ export async function linkUserToEmployee(
 	return {success: true, role: roleToAssign, locations: locationsToAssign};
 }
 
-// Mutation: Create employee with Clerk account (admin only)
-// ✅ FIX: Skip admin check if this is the first admin being created
+// Mutation: Create employee with Clerk account (admin only, OR self-sync, OR first admin)
+// ✅ FIX: Skip admin check if this is the first admin being created OR if user is syncing themselves
 
 export async function createEmployee(
 	args: {
@@ -158,11 +158,18 @@ export async function createEmployee(
 	const admins = await checkForAdmins();
 	const isFirstAdmin = admins.length === 0;
 
-	// Only require admin access if NOT creating first admin
-	if (!isFirstAdmin) {
+	// ✅ FIX: Check if this is a self-sync (user creating their own employee record)
+	// This happens when a user logs in and their Clerk metadata has role/locations but no employee record exists
+	const clerkUser = await getClerkUser(adminClerkUserId);
+	const isSelfSync = clerkUser?.email === args.email;
+
+	// Only require admin access if NOT creating first admin AND NOT self-sync
+	if (!isFirstAdmin && !isSelfSync) {
 		await requireAdminAccess(adminClerkUserId);
-	} else {
+	} else if (isFirstAdmin) {
 		console.log('🎖️  Creating first admin - skipping admin check');
+	} else if (isSelfSync) {
+		console.log('✅ Self-sync allowed - user creating their own employee record');
 	}
 
 	// Check if employee with this email already exists
@@ -317,7 +324,7 @@ export async function createEmployee(
 	};
 }
 
-// Mutation: Update employee (admin only)
+// Mutation: Update employee (admin only, OR self-update during sync)
 export async function updateEmployee(
 	args: {
 		employeeId: string;
@@ -337,12 +344,18 @@ export async function updateEmployee(
 	},
 	clerkUserId: string
 ) {
-	await requireAdminAccess(clerkUserId);
-
 	const employee = await db.query.employees.findFirst({
 		where: eq(employees.id, args.employeeId),
 	});
 	if (!employee) throw new Error('Employee not found');
+
+	// ✅ CRITICAL FIX: Allow self-updates during sync (user updating their own record)
+	const isSelfUpdate = employee.clerkUserId === clerkUserId;
+	if (!isSelfUpdate) {
+		await requireAdminAccess(clerkUserId);
+	} else {
+		console.log('✅ Self-update allowed for user:', clerkUserId);
+	}
 
 	await db
 		.update(employees)
