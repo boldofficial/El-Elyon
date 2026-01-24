@@ -518,28 +518,32 @@ function ISPTab({ residentId }: { residentId: string }) {
 
     setUploading(true);
     try {
-      const uploadUrlRes = await fetch('/api/care/isp-files/upload-url', { method: 'POST' });
-      if (!uploadUrlRes.ok) throw new Error('Failed to get upload URL');
-      const { url, storageId } = await uploadUrlRes.json();
+      // Step 1: Upload file to /api/uploads
+      const formData = new FormData();
+      formData.append('file', uploadForm.file);
+      formData.append('fileType', 'isp-files');
 
-      const result = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": uploadForm.file.type },
-        body: uploadForm.file,
+      const uploadRes = await fetch('/api/uploads', {
+        method: 'POST',
+        body: formData,
       });
 
-      if (!result.ok) {
+      if (!uploadRes.ok) {
         throw new Error("File upload failed");
       }
 
-      await fetch('/api/care/isp-files', {
+      const uploadData = await uploadRes.json();
+      const fileId = uploadData.fileId;
+
+      // Step 2: Create ISP record
+      const res = await fetch('/api/care/isp-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           residentId,
           versionLabel: uploadForm.versionLabel.trim(),
-          effectiveDate: uploadForm.effectiveDate,
-          fileStorageId: storageId,
+          effectiveDate: new Date(uploadForm.effectiveDate).getTime(),
+          fileStorageId: fileId,
           fileName: uploadForm.file.name,
           fileSize: uploadForm.file.size,
           contentType: uploadForm.file.type,
@@ -547,6 +551,11 @@ function ISPTab({ residentId }: { residentId: string }) {
           notes: uploadForm.notes.trim() || undefined,
         }),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to create ISP record");
+      }
 
       toast.success("ISP file uploaded successfully");
       setShowUploadForm(false);
@@ -559,26 +568,15 @@ function ISPTab({ residentId }: { residentId: string }) {
       });
       await fetchIspData(); // Refresh data
     } catch (error: any) {
+      console.error("Upload error:", error);
       toast.error(error.message || "Upload failed");
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDownload = async (ispFileId: string) => {
-    setDownloading(ispFileId);
-    try {
-      const res = await fetch(`/api/care/isp-files/download-url?ispFileId=${ispFileId}`);
-      if (!res.ok) throw new Error('Failed to get download URL');
-      const { downloadUrl } = await res.json();
-
-      if (downloadUrl) {
-        window.open(downloadUrl, "_blank", "noopener,noreferrer");
-      }
-    } catch (e: any) {
-      toast.error("Download failed: " + (e.message || "Unknown error"));
-    }
-    setDownloading(null);
+  const handleDownload = (ispFileId: string, fileStorageId: string) => {
+     window.open(`/api/uploads?fileId=${fileStorageId}`, '_blank');
   };
 
   const handleActivate = async (ispFileId: string) => {
@@ -770,11 +768,11 @@ function ISPTab({ residentId }: { residentId: string }) {
                 </div>
               </div>
               <button
-                onClick={() => handleDownload(activeISP.id)}
-                disabled={downloading === activeISP.id}
+                onClick={() => handleDownload(activeISP.id, activeISP.fileStorageId)}
+                // disabled={downloading === activeISP.id} // Downloading state no longer tracked this way for window.open
                 className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
               >
-                {downloading === activeISP.id ? "Downloading..." : "📥 Download"}
+                📥 Download
               </button>
             </div>
           </div>
@@ -810,11 +808,10 @@ function ISPTab({ residentId }: { residentId: string }) {
                   </div>
                   <div className="flex flex-col space-y-2">
                     <button
-                      onClick={() => handleDownload(isp.id)}
-                      disabled={downloading === isp.id}
+                      onClick={() => handleDownload(isp.id, isp.fileStorageId)}
                       className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
                     >
-                      {downloading === isp.id ? "Downloading..." : "📥 Download"}
+                      📥 Download
                     </button>
                     {canActivate && (
                       <button
@@ -864,11 +861,10 @@ function ISPTab({ residentId }: { residentId: string }) {
                     </div>
                   </div>
                   <button
-                    onClick={() => handleDownload(isp.id)}
-                    disabled={downloading === isp.id}
+                    onClick={() => handleDownload(isp.id, isp.fileStorageId)}
                     className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
                   >
-                    {downloading === isp.id ? "Downloading..." : "📥 Download"}
+                    📥 Download
                   </button>
                 </div>
               </div>
