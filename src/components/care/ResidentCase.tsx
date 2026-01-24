@@ -110,10 +110,59 @@ export default function ResidentCase({ residentId, onBack }: Props) {
 }
 
 function OverviewTab({ resident }: { resident: any }) {
+  if (!resident) return null;
+
   return (
-    <div>
-      <div><b>Name:</b> {resident.name}</div>
-      <div><b>Location:</b> {resident.location}</div>
+    <div className="space-y-6">
+      {/* Demographics & Physical */}
+      <div className="bg-white rounded-lg border p-4">
+        <h3 className="text-lg font-semibold mb-3">Resident Information</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div><span className="font-medium text-gray-600">Name:</span> {resident.name}</div>
+          <div><span className="font-medium text-gray-600">Location:</span> {resident.location}</div>
+          <div><span className="font-medium text-gray-600">Date of Birth:</span> {resident.dateOfBirth || resident.dob || 'N/A'}</div>
+          <div><span className="font-medium text-gray-600">Sex:</span> {resident.sex || 'N/A'}</div>
+          <div><span className="font-medium text-gray-600">Height:</span> {resident.height || 'N/A'}</div>
+          <div><span className="font-medium text-gray-600">Weight:</span> {resident.weight || 'N/A'}</div>
+          <div><span className="font-medium text-gray-600">Hair Color:</span> {resident.hairColor || 'N/A'}</div>
+          <div><span className="font-medium text-gray-600">Placement Date:</span> {resident.placementDate ? new Date(resident.placementDate).toLocaleDateString() : 'N/A'}</div>
+        </div>
+      </div>
+
+      {/* Case Management */}
+      <div className="bg-white rounded-lg border p-4">
+        <h3 className="text-lg font-semibold mb-3">Case Management & Funding</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div><span className="font-medium text-gray-600">Funding Agency:</span> {resident.fundingAgency || 'N/A'}</div>
+          <div><span className="font-medium text-gray-600">Support Broker:</span> {resident.supportBroker || 'N/A'}</div>
+          <div><span className="font-medium text-gray-600">Case Manager:</span> {resident.caseManagerName || 'N/A'}</div>
+          <div><span className="font-medium text-gray-600">CM Phone:</span> {resident.caseManagerPhone || 'N/A'}</div>
+          <div className="col-span-1 md:col-span-2"><span className="font-medium text-gray-600">CM Email:</span> {resident.caseManagerEmail || 'N/A'}</div>
+        </div>
+      </div>
+
+      {/* Medical & Diagnostics */}
+      <div className="bg-white rounded-lg border p-4">
+        <h3 className="text-lg font-semibold mb-3">Medical & Care</h3>
+        <div className="space-y-3">
+          <div>
+            <div className="font-medium text-gray-600 mb-1">Diagnostics:</div>
+            <p className="text-gray-800 bg-gray-50 p-2 rounded">{resident.diagnostics || 'No diagnostics recorded.'}</p>
+          </div>
+          <div>
+            <div className="font-medium text-gray-600 mb-1">Medical Info:</div>
+            <p className="text-gray-800 bg-gray-50 p-2 rounded">{resident.medicalInfo || 'No medical info recorded.'}</p>
+          </div>
+          <div>
+            <div className="font-medium text-gray-600 mb-1">Care Notes:</div>
+            <p className="text-gray-800 bg-gray-50 p-2 rounded">{resident.careNotes || 'No notes.'}</p>
+          </div>
+          <div>
+            <div className="font-medium text-gray-600 mb-1">Important Relationships:</div>
+            <p className="text-gray-800 bg-gray-50 p-2 rounded">{resident.importantRelationships || 'None recorded.'}</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
