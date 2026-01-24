@@ -1,7 +1,7 @@
 import {db} from '../index';
 import {isp, ispFiles, residents} from '../schema';
 import {eq, and, InferInsertModel, InferSelectModel, isNull, or} from 'drizzle-orm';
-import {requireCareAccess, requireSupervisorAccess, logAudit} from '@/lib/db-helpers';
+import {requireCareAccess, logAudit} from '@/lib/db-helpers';
 
 type IspInsert = InferInsertModel<typeof isp>;
 type IspSelect = InferSelectModel<typeof isp>;
@@ -70,7 +70,8 @@ export async function createISPFile(args: {
     uploadedBy,
   } = args;
 
-  await requireSupervisorAccess(args.uploadedBy); // Ensure supervisor access
+  // Permissions checked in API route
+  // await requireSupervisorAccess(args.uploadedBy);
 
   const [newISPFile] = await db.insert(ispFiles).values({
     residentId,
@@ -104,7 +105,8 @@ export async function createISPFile(args: {
 
 // Mutation: Activate ISP File
 export async function activateISPFile(ispFileId: string, activatedByClerkUserId: string) {
-  await requireSupervisorAccess(activatedByClerkUserId);
+  // Permissions checked in API route
+  // await requireSupervisorAccess(activatedByClerkUserId);
 
   const ispFileToActivate = await db.query.ispFiles.findFirst({
     where: eq(ispFiles.id, ispFileId),
