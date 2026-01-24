@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireCareAccess, requireAdminAccess, requireSupervisorAccess } from '@/lib/db-helpers';
+import { requireCareAccess, requireAdminAccess, requireAdminOrSupervisorAccess } from '@/lib/db-helpers';
 import {
   listISPFiles,
   createISPFile,
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    await requireSupervisorAccess(userId); // Only supervisors/admins can create/manage ISP files
+    await requireAdminOrSupervisorAccess(userId); // Only supervisors/admins can create/manage ISP files
 
     const {
       residentId,
@@ -94,7 +94,7 @@ export async function PUT(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    await requireSupervisorAccess(userId); // Only supervisors/admins can activate ISP files
+    await requireAdminOrSupervisorAccess(userId); // Only supervisors/admins can activate ISP files
 
     const { ispFileId } = await req.json();
 
