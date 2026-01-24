@@ -37,12 +37,21 @@ interface ISPWorkspaceProps {
 
 export default function ISPWorkspace({ residentId, residentName, onClose }: ISPWorkspaceProps) {
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [editingISP, setEditingISP] = useState<ISPFile | null>(null);
   const [uploading, setUploading] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [ispFiles, setIspFiles] = useState<ISPFile[]>([]);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loadingData, setLoadingData] = useState(true);
+  
+  // Use a separate form state for editing to avoid conflicts
+  const [editForm, setEditForm] = useState({
+    versionLabel: "",
+    effectiveDate: "",
+    preparedBy: "",
+    notes: "",
+  });
 
   const [uploadForm, setUploadForm] = useState({
     versionLabel: "",
@@ -171,6 +180,54 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
     }
   };
 
+  const startEditing = (file: ISPFile) => {
+      setEditingISP(file);
+      setEditForm({
+          versionLabel: file.versionLabel,
+          effectiveDate: new Date(file.effectiveDate).toISOString().split('T')[0],
+          preparedBy: file.preparedBy || "",
+          notes: file.notes || "",
+      });
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingISP) return;
+    
+    if (!editForm.versionLabel.trim() || !editForm.effectiveDate) {
+        toast.error("Please fill in all required fields");
+        return;
+    }
+
+    setUploading(true);
+    try {
+        const res = await fetch(`/api/care/isp-files`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ispFileId: editingISP.id,
+                versionLabel: editForm.versionLabel.trim(),
+                effectiveDate: editForm.effectiveDate, // Backend expects string YYYY-MM-DD or parseable
+                preparedBy: editForm.preparedBy.trim() || undefined,
+                notes: editForm.notes.trim() || undefined,
+            }),
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || 'Failed to update ISP file');
+        }
+
+        toast.success("ISP file updated successfully");
+        setEditingISP(null);
+        await fetchAllData();
+    } catch (error: any) {
+        toast.error(error.message || "Update failed");
+    } finally {
+        setUploading(false);
+    }
+  };
+
   const handleDownload = (fileStorageId: string) => {
     window.open(`/api/uploads?fileId=${fileStorageId}`, '_blank');
   };
@@ -201,7 +258,7 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
   };
 
   const handleDelete = async (ispFileId: string) => {
-    if (!window.confirm("Are you sure you want to delete this ISP file?")) return;
+    if (!window.confirm("Are you sure you want to delete this ISP file? This action cannot be undone.")) return;
 
     setDeletingId(ispFileId);
     try {
@@ -225,6 +282,7 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
     }
   };
 
+  const canEdit = userRole?.role === "admin" || userRole?.role === "supervisor";
   const canActivate = userRole?.role === "admin" || userRole?.role === "supervisor";
   const canDelete = userRole?.role === "admin";
 
@@ -257,7 +315,7 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
           <p className="text-sm text-gray-500 mt-1.5">Manage Individual Service Plans for {residentName}</p>
         </div>
         <div className="flex items-center gap-2">
-            {!showUploadForm && (
+            {!showUploadForm && !editingISP && (
                 <button
                     onClick={() => setShowUploadForm(true)}
                     className={btnPrimary}
@@ -346,6 +404,62 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
             </div>
         )}
 
+        {/* Edit Form */}
+        {editingISP && (
+            <div className="rounded-lg border bg-blue-50/50 p-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium">Edit ISP Details</h3>
+                    <button onClick={() => setEditingISP(null)} className="text-xs text-gray-500 hover:text-gray-900">Cancel</button>
+                </div>
+                <form onSubmit={(e) => void handleUpdate(e)} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Version Label <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                className={inputClass}
+                                value={editForm.versionLabel}
+                                onChange={e => setEditForm({...editForm, versionLabel: e.target.value})}
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Effective Date <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="date"
+                                className={inputClass}
+                                value={editForm.effectiveDate}
+                                onChange={e => setEditForm({...editForm, effectiveDate: e.target.value})}
+                                required
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                            Notes (Optional)
+                        </label>
+                        <textarea
+                            className="flex min-h-[60px] w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            value={editForm.notes}
+                            onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                        />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                        <button type="button" onClick={() => setEditingISP(null)} className={btnSecondary}>Cancel</button>
+                        <button type="submit" disabled={uploading} className={btnPrimary}>
+                            {uploading && <div className="mr-2 h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+                            Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        )}
+
         {/* Active ISP Card */}
         <div>
             <h3 className="text-sm font-medium mb-3 text-gray-500 uppercase tracking-wider">Current Active Plan</h3>
@@ -368,10 +482,27 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
                             </div>
                         </div>
                     </div>
-                    <button onClick={() => handleDownload(activeISP.fileStorageId)} className={btnSecondary}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => handleDownload(activeISP.fileStorageId)} className={btnSecondary}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
+                        </button>
+                        {canEdit && (
+                            <button onClick={() => startEditing(activeISP)} className={btnSecondary} title="Edit Details">
+                                <FileText className="h-4 w-4" /> 
+                            </button>
+                        )}
+                        {canDelete && (
+                            <button 
+                                onClick={() => void handleDelete(activeISP.id)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50"
+                                title="Delete Active ISP"
+                                disabled={deletingId === activeISP.id}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
                 </div>
             ) : (
                 <div className="rounded-lg border border-dashed p-8 text-center bg-gray-50/50">
@@ -417,6 +548,15 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
                                             >
                                                 <Download className="h-4 w-4" />
                                             </button>
+                                            {canEdit && (
+                                                <button 
+                                                    onClick={() => startEditing(file)}
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-900 hover:bg-gray-100"
+                                                    title="Edit"
+                                                >
+                                                    <FileText className="h-4 w-4" />
+                                                </button>
+                                            )}
                                             {canActivate && file.status === 'draft' && (
                                                 <button 
                                                     onClick={() => void handleActivate(file.id)}

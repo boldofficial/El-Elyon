@@ -168,3 +168,45 @@ export async function deleteISPFile(ispFileId: string) {
 
   return true;
 }
+
+// Mutation: Update ISP File Metadata
+export async function updateISPFile(ispFileId: string, updates: {
+  versionLabel?: string;
+  effectiveDate?: string;
+  notes?: string;
+  preparedBy?: string;
+}) {
+  // Permissions checked in API route
+  const ispFileToUpdate = await db.query.ispFiles.findFirst({
+    where: eq(ispFiles.id, ispFileId),
+  });
+
+  if (!ispFileToUpdate) {
+    throw new Error('ISP file not found');
+  }
+
+  const updateData: any = {};
+  if (updates.versionLabel) updateData.versionLabel = updates.versionLabel;
+  if (updates.effectiveDate) updateData.effectiveDate = new Date(updates.effectiveDate);
+  if (updates.notes !== undefined) updateData.notes = updates.notes;
+  if (updates.preparedBy !== undefined) updateData.preparedBy = updates.preparedBy;
+
+  if (Object.keys(updateData).length === 0) {
+    return ispFileToUpdate;
+  }
+
+  const [updatedISP] = await db.update(ispFiles)
+    .set(updateData)
+    .where(eq(ispFiles.id, ispFileId))
+    .returning();
+
+  await logAudit({
+    clerkUserId: '', // Handled by API route
+    event: 'isp_file.updated',
+    details: `Updated ISP file ${ispFileId} metadata`,
+    deviceId: 'system',
+    location: '',
+  });
+
+  return updatedISP;
+}

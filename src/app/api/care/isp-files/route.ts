@@ -5,6 +5,7 @@ import {
   createISPFile,
   activateISPFile,
   deleteISPFile,
+  updateISPFile,
 } from '@/db/mutations/isp';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 
@@ -133,6 +134,33 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ message: 'ISP file deleted successfully' });
   } catch (error: any) {
     console.error('Error deleting ISP file:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    await requireAdminOrSupervisorAccess(userId); // Only supervisors/admins can edit ISP files
+
+    const { ispFileId, versionLabel, effectiveDate, notes, preparedBy } = await req.json();
+
+    if (!ispFileId) {
+      return NextResponse.json({ error: 'ISP File ID is required' }, { status: 400 });
+    }
+
+    const updatedISP = await updateISPFile(ispFileId, {
+      versionLabel,
+      effectiveDate,
+      notes,
+      preparedBy,
+    });
+    return NextResponse.json(updatedISP);
+  } catch (error: any) {
+    console.error('Error updating ISP file:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
