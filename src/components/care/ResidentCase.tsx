@@ -438,6 +438,7 @@ function ISPTab({ residentId }: { residentId: string }) {
   
   const [downloading, setDownloading] = useState<string | null>(null);
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [editingISP, setEditingISP] = useState<any | null>(null);
   const [uploading, setUploading] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -448,6 +449,14 @@ function ISPTab({ residentId }: { residentId: string }) {
     preparedBy: "",
     notes: "",
     file: null as File | null,
+  });
+
+  // Separate form for editing
+  const [editForm, setEditForm] = useState({
+    versionLabel: "",
+    effectiveDate: "",
+    preparedBy: "",
+    notes: "",
   });
 
   const fetchIspData = async () => {
@@ -575,6 +584,55 @@ function ISPTab({ residentId }: { residentId: string }) {
     }
   };
 
+  const startEditing = (file: any) => {
+      setEditingISP(file);
+      setEditForm({
+          versionLabel: file.versionLabel,
+          effectiveDate: new Date(file.effectiveDate).toISOString().split('T')[0],
+          preparedBy: file.preparedBy || "",
+          notes: file.notes || "",
+      });
+      setShowUploadForm(false); // Close upload form if open
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingISP) return;
+    
+    if (!editForm.versionLabel.trim() || !editForm.effectiveDate) {
+        alert("Please fill in all required fields");
+        return;
+    }
+
+    setUploading(true);
+    try {
+        const res = await fetch(`/api/care/isp-files`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ispFileId: editingISP.id,
+                versionLabel: editForm.versionLabel.trim(),
+                effectiveDate: editForm.effectiveDate, 
+                preparedBy: editForm.preparedBy.trim() || undefined,
+                notes: editForm.notes.trim() || undefined,
+            }),
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || 'Failed to update ISP file');
+        }
+
+        toast.success("ISP file updated successfully");
+        setEditingISP(null);
+        await fetchIspData();
+    } catch (error: any) {
+        toast.error(error.message || "Update failed");
+    } finally {
+        setUploading(false);
+    }
+  };
+
   const handleDownload = (ispFileId: string, fileStorageId: string) => {
      window.open(`/api/uploads?fileId=${fileStorageId}`, '_blank');
   };
@@ -625,6 +683,7 @@ function ISPTab({ residentId }: { residentId: string }) {
     }
   };
 
+  const canEdit = userRole?.role === "admin" || userRole?.role === "supervisor";
   const canActivate = userRole?.role === "admin" || userRole?.role === "supervisor";
   const canDelete = userRole?.role === "admin";
 
@@ -639,12 +698,14 @@ function ISPTab({ residentId }: { residentId: string }) {
           <h3 className="text-lg font-semibold">ISP Management</h3>
           <p className="text-sm text-gray-600">Upload, activate, and manage Individual Service Plans</p>
         </div>
-        <button
-          onClick={() => setShowUploadForm(!showUploadForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          {showUploadForm ? "Cancel Upload" : "Upload New ISP"}
-        </button>
+        {!showUploadForm && !editingISP && (
+          <button
+            onClick={() => setShowUploadForm(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+          >
+            Upload New ISP
+          </button>
+        )}
       </div>
 
       {/* Upload Form */}
@@ -746,6 +807,70 @@ function ISPTab({ residentId }: { residentId: string }) {
         </div>
       )}
 
+      {/* Edit Form */}
+      {editingISP && (
+        <div className="bg-blue-50 rounded-lg shadow-sm border border-blue-200 p-6">
+          <h4 className="text-md font-semibold mb-4 text-blue-900">Edit ISP Details</h4>
+          <form onSubmit={handleUpdate} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Version Label *
+                </label>
+                <input
+                  type="text"
+                  value={editForm.versionLabel}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, versionLabel: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Effective Date *
+                </label>
+                <input
+                  type="date"
+                  value={editForm.effectiveDate}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, effectiveDate: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Administrative Notes (Optional)
+              </label>
+              <textarea
+                value={editForm.notes}
+                onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+                rows={3}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setEditingISP(null)}
+                className="px-4 py-2 border border-blue-200 rounded-md text-blue-800 hover:bg-blue-100 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={uploading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {uploading ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Active ISP */}
       <div>
         <h3 className="text-lg font-semibold mb-3">Active ISP</h3>
@@ -764,16 +889,35 @@ function ISPTab({ residentId }: { residentId: string }) {
                   <div><span className="font-medium">File:</span> {activeISP.fileName}</div>
                   <div><span className="font-medium">Size:</span> {(activeISP.fileSize / 1024).toFixed(1)} KB</div>
                   {activeISP.preparedBy && <div><span className="font-medium">Prepared By:</span> {activeISP.preparedBy}</div>}
+                  {activeISP.notes && <div><span className="font-medium">Notes:</span> {activeISP.notes}</div>}
                   <div><span className="font-medium">Activated:</span> {new Date(activeISP.activatedAt!).toLocaleString()}</div>
                 </div>
               </div>
-              <button
-                onClick={() => handleDownload(activeISP.id, activeISP.fileStorageId)}
-                // disabled={downloading === activeISP.id} // Downloading state no longer tracked this way for window.open
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                📥 Download
-              </button>
+              <div className="flex flex-col space-y-2">
+                <button
+                  onClick={() => handleDownload(activeISP.id, activeISP.fileStorageId)}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  📥 Download
+                </button>
+                {canEdit && (
+                    <button
+                        onClick={() => startEditing(activeISP)}
+                        className="px-4 py-2 bg-blue-50 text-blue-700 text-sm rounded-md border border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                    >
+                        ✎ Edit
+                    </button>
+                )}
+                {canDelete && (
+                  <button
+                    onClick={() => handleDelete(activeISP.id)}
+                    disabled={deletingId === activeISP.id}
+                    className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {deletingId === activeISP.id ? "Deleting..." : "🗑 Delete"}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         ) : (
@@ -813,6 +957,14 @@ function ISPTab({ residentId }: { residentId: string }) {
                     >
                       📥 Download
                     </button>
+                    {canEdit && (
+                        <button
+                            onClick={() => startEditing(isp)}
+                            className="px-4 py-2 bg-blue-50 text-blue-700 text-sm rounded-md border border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                        >
+                            ✎ Edit
+                        </button>
+                    )}
                     {canActivate && (
                       <button
                         onClick={() => handleActivate(isp.id)}
@@ -860,12 +1012,31 @@ function ISPTab({ residentId }: { residentId: string }) {
                       <div><span className="font-medium">Archived:</span> {new Date(isp.archivedAt!).toLocaleString()}</div>
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDownload(isp.id, isp.fileStorageId)}
-                    className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                  >
-                    📥 Download
-                  </button>
+                  <div className="flex flex-col space-y-2">
+                    <button
+                      onClick={() => handleDownload(isp.id, isp.fileStorageId)}
+                      className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                      📥 Download
+                    </button>
+                    {canEdit && (
+                        <button
+                            onClick={() => startEditing(isp)}
+                            className="px-4 py-2 bg-blue-50 text-blue-700 text-sm rounded-md border border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50"
+                        >
+                            ✎ Edit
+                        </button>
+                    )}
+                     {canDelete && (
+                      <button
+                        onClick={() => handleDelete(isp.id)}
+                        disabled={deletingId === isp.id}
+                        className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+                      >
+                        {deletingId === isp.id ? "Deleting..." : "🗑 Delete"}
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
