@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 // Define interfaces for data structures
 interface ISPFile {
-  id: string; // Use 'id' instead of '_id' for consistency with Next.js API responses
+  id: string; 
   residentId: string;
   fileStorageId: string;
   fileName: string;
@@ -20,7 +20,8 @@ interface ISPFile {
   versionLabel: string;
   preparedBy?: string;
   activatedAt?: number;
-  url: string; // URL to download the file
+  uploadedBy?: string;
+  activatedBy?: string;
 }
 
 interface UserRole {
@@ -36,7 +37,7 @@ interface ISPWorkspaceProps {
 export default function ISPWorkspace({ residentId, residentName, onClose }: ISPWorkspaceProps) {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  // const [downloadingId, setDownloadingId] = useState<string | null>(null); // No longer needed for redirect
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [ispFiles, setIspFiles] = useState<ISPFile[]>([]);
@@ -55,14 +56,21 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
     setLoadingData(true);
     try {
       const [ispFilesRes, userRoleRes] = await Promise.all([
-        fetch(`/api/supervisor/isps?residentId=${residentId}`),
+        fetch(`/api/care/isp-files?residentId=${residentId}`), // CHANGED: Use care/isp-files
         fetch('/api/users/role'),
       ]);
 
+      if (!ispFilesRes.ok) throw new Error('Failed to fetch ISP files');
+      
       const ispFilesData: ISPFile[] = await ispFilesRes.json();
       const userRoleData: UserRole = await userRoleRes.json();
 
-      setIspFiles(ispFilesData);
+      // Sort by creation date descending
+      const sortedFiles = ispFilesData.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      setIspFiles(sortedFiles);
       setUserRole(userRoleData);
     } catch (error) {
       console.error('Error fetching ISP data:', error);
@@ -112,8 +120,25 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
 
     setUploading(true);
     try {
-      // Step 1: Request upload URL and create ISP file metadata
-      const res = await fetch('/api/supervisor/isps', {
+      // Step 1: Upload file to /api/uploads
+      const formData = new FormData();
+      formData.append('file', uploadForm.file);
+      formData.append('fileType', 'isp-files');
+
+      const uploadRes = await fetch('/api/uploads', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("File upload failed");
+      }
+
+      const uploadData = await uploadRes.json();
+      const fileId = uploadData.fileId;
+
+      // Step 2: Create ISP record with file metadata
+      const res = await fetch('/api/care/isp-files', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -122,6 +147,7 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
           residentId,
           versionLabel: uploadForm.versionLabel.trim(),
           effectiveDate: new Date(uploadForm.effectiveDate).getTime(),
+          fileStorageId: fileId,
           fileName: uploadForm.file.name,
           fileSize: uploadForm.file.size,
           contentType: uploadForm.file.type,
@@ -132,20 +158,7 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to prepare ISP upload");
-      }
-
-      const { uploadUrl } = await res.json(); // Assuming API returns uploadUrl
-
-      // Step 2: Upload file to the received URL
-      const uploadResult = await fetch(uploadUrl, {
-        method: "PUT", // Use PUT for direct S3/blob storage upload
-        headers: { "Content-Type": uploadForm.file.type },
-        body: uploadForm.file,
-      });
-
-      if (!uploadResult.ok) {
-        throw new Error("File upload failed");
+        throw new Error(errorData.error || "Failed to create ISP record");
       }
 
       toast.success("ISP file uploaded successfully");
@@ -159,36 +172,16 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
       });
       await fetchAllData(); // Refresh data
     } catch (error: any) {
+        console.error("Upload error:", error);
       toast.error(error.message || "Upload failed");
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDownload = async (ispFileId: string, fileName: string) => {
-    setDownloadingId(ispFileId);
-    try {
-      const res = await fetch(`/api/supervisor/isps/${ispFileId}/download`);
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to generate download URL');
-      }
-      const { downloadUrl } = await res.json();
-      
-      // Create a temporary link to download the file
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success("Download started");
-    } catch (error: any) {
-      toast.error(error.message || "Download failed");
-    } finally {
-      setDownloadingId(null);
-    }
+  const handleDownload = (fileStorageId: string) => {
+    // CHANGED: Use direct redirect URL through our proxy
+    window.open(`/api/uploads?fileId=${fileStorageId}`, '_blank');
   };
 
   const handleActivate = async (ispFileId: string) => {
@@ -198,12 +191,12 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
 
     setActivatingId(ispFileId);
     try {
-      const res = await fetch(`/api/supervisor/isps/${ispFileId}/publish`, {
-        method: 'POST',
+      const res = await fetch(`/api/care/isp-files`, { // CHANGED: Use PUT /api/care/isp-files
+        method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}), // No specific body needed for this API
+        body: JSON.stringify({ ispFileId }), 
       });
 
       if (!res.ok) {
@@ -227,8 +220,12 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
 
     setDeletingId(ispFileId);
     try {
-      const res = await fetch(`/api/supervisor/isps/${ispFileId}`, {
+      const res = await fetch(`/api/care/isp-files`, { // CHANGED: Use DELETE /api/care/isp-files
         method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ispFileId }) 
       });
 
       if (!res.ok) {
@@ -272,7 +269,7 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
             onClick={() => setShowUploadForm(!showUploadForm)}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
           >
-            {showUploadForm ? "Cancel" : "Upload ISP (Draft)"}
+            {showUploadForm ? "Cancel" : "Upload ISP"}
           </button>
           <button
             onClick={onClose}
@@ -452,11 +449,11 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
                   
                   <div className="flex flex-col items-end space-y-2">
                     <button
-                      onClick={() => void handleDownload(file.id, file.fileName)}
-                      disabled={downloadingId === file.id}
+                      onClick={() => handleDownload(file.fileStorageId)} // CHANGED: Pass fileStorageId
+                      // disabled={downloadingId === file.id} // No longer needed
                       className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
                     >
-                      {downloadingId === file.id ? "Downloading..." : "Download"}
+                      Download
                     </button>
                     
                     {canActivate && file.status === "draft" && (
@@ -488,3 +485,4 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
     </div>
   );
 }
+

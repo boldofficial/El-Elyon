@@ -237,46 +237,55 @@ function LogsTab({ residentId }: { residentId: string }) {
       <div className="mb-2">
         <b>Daily Log Template:</b> Mood, Notes
       </div>
-      {user && residentId && canLog === false && (
-        <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
-          <div>
-            <b>ISP must be acknowledged before submitting a log.</b>
-          </div>
-          <button
-            className="button mt-2"
-            onClick={handleAcknowledge}
-            disabled={submitting}
-          >
-            Acknowledge ISP
-          </button>
+      {user && user.role === 'admin' ? (
+        <div className="mb-4 p-4 bg-gray-100 text-gray-700 rounded border border-gray-200">
+          <p className="font-medium">Admin View Only</p>
+          <p className="text-sm">Administrators cannot submit logs. Please log in as a Supervisor or Staff member to create entries.</p>
         </div>
+      ) : (
+        <>
+          {user && residentId && canLog === false && (
+            <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
+              <div>
+                <b>ISP must be acknowledged before submitting a log.</b>
+              </div>
+              <button
+                className="button mt-2"
+                onClick={handleAcknowledge}
+                disabled={submitting}
+              >
+                Acknowledge ISP
+              </button>
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="flex flex-col gap-2 mb-4">
+            <input
+              className="border rounded px-2 py-1"
+              placeholder="Mood"
+              value={form.mood}
+              onChange={(e) => setForm((f) => ({ ...f, mood: e.target.value }))}
+              disabled={submitting || canLog === false}
+              aria-label="Mood"
+            />
+            <textarea
+              className="border rounded px-2 py-1"
+              placeholder="Notes"
+              value={form.notes}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+              disabled={submitting || canLog === false}
+              aria-label="Notes"
+            />
+            <button
+              className="button"
+              type="submit"
+              disabled={submitting || canLog === false}
+            >
+              Submit Log
+            </button>
+            {error && <div className="text-red-600">{error}</div>}
+          </form>
+        </>
       )}
-      <form onSubmit={handleSubmit} className="flex flex-col gap-2 mb-4">
-        <input
-          className="border rounded px-2 py-1"
-          placeholder="Mood"
-          value={form.mood}
-          onChange={(e) => setForm((f) => ({ ...f, mood: e.target.value }))}
-          disabled={submitting || canLog === false}
-          aria-label="Mood"
-        />
-        <textarea
-          className="border rounded px-2 py-1"
-          placeholder="Notes"
-          value={form.notes}
-          onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-          disabled={submitting || canLog === false}
-          aria-label="Notes"
-        />
-        <button
-          className="button"
-          type="submit"
-          disabled={submitting || canLog === false}
-        >
-          Submit Log
-        </button>
-        {error && <div className="text-red-600">{error}</div>}
-      </form>
       <div>
         <b>Log History (latest first):</b>
         <ul className="text-xs mt-2">

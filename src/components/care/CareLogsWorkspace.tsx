@@ -24,23 +24,26 @@ export default function CareLogsWorkspace() {
 	const [recentLogs, setRecentLogs] = useState<any[]>([]);
 	const [logsSummary, setLogsSummary] = useState<any>(null);
 	const [searchResults, setSearchResults] = useState<any[]>([]);
+	const [currentUser, setCurrentUser] = useState<any>(null);
 
 	// Fetch initial data
 	useEffect(() => {
 		async function fetchData() {
 			try {
-				const [residentsRes, templatesRes, logsRes, summaryRes] =
+				const [residentsRes, templatesRes, logsRes, summaryRes, userRes] =
 					await Promise.all([
 						fetch('/api/care/residents'),
 						fetch('/api/care/log-templates'),
 						fetch('/api/care/resident-logs?limit=20'),
 						fetch('/api/care/logs-summary'),
+						fetch('/api/users/current'),
 					]);
 
 				setResidents(await residentsRes.json());
 				setTemplates(await templatesRes.json());
 				setRecentLogs(await logsRes.json());
 				setLogsSummary(await summaryRes.json());
+				setCurrentUser(await userRes.json());
 			} catch (error) {
 				console.error('Error fetching logs data:', error);
 			}
@@ -630,9 +633,12 @@ export default function CareLogsWorkspace() {
 
 			<div className="border-b border-gray-200">
 				<nav className="-mb-px flex space-x-8">
+				<nav className="-mb-px flex space-x-8">
 					{[
 						{id: 'view', label: 'View Logs', icon: '👁️'},
-						{id: 'create', label: 'Create Log', icon: '✏️'},
+						...(currentUser?.role !== 'admin' 
+							? [{id: 'create', label: 'Create Log', icon: '✏️'}] 
+							: []),
 						{id: 'search', label: 'Search', icon: '🔍'},
 					].map((tab) => (
 						<button
