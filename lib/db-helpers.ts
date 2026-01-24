@@ -52,11 +52,13 @@ export async function requireCareAccess(clerkUserId: string) {
 // Helper: Check supervisor access
 export async function requireSupervisorAccess(clerkUserId: string) {
 	const userRole = await getUserRoleDoc(clerkUserId);
-	if (!userRole || !['admin', 'supervisor'].includes(userRole.role || '')) {
+	const role = userRole?.role?.toLowerCase() || '';
+	
+	if (!userRole || !['admin', 'supervisor'].includes(role)) {
 		await logAudit({
 			clerkUserId: clerkUserId,
 			event: 'access_denied',
-			details: 'supervisor_access_required',
+			details: `supervisor_access_required_actual_${role}`,
 			deviceId: 'system',
 			location: '',
 		});
@@ -83,11 +85,13 @@ export async function requireAdminAccess(clerkUserId: string) {
 
 export async function requireAdminOrSupervisorAccess(clerkUserId: string) {
 	const userRole = await getUserRoleDoc(clerkUserId);
-	if (!userRole || !['admin', 'supervisor'].includes(userRole.role || '')) {
+	const role = userRole?.role?.toLowerCase() || '';
+
+	if (!userRole || !['admin', 'supervisor'].includes(role)) {
 		await logAudit({
 			clerkUserId: clerkUserId,
 			event: 'access_denied',
-			details: 'admin_or_supervisor_access_required',
+			details: `admin_or_supervisor_access_required_actual_${role}`,
 			deviceId: 'system',
 			location: '',
 		});
