@@ -3,7 +3,7 @@ import { toast } from "sonner";
 
 // Define interfaces for data structures
 interface FireEvacPlan {
-  _id: string;
+  id: string; // Changed from _id to id to match schema
   residentId: string;
   fileStorageId: string;
   fileName: string;
@@ -14,12 +14,11 @@ interface FireEvacPlan {
   medicalEquipment?: string;
   specialInstructions?: string;
   notes?: string;
-  createdAt: number;
-  dueDate: number;
+  createdAt: number; // Will map from created_at in backend response
+  dueDate: number; // Calculated on backend or frontend
   status: string; // e.g., "ok", "due-soon", "overdue"
-  daysUntilDue: number;
+  daysUntilDue: number; // Calculated or from backend
   version: number;
-  url: string; // URL to download the file
 }
 
 type Props = {
@@ -46,12 +45,37 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
   const fetchFireEvacPlans = useCallback(async () => {
     setLoadingPlans(true);
     try {
-      const res = await fetch(`/api/uploads/fire-evac-url?residentId=${residentId}`); // Assuming this endpoint can also list plans
+      const res = await fetch(`/api/care/fire-evac-plans?residentId=${residentId}`);
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
       }
-      const data: FireEvacPlan[] = await res.json();
-      setFireEvacPlans(data);
+      // The API returns the plans directly
+      const data = await res.json();
+      
+      // Calculate derived fields that might not be in the raw DB response if looking at raw table
+      // But let's assume the API might need some enrichment or we calculate here.
+      // Based on previous code, let's enrich client side if needed, or trust API.
+      // The API listFireEvacPlans returns raw DB records. We need to calculate status/dueDate.
+      
+      const enrichedData = data.map((plan: any) => {
+          const createdAt = new Date(plan.createdAt || Date.now()).getTime();
+          const dueDate = createdAt + 365 * 24 * 60 * 60 * 1000;
+          const now = Date.now();
+          const daysUntilDue = Math.ceil((dueDate - now) / (1000 * 60 * 60 * 24));
+          
+          let status = 'ok';
+          if (daysUntilDue < 0) status = 'overdue';
+          else if (daysUntilDue <= 30) status = 'due-soon';
+
+          return {
+              ...plan,
+              dueDate,
+              daysUntilDue,
+              status
+          };
+      });
+
+      setFireEvacPlans(enrichedData);
     } catch (error: any) {
       console.error("Error fetching fire evac plans:", error);
       toast.error("Failed to load fire evacuation plans.");
@@ -86,14 +110,32 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
     setUploading(true);
     
     try {
-      // Step 1: Get upload URL and save fire evac plan metadata
-      const res = await fetch('/api/uploads/fire-evac-url', {
+      // Step 1: Upload file to /api/uploads
+      const uploadFormData = new FormData();
+      uploadFormData.append('file', file);
+      uploadFormData.append('fileType', 'fire-evac');
+
+      const uploadRes = await fetch('/api/uploads', {
+        method: 'POST',
+        body: uploadFormData,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error("File upload failed");
+      }
+
+      const uploadData = await uploadRes.json();
+      const fileId = uploadData.fileId;
+
+      // Step 2: Create Fire Evac record with metadata
+      const res = await fetch('/api/care/fire-evac-plans', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           residentId,
+          fileStorageId: fileId,
           fileName: file.name,
           fileSize: file.size,
           contentType: file.type,
@@ -107,20 +149,7 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to prepare upload");
-      }
-
-      const { uploadUrl, storageId } = await res.json();
-      
-      // Step 2: Upload file to the received URL
-      const uploadResult = await fetch(uploadUrl, {
-        method: "PUT", // Use PUT for direct S3/blob storage upload
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      
-      if (!uploadResult.ok) {
-        throw new Error("File upload failed");
+        throw new Error(errorData.error || "Failed to save fire evacuation plan");
       }
       
       toast.success("Fire evacuation plan uploaded successfully!");
@@ -142,6 +171,10 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleDownload = (fileStorageId: string) => {
+    window.open(`/api/uploads?fileId=${fileStorageId}`, '_blank');
   };
 
   const getStatusColor = (status: string) => {
@@ -370,18 +403,14 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
               </div>
             )}
 
-            {latestPlan.url && (
-              <div className="pt-3 border-t">
-                <a
-                  href={latestPlan.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-                >
-                  📥 Download Plan
-                </a>
-              </div>
-            )}
+            <div className="pt-3 border-t">
+              <button
+                onClick={() => handleDownload(latestPlan.fileStorageId)}
+                className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+              >
+                📥 Download Plan
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -392,7 +421,7 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
           <h4 className="text-md font-semibold mb-4">Previous Plans</h4>
           <div className="space-y-3">
             {fireEvacPlans.slice(1).map((plan) => (
-              <div key={plan._id} className="border border-gray-200 rounded-lg p-4">
+              <div key={plan.id} className="border border-gray-200 rounded-lg p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-2">
@@ -405,16 +434,12 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
                       <p className="text-sm text-gray-600">{plan.notes}</p>
                     )}
                   </div>
-                  {plan.url && (
-                    <a
-                      href={plan.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
-                    >
-                      📥 Download
-                    </a>
-                  )}
+                  <button
+                    onClick={() => handleDownload(plan.fileStorageId)}
+                    className="px-3 py-1 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                  >
+                    📥 Download
+                  </button>
                 </div>
               </div>
             ))}
@@ -441,3 +466,4 @@ export default function FireEvacManagement({ residentId, residentName, onClose }
     </div>
   );
 }
+
