@@ -4,6 +4,7 @@
 
 import React, {useState, useEffect} from 'react';
 import CareLogWithActivities from './CareLogWithActivities';
+import ResidentActivityHistory from './ResidentActivityHistory';
 import IncidentReportForm from './IncidentReportForm';
 import IncidentReportsList from './IncidentReportsList';
 
@@ -240,9 +241,7 @@ export default function CarePortalResidentDetails({
 					)}
 
 					{activeTab === 'history' && (
-						<div className="text-center py-12 text-gray-500">
-							<p>Activity history coming soon...</p>
-						</div>
+						<ResidentActivityHistory residentId={resident.id} />
 					)}
 				</div>
 			</div>

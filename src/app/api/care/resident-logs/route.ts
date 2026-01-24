@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
 				orderBy: [desc(residentLogs.createdAt)],
 				with: {
 					resident: true,
+          activities: true,
 				},
 			});
 		} else {
@@ -34,6 +35,7 @@ export async function GET(req: NextRequest) {
 				orderBy: [desc(residentLogs.createdAt)],
 				with: {
 					resident: true,
+          activities: true,
 				},
 			});
 		}
