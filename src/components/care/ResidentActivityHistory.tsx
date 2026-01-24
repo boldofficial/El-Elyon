@@ -99,9 +99,74 @@ export default function ResidentActivityHistory({residentId}: Props) {
                         {log.content && (
                             <div className="mb-4">
                                 <h4 className="text-sm font-medium text-gray-700 mb-1">General Notes:</h4>
-                                <p className="text-gray-800 whitespace-pre-wrap text-sm bg-gray-50 p-2 rounded">
-                                    {log.content}
-                                </p>
+                                <div className="text-gray-800 text-sm bg-gray-50 p-2 rounded">
+                                    {(() => {
+                                        try {
+                                            // Try to parse as JSON
+                                            let parsed = JSON.parse(log.content);
+                                            
+                                            // Handle case where content is a string containing JSON (double encoded)
+                                            if (typeof parsed === 'string') {
+                                                try {
+                                                    parsed = JSON.parse(parsed);
+                                                } catch (e) {
+                                                    // content was just a simple string
+                                                }
+                                            }
+
+                                            // If it's an object, render fields
+                                            if (typeof parsed === 'object' && parsed !== null) {
+                                                if (parsed.content && typeof parsed.content === 'string') {
+                                                     // Check if the nested content is also JSON
+                                                     try {
+                                                         const nested = JSON.parse(parsed.content);
+                                                         if (typeof nested === 'object' && nested !== null) {
+                                                             parsed = { ...parsed, ...nested };
+                                                         } else {
+                                                             // It was just a string content
+                                                         }
+                                                     } catch (e) {
+                                                         // content is just text
+                                                     }
+                                                }
+
+                                                return (
+                                                    <div className="space-y-1">
+                                                        {parsed.mood && (
+                                                            <div><span className="font-medium text-gray-600">Mood:</span> {parsed.mood}</div>
+                                                        )}
+                                                        {parsed.behavior && (
+                                                            <div><span className="font-medium text-gray-600">Behavior:</span> {parsed.behavior}</div>
+                                                        )}
+                                                        {parsed.activity && (
+                                                            <div><span className="font-medium text-gray-600">Activity:</span> {parsed.activity}</div>
+                                                        )}
+                                                        {/* Handle specific medication fields */}
+                                                        {parsed.medication && (
+                                                            <div><span className="font-medium text-gray-600">Medication:</span> {parsed.medication}</div>
+                                                        )}
+                                                        {parsed.dosage && parsed.dosage !== 'Null' && (
+                                                            <div><span className="font-medium text-gray-600">Dosage:</span> {parsed.dosage}</div>
+                                                        )}
+                                                        
+                                                        {/* Notes/Content - prioritize 'notes', then 'content' field if not JSON, then generic 'text' */}
+                                                        {parsed.notes && <div>{parsed.notes}</div>}
+                                                        {!parsed.notes && parsed.content && typeof parsed.content === 'string' && (
+                                                             /* Only show content if it's not the same as what we just parsed (handle recursive case) */
+                                                             !parsed.content.trim().startsWith('{') && <div>{parsed.content}</div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            }
+                                            
+                                            // If not an object (e.g. number/boolean), just stringify
+                                            return String(parsed);
+                                        } catch (e) {
+                                            // Not JSON, return as plain text
+                                            return <span className="whitespace-pre-wrap">{log.content}</span>;
+                                        }
+                                    })()}
+                                </div>
                             </div>
                         )}
 
