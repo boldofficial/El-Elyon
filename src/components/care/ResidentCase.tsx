@@ -7,7 +7,8 @@ type Props = {
   onBack?: () => void;
 };
 
-const TABS = [
+// TABS definition moved inside component or memoized to depend on user role
+const ALL_TABS = [
   { key: "overview", label: "Overview" },
   { key: "logs", label: "Logs" },
   { key: "isp", label: "ISP" },
@@ -21,26 +22,39 @@ export default function ResidentCase({ residentId, onBack }: Props) {
   const [loadingResident, setLoadingResident] = useState(true);
   const [errorResident, setErrorResident] = useState<string | null>(null);
 
+  const [user, setUser] = useState<any>(null);
+
   useEffect(() => {
-    async function fetchResident() {
+    async function fetchData() {
       setLoadingResident(true);
       setErrorResident(null);
       try {
-        const res = await fetch(`/api/care/residents?residentId=${residentId}`);
-        if (!res.ok) {
-          throw new Error('Failed to fetch resident');
-        }
-        const data = await res.json();
-        setResident(data);
+        const [residentRes, userRes] = await Promise.all([
+          fetch(`/api/care/residents?residentId=${residentId}`),
+          fetch('/api/users/current')
+        ]);
+
+        if (!residentRes.ok) throw new Error('Failed to fetch resident');
+        
+        const residentData = await residentRes.json();
+        const userData = await userRes.json();
+
+        setResident(residentData);
+        setUser(userData);
       } catch (error: any) {
-        console.error('Error fetching resident:', error);
-        setErrorResident(error.message || 'Failed to load resident data.');
+        console.error('Error fetching data:', error);
+        setErrorResident(error.message || 'Failed to load data.');
       } finally {
         setLoadingResident(false);
       }
     }
-    fetchResident();
+    fetchData();
   }, [residentId]);
+
+  const tabs = ALL_TABS.filter(t => {
+    if (t.key === 'logs' && user?.role === 'admin') return false;
+    return true;
+  });
 
   if (loadingResident) {
     return <div>Loading...</div>;
@@ -74,7 +88,7 @@ export default function ResidentCase({ residentId, onBack }: Props) {
       </div>
       
       <div className="flex gap-2 mb-4">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.key}
             className={`px-3 py-1 rounded ${tab === t.key ? "bg-blue-600 text-white" : "bg-gray-200"}`}
