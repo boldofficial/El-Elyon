@@ -33,7 +33,7 @@ export async function GET() {
 								weight: r.weight,
 								height: r.height,
 								hairColor: r.hairColor,
-								diagnostics: r.diagnostics,
+								diagnosis: r.diagnosis,
 								supportBroker: r.supportBroker,
 								importantRelationships: r.importantRelationships,
 								fundingAgency: r.fundingAgency,

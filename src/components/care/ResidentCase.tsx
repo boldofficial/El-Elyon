@@ -141,13 +141,13 @@ function OverviewTab({ resident }: { resident: any }) {
         </div>
       </div>
 
-      {/* Medical & Diagnostics */}
+      {/* Medical & Diagnosis */}
       <div className="bg-white rounded-lg border p-4">
         <h3 className="text-lg font-semibold mb-3">Medical & Care</h3>
         <div className="space-y-3">
           <div>
-            <div className="font-medium text-gray-600 mb-1">Diagnostics:</div>
-            <p className="text-gray-800 bg-gray-50 p-2 rounded">{resident.diagnostics || 'No diagnostics recorded.'}</p>
+            <div className="font-medium text-gray-600 mb-1">Diagnosis:</div>
+            <p className="text-gray-800 bg-gray-50 p-2 rounded">{resident.diagnosis || 'No diagnosis recorded.'}</p>
           </div>
           <div>
             <div className="font-medium text-gray-600 mb-1">Medical Info:</div>

@@ -31,7 +31,7 @@ export const residents = pgTable(
 		weight: varchar('weight', {length: 50}),
 		height: varchar('height', {length: 50}),
 		hairColor: varchar('hair_color', {length: 50}),
-		diagnostics: text('diagnostics'),
+		diagnosis: text('diagnosis'),
 		supportBroker: varchar('support_broker', {length: 255}),
 		importantRelationships: text('important_relationships'),
 

@@ -20,7 +20,7 @@ interface Resident {
 	weight?: string;
 	height?: string;
 	hairColor?: string;
-	diagnostics?: string;
+	diagnosis?: string;
 	supportBroker?: string;
 	importantRelationships?: string;
 	fundingAgency?: string;
@@ -142,12 +142,12 @@ export default function CarePortalResidentDetails({
 					</p>
 				</div>
 
-				{(resident.diagnostics || resident.importantRelationships) && (
+				{(resident.diagnosis || resident.importantRelationships) && (
 					<div className="col-span-full border-t pt-4 mt-4">
-						{resident.diagnostics && (
+						{resident.diagnosis && (
 							<p className="mt-2">
-								<span className="font-medium">Diagnostics:</span>{' '}
-								{resident.diagnostics}
+								<span className="font-medium">Diagnosis:</span>{' '}
+								{resident.diagnosis}
 							</p>
 						)}
 						{resident.importantRelationships && (

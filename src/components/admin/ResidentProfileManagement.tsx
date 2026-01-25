@@ -15,7 +15,7 @@ interface Resident {
 	weight?: string;
 	height?: string;
 	hairColor?: string;
-	diagnostics?: string;
+	diagnosis?: string;
 	supportBroker?: string;
 	importantRelationships?: string;
 	fundingAgency?: string;
@@ -203,10 +203,10 @@ export default function ResidentProfileManagement({
 				</div>
 
 				<div className="mt-4">
-					<label className="block text-sm font-medium mb-1">Diagnostics</label>
+					<label className="block text-sm font-medium mb-1">Diagnosis</label>
 					<textarea
-						name="diagnostics"
-						value={resident.diagnostics || ''}
+						name="diagnosis"
+						value={resident.diagnosis || ''}
 						onChange={handleChange}
 						rows={3}
 						className="w-full border rounded px-3 py-2"
