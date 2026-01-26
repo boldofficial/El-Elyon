@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import FireEvacManagement from "../admin/FireEvacManagement";
 import { toast } from 'sonner';
+import ResidentActivityHistory from "./ResidentActivityHistory";
 
 type Props = {
   residentId: string;
@@ -11,6 +12,7 @@ type Props = {
 const ALL_TABS = [
   { key: "overview", label: "Overview" },
   { key: "logs", label: "Logs" },
+  { key: "history", label: "Recent Activity" },
   { key: "isp", label: "ISP" },
   { key: "fire_evac", label: "Fire Evac" },
   { key: "documents", label: "Other Documents" },
@@ -87,11 +89,11 @@ export default function ResidentCase({ residentId, onBack }: Props) {
         <p className="text-sm text-gray-600">{resident.location}</p>
       </div>
       
-      <div className="flex gap-2 mb-4">
-        {tabs.map((t) => (
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+		{tabs.map((t) => (
           <button
             key={t.key}
-            className={`px-3 py-1 rounded ${tab === t.key ? "bg-blue-600 text-white" : "bg-gray-200"}`}
+            className={`px-3 py-1 rounded whitespace-nowrap ${tab === t.key ? "bg-blue-600 text-white" : "bg-gray-200"}`}
             onClick={() => setTab(t.key)}
           >
             {t.label}
@@ -101,6 +103,7 @@ export default function ResidentCase({ residentId, onBack }: Props) {
       <div>
         {tab === "overview" && <OverviewTab resident={resident} />}
         {tab === "logs" && <LogsTab residentId={residentId} />}
+        {tab === "history" && <ResidentActivityHistory residentId={residentId} />}
         {tab === "isp" && <ISPTab residentId={residentId} />}
         {tab === "fire_evac" && <FireEvacTab residentId={residentId} residentName={resident.name} />}
         {tab === "documents" && <DocumentsTab residentId={residentId} />}
