@@ -56,7 +56,7 @@ export default function IncidentReportForm({
 		Array<{name: string; key: string}>
 	>([]);
 
-	// ADDED: File upload handler for incident attachments
+	// ARTIFACT_UPDATE: Use server-side upload to avoid CORS issues
 	const handleFileUpload = async (files: FileList) => {
 		setUploading(true);
 		const uploadedKeys: string[] = [];
@@ -72,37 +72,25 @@ export default function IncidentReportForm({
 					continue;
 				}
 
-				// Get presigned upload URL
-				const urlResponse = await fetch(
-					'/api/care/incidents/generate-upload-url',
-					{
-						method: 'POST',
-						headers: {'Content-Type': 'application/json'},
-						body: JSON.stringify({
-							filename: file.name,
-							contentType: file.type,
-						}),
-					}
-				);
+				// Upload via Server-Side API
+				const formData = new FormData();
+				formData.append('file', file);
+				formData.append('fileType', 'incident-attachments');
 
-				if (!urlResponse.ok) {
-					toast.error(`Failed to prepare upload for ${file.name}`);
-					continue;
-				}
-
-				const {uploadUrl, fileKey} = await urlResponse.json();
-
-				// Upload file to S3
-				const uploadResponse = await fetch(uploadUrl, {
-					method: 'PUT',
-					body: file,
-					headers: {'Content-Type': file.type},
+				const res = await fetch('/api/uploads', {
+					method: 'POST',
+					body: formData,
 				});
 
-				if (!uploadResponse.ok) {
-					toast.error(`Failed to upload ${file.name}`);
+				if (!res.ok) {
+                    const err = await res.json();
+					toast.error(`Failed to upload ${file.name}: ${err.error || 'Unknown error'}`);
 					continue;
 				}
+
+				const data = await res.json();
+                // API returns fileId (which is the key)
+				const fileKey = data.fileId;
 
 				uploadedKeys.push(fileKey);
 				uploadedFilesList.push({name: file.name, key: fileKey});
@@ -114,7 +102,9 @@ export default function IncidentReportForm({
 				attachments: [...prev.attachments, ...uploadedKeys],
 			}));
 
-			toast.success(`${uploadedKeys.length} file(s) uploaded successfully`);
+			if (uploadedKeys.length > 0) {
+				toast.success(`${uploadedKeys.length} file(s) uploaded successfully`);
+			}
 		} catch (error) {
 			console.error('Upload error:', error);
 			toast.error('Failed to upload files');
