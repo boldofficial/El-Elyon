@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import ResidentDocuments from "./ResidentDocuments";
 import FireEvacManagement from "../admin/FireEvacManagement";
 import { toast } from 'sonner';
 import ResidentActivityHistory from "./ResidentActivityHistory";
@@ -107,7 +106,7 @@ export default function ResidentCase({ residentId, onBack }: Props) {
         {tab === "history" && <ResidentActivityHistory residentId={residentId} />}
         {tab === "isp" && <ISPTab residentId={residentId} />}
         {tab === "fire_evac" && <FireEvacTab residentId={residentId} residentName={resident.name} />}
-        {tab === "documents" && <ResidentDocuments residentId={residentId} />}
+        {tab === "documents" && <DocumentsTab residentId={residentId} />}
       </div>
     </div>
   );

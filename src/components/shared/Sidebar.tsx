@@ -23,11 +23,6 @@ const NAV_SECTIONS = [
 		icon: '📍',
 	},
 	{
-		key: 'documents',
-		label: 'Documents',
-		icon: '📁',
-	},
-	{
 		key: 'devices',
 		label: 'Device Management',
 		icon: '💻',

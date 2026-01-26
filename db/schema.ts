@@ -717,32 +717,6 @@ export const residentLogActivities = pgTable(
 	})
 );
 
-// Generic Resident Documents Table
-export const residentDocuments = pgTable(
-	'resident_documents',
-	{
-		id: uuid('id').primaryKey().defaultRandom(),
-		residentId: uuid('resident_id')
-			.notNull()
-			.references(() => residents.id, {onDelete: 'cascade'}),
-		title: varchar('title', {length: 255}).notNull(),
-		type: varchar('type', {length: 50}).notNull(), // 'medical', 'consent', 'assessment', 'other'
-		fileStorageId: varchar('file_storage_id', {length: 500}).notNull(),
-		fileName: varchar('file_name', {length: 255}).notNull(),
-		fileSize: integer('file_size').notNull(),
-		contentType: varchar('content_type', {length: 100}).notNull(),
-		description: text('description'),
-		uploadedBy: varchar('uploaded_by', {length: 255}).notNull(),
-		uploadedAt: timestamp('uploaded_at').defaultNow(),
-	},
-	(table) => ({
-		residentIdIdx: index('resident_documents_resident_id_idx').on(
-			table.residentId
-		),
-		typeIdx: index('resident_documents_type_idx').on(table.type),
-	})
-);
-
 // Incident Reports Table
 export const incidentReports = pgTable(
 	'incident_reports',
@@ -793,7 +767,6 @@ export const residentsRelations = relations(residents, ({many}) => ({
 	ispAccessLogs: many(ispAccessLogs),
 	ispAcknowledgments: many(ispAcknowledgments),
 	incidentReports: many(incidentReports),
-	documents: many(residentDocuments),
 }));
 
 export const employeesRelations = relations(employees, ({many}) => ({
