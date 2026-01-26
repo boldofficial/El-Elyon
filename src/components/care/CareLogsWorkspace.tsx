@@ -138,20 +138,54 @@ export default function CareLogsWorkspace() {
 	};
 
 	const formatLogContent = (content: string, template: string | undefined) => {
+		// Handle empty or invalid content
+		if (!content || content.trim() === '') {
+			return 'No content provided';
+		}
+
 		try {
-			const parsed = JSON.parse(content);
+			// Parse the content - might need multiple parses if double-encoded
+			let parsed = JSON.parse(content);
+			
+			// If it's still a string after first parse, parse again (double-encoded case)
+			if (typeof parsed === 'string') {
+				parsed = JSON.parse(parsed);
+			}
+
+			// If parsed is still a string or empty object, show default message
+			if (typeof parsed === 'string' || Object.keys(parsed).length === 0) {
+				return 'No content provided';
+			}
+
 			const templateData = templates.find((t) => t.id === template);
 
-			if (!templateData) return content;
+			if (!templateData || !templateData.fields) {
+				// If no template found, display the parsed object as JSON
+				return Object.entries(parsed)
+					.map(([key, value]) => `${key}: ${value || 'Not specified'}`)
+					.join('\n') || 'No content provided';
+			}
 
-			return templateData.fields
+			// Format according to template fields
+			const formattedContent = templateData.fields
 				.map((field: any) => {
-					const value = parsed[field.name] || 'Not specified';
+					const value = parsed[field.name];
+					// Only show fields that have values
+					if (!value || value.trim() === '') {
+						return null;
+					}
 					return `${field.label}: ${value}`;
 				})
+				.filter(Boolean) // Remove null entries
 				.join('\n');
-		} catch {
-			return content;
+
+			return formattedContent || 'No content provided';
+		} catch (error) {
+			console.error('Error parsing log content:', error);
+			// If parsing fails completely, try to show something useful
+			return content.length > 100 
+				? 'Invalid content format' 
+				: content;
 		}
 	};
 

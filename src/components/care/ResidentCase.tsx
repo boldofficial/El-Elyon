@@ -2,19 +2,21 @@ import React, { useState, useEffect } from "react";
 import FireEvacManagement from "../admin/FireEvacManagement";
 import { toast } from 'sonner';
 import ResidentActivityHistory from "./ResidentActivityHistory";
+import IncidentReportsList from "./IncidentReportsList";
+import IncidentReportForm from "./IncidentReportForm";
 
 type Props = {
   residentId: string;
   onBack?: () => void;
 };
 
-// TABS definition moved inside component or memoized to depend on user role
 const ALL_TABS = [
   { key: "overview", label: "Overview" },
   { key: "logs", label: "Logs" },
   { key: "history", label: "Recent Activity" },
   { key: "isp", label: "ISP" },
   { key: "fire_evac", label: "Fire Evac" },
+  { key: "incident_reports", label: "Incident Reports" },
   { key: "documents", label: "Other Documents" },
 ];
 
@@ -23,7 +25,6 @@ export default function ResidentCase({ residentId, onBack }: Props) {
   const [resident, setResident] = useState<any>(null);
   const [loadingResident, setLoadingResident] = useState(true);
   const [errorResident, setErrorResident] = useState<string | null>(null);
-
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
@@ -53,19 +54,16 @@ export default function ResidentCase({ residentId, onBack }: Props) {
     fetchData();
   }, [residentId]);
 
-  const tabs = ALL_TABS.filter(t => {
-    if (t.key === 'logs' && user?.role === 'admin') return false;
-    return true;
-  });
-
   if (loadingResident) {
-    return <div>Loading...</div>;
+    return <div className="flex items-center justify-center p-8">Loading...</div>;
   }
+  
   if (errorResident) {
-    return <div className="text-red-600">{errorResident}</div>;
+    return <div className="text-red-600 p-4">{errorResident}</div>;
   }
+  
   if (!resident) {
-    return <div className="text-red-600">Resident not found.</div>;
+    return <div className="text-red-600 p-4">Resident not found.</div>;
   }
 
   return (
@@ -89,28 +87,46 @@ export default function ResidentCase({ residentId, onBack }: Props) {
         <p className="text-sm text-gray-600">{resident.location}</p>
       </div>
       
+      {/* Tab Navigation */}
       <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-		{tabs.map((t) => (
+        {ALL_TABS.map((t) => (
           <button
             key={t.key}
-            className={`px-3 py-1 rounded whitespace-nowrap ${tab === t.key ? "bg-blue-600 text-white" : "bg-gray-200"}`}
+            className={`px-3 py-1 rounded whitespace-nowrap transition-colors ${
+              tab === t.key 
+                ? "bg-blue-600 text-white" 
+                : "bg-gray-200 hover:bg-gray-300"
+            }`}
             onClick={() => setTab(t.key)}
           >
             {t.label}
           </button>
         ))}
       </div>
+
+      {/* Tab Content */}
       <div>
         {tab === "overview" && <OverviewTab resident={resident} />}
         {tab === "logs" && <LogsTab residentId={residentId} />}
         {tab === "history" && <ResidentActivityHistory residentId={residentId} />}
         {tab === "isp" && <ISPTab residentId={residentId} />}
         {tab === "fire_evac" && <FireEvacTab residentId={residentId} residentName={resident.name} />}
+        {tab === "incident_reports" && (
+          <IncidentReportsTab 
+            residentId={residentId} 
+            residentName={resident.name} 
+            location={resident.location} 
+          />
+        )}
         {tab === "documents" && <DocumentsTab residentId={residentId} />}
       </div>
     </div>
   );
 }
+
+// ============================================================================
+// OVERVIEW TAB
+// ============================================================================
 
 function OverviewTab({ resident }: { resident: any }) {
   if (!resident) return null;
@@ -121,14 +137,17 @@ function OverviewTab({ resident }: { resident: any }) {
       <div className="bg-white rounded-lg border p-4">
         <h3 className="text-lg font-semibold mb-3">Resident Information</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><span className="font-medium text-gray-600">Name:</span> {resident.name}</div>
-          <div><span className="font-medium text-gray-600">Location:</span> {resident.location}</div>
-          <div><span className="font-medium text-gray-600">Date of Birth:</span> {resident.dateOfBirth || resident.dob || 'N/A'}</div>
-          <div><span className="font-medium text-gray-600">Sex:</span> {resident.sex || 'N/A'}</div>
-          <div><span className="font-medium text-gray-600">Height:</span> {resident.height || 'N/A'}</div>
-          <div><span className="font-medium text-gray-600">Weight:</span> {resident.weight || 'N/A'}</div>
-          <div><span className="font-medium text-gray-600">Hair Color:</span> {resident.hairColor || 'N/A'}</div>
-          <div><span className="font-medium text-gray-600">Placement Date:</span> {resident.placementDate ? new Date(resident.placementDate).toLocaleDateString() : 'N/A'}</div>
+          <InfoField label="Name" value={resident.name} />
+          <InfoField label="Location" value={resident.location} />
+          <InfoField label="Date of Birth" value={resident.dateOfBirth || resident.dob} />
+          <InfoField label="Sex" value={resident.sex} />
+          <InfoField label="Height" value={resident.height} />
+          <InfoField label="Weight" value={resident.weight} />
+          <InfoField label="Hair Color" value={resident.hairColor} />
+          <InfoField 
+            label="Placement Date" 
+            value={resident.placementDate ? new Date(resident.placementDate).toLocaleDateString() : null} 
+          />
         </div>
       </div>
 
@@ -136,11 +155,13 @@ function OverviewTab({ resident }: { resident: any }) {
       <div className="bg-white rounded-lg border p-4">
         <h3 className="text-lg font-semibold mb-3">Case Management & Funding</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><span className="font-medium text-gray-600">Funding Agency:</span> {resident.fundingAgency || 'N/A'}</div>
-          <div><span className="font-medium text-gray-600">Support Broker:</span> {resident.supportBroker || 'N/A'}</div>
-          <div><span className="font-medium text-gray-600">Case Manager:</span> {resident.caseManagerName || 'N/A'}</div>
-          <div><span className="font-medium text-gray-600">CM Phone:</span> {resident.caseManagerPhone || 'N/A'}</div>
-          <div className="col-span-1 md:col-span-2"><span className="font-medium text-gray-600">CM Email:</span> {resident.caseManagerEmail || 'N/A'}</div>
+          <InfoField label="Funding Agency" value={resident.fundingAgency} />
+          <InfoField label="Support Broker" value={resident.supportBroker} />
+          <InfoField label="Case Manager" value={resident.caseManagerName} />
+          <InfoField label="CM Phone" value={resident.caseManagerPhone} />
+          <div className="col-span-1 md:col-span-2">
+            <InfoField label="CM Email" value={resident.caseManagerEmail} />
+          </div>
         </div>
       </div>
 
@@ -148,27 +169,54 @@ function OverviewTab({ resident }: { resident: any }) {
       <div className="bg-white rounded-lg border p-4">
         <h3 className="text-lg font-semibold mb-3">Medical & Care</h3>
         <div className="space-y-3">
-          <div>
-            <div className="font-medium text-gray-600 mb-1">Diagnosis:</div>
-            <p className="text-gray-800 bg-gray-50 p-2 rounded">{resident.diagnosis || 'No diagnosis recorded.'}</p>
-          </div>
-          <div>
-            <div className="font-medium text-gray-600 mb-1">Medical Info:</div>
-            <p className="text-gray-800 bg-gray-50 p-2 rounded">{resident.medicalInfo || 'No medical info recorded.'}</p>
-          </div>
-          <div>
-            <div className="font-medium text-gray-600 mb-1">Care Notes:</div>
-            <p className="text-gray-800 bg-gray-50 p-2 rounded">{resident.careNotes || 'No notes.'}</p>
-          </div>
-          <div>
-            <div className="font-medium text-gray-600 mb-1">Important Relationships:</div>
-            <p className="text-gray-800 bg-gray-50 p-2 rounded">{resident.importantRelationships || 'None recorded.'}</p>
-          </div>
+          <TextAreaField 
+            label="Diagnosis" 
+            value={resident.diagnosis} 
+            placeholder="No diagnosis recorded." 
+          />
+          <TextAreaField 
+            label="Medical Info" 
+            value={resident.medicalInfo} 
+            placeholder="No medical info recorded." 
+          />
+          <TextAreaField 
+            label="Care Notes" 
+            value={resident.careNotes} 
+            placeholder="No notes." 
+          />
+          <TextAreaField 
+            label="Important Relationships" 
+            value={resident.importantRelationships} 
+            placeholder="None recorded." 
+          />
         </div>
       </div>
     </div>
   );
 }
+
+function InfoField({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div>
+      <span className="font-medium text-gray-600">{label}:</span> {value || 'N/A'}
+    </div>
+  );
+}
+
+function TextAreaField({ label, value, placeholder }: { label: string; value?: string | null; placeholder: string }) {
+  return (
+    <div>
+      <div className="font-medium text-gray-600 mb-1">{label}:</div>
+      <p className="text-gray-800 bg-gray-50 p-2 rounded">
+        {value || placeholder}
+      </p>
+    </div>
+  );
+}
+
+// ============================================================================
+// LOGS TAB
+// ============================================================================
 
 function LogsTab({ residentId }: { residentId: string }) {
   const [logs, setLogs] = useState<any[]>([]);
@@ -211,7 +259,6 @@ function LogsTab({ residentId }: { residentId: string }) {
 
   useEffect(() => {
     fetchLogsData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [residentId]);
 
   const handleAcknowledge = async () => {
@@ -221,12 +268,12 @@ function LogsTab({ residentId }: { residentId: string }) {
       const res = await fetch('/api/care/acknowledge-isp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ residentId, ispId: 'placeholder-isp-id' }), // ispId will be determined by the backend
+        body: JSON.stringify({ residentId, ispId: 'placeholder-isp-id' }),
       });
 
       if (!res.ok) throw new Error('Failed to acknowledge ISP');
       toast.success('ISP acknowledged successfully!');
-      await fetchLogsData(); // Refresh data
+      await fetchLogsData();
     } catch (e: any) {
       setError(e.message || "Failed to acknowledge ISP.");
       toast.error(e.message || "Failed to acknowledge ISP.");
@@ -250,7 +297,7 @@ function LogsTab({ residentId }: { residentId: string }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           residentId,
-          template: "daily_notes", // Using a predefined template ID
+          template: "daily_notes",
           content: JSON.stringify({ ...form }),
         }),
       });
@@ -258,7 +305,7 @@ function LogsTab({ residentId }: { residentId: string }) {
       if (!res.ok) throw new Error('Failed to submit log');
       toast.success('Log submitted successfully!');
       setForm({ mood: "", notes: "" });
-      await fetchLogsData(); // Refresh data
+      await fetchLogsData();
     } catch (e: any) {
       setError(e.message || "Failed to submit log.");
       toast.error(e.message || "Failed to submit log.");
@@ -277,7 +324,7 @@ function LogsTab({ residentId }: { residentId: string }) {
         body: JSON.stringify({
           logId,
           residentId,
-          template: "daily_notes", // Assuming same template for editing
+          template: "daily_notes",
           fields: { ...form },
         }),
       });
@@ -286,7 +333,7 @@ function LogsTab({ residentId }: { residentId: string }) {
       toast.success('Log edited successfully!');
       setEditingLogId(null);
       setForm({ mood: "", notes: "" });
-      await fetchLogsData(); // Refresh data
+      await fetchLogsData();
     } catch (e: any) {
       setError(e.message || "Failed to edit log.");
       toast.error(e.message || "Failed to edit log.");
@@ -295,28 +342,38 @@ function LogsTab({ residentId }: { residentId: string }) {
     }
   };
 
-  if (loading) return <div>Loading logs...</div>;
-  if (error) return <div className="text-red-600">{error}</div>;
+  const parseLogContent = (content: string) => {
+    try {
+      return JSON.parse(content);
+    } catch {
+      return { mood: "", notes: "" };
+    }
+  };
+
+  if (loading) return <div className="p-4">Loading logs...</div>;
+  if (error) return <div className="text-red-600 p-4">{error}</div>;
 
   return (
-    <div>
-      <div className="mb-2">
-        <b>Daily Log Template:</b> Mood, Notes
+    <div className="space-y-6">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <b className="text-blue-900">Daily Log Template:</b>
+        <span className="text-blue-800"> Mood, Notes</span>
       </div>
+
       {user && user.role === 'admin' ? (
-        <div className="mb-4 p-4 bg-gray-100 text-gray-700 rounded border border-gray-200">
+        <div className="p-4 bg-gray-100 text-gray-700 rounded border border-gray-200">
           <p className="font-medium">Admin View Only</p>
           <p className="text-sm">Administrators cannot submit logs. Please log in as a Supervisor or Staff member to create entries.</p>
         </div>
       ) : (
         <>
-          {user && residentId && canLog === false && (
-            <div className="mb-2 p-2 bg-yellow-100 text-yellow-800 rounded">
-              <div>
-                <b>ISP must be acknowledged before submitting a log.</b>
+          {canLog === false && (
+            <div className="p-4 bg-yellow-100 text-yellow-800 rounded border border-yellow-300">
+              <div className="font-medium mb-2">
+                ISP must be acknowledged before submitting a log.
               </div>
               <button
-                className="button mt-2"
+                className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors"
                 onClick={handleAcknowledge}
                 disabled={submitting}
               >
@@ -324,9 +381,10 @@ function LogsTab({ residentId }: { residentId: string }) {
               </button>
             </div>
           )}
-          <form onSubmit={handleSubmit} className="flex flex-col gap-2 mb-4">
+
+          <form onSubmit={handleSubmit} className="space-y-3 bg-white border rounded-lg p-4">
             <input
-              className="border rounded px-2 py-1"
+              className="w-full border rounded px-3 py-2"
               placeholder="Mood"
               value={form.mood}
               onChange={(e) => setForm((f) => ({ ...f, mood: e.target.value }))}
@@ -334,104 +392,129 @@ function LogsTab({ residentId }: { residentId: string }) {
               aria-label="Mood"
             />
             <textarea
-              className="border rounded px-2 py-1"
+              className="w-full border rounded px-3 py-2"
               placeholder="Notes"
+              rows={4}
               value={form.notes}
               onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
               disabled={submitting || canLog === false}
               aria-label="Notes"
             />
             <button
-              className="button"
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50"
               type="submit"
               disabled={submitting || canLog === false}
             >
-              Submit Log
+              {submitting ? 'Submitting...' : 'Submit Log'}
             </button>
-            {error && <div className="text-red-600">{error}</div>}
           </form>
         </>
       )}
-      <div>
-        <b>Log History (latest first):</b>
-        <ul className="text-xs mt-2">
-          {logs.map((log: any) => {
-            let fields = { mood: "", notes: "" };
-            try {
-              fields = JSON.parse(log.content);
-            } catch {
-              fields = { mood: "", notes: "" };
-            }
-            return (
-              <li key={log.id} className="border-b py-2">
-                <div>
-                  <b>v{log.version}</b> | <b>Author:</b> {log.authorName} |{" "}
-                  <b>Created:</b> {new Date(log.createdAt).toLocaleString()}
-                </div>
-                <div>
-                  <b>Mood:</b> {fields.mood} <br />
-                  <b>Notes:</b> {fields.notes}
-                </div>
-                {user && user.clerkUserId === log.authorId && (
-                  <button
-                    className="button mt-1"
-                    onClick={() => {
-                      setEditingLogId(log.id);
-                      setForm({ ...fields });
-                    }}
-                    disabled={submitting}
-                  >
-                    Edit (new version)
-                  </button>
-                )}
-                {editingLogId === log.id && (
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleEdit(log.id);
-                    }}
-                    className="flex flex-col gap-1 mt-2"
-                  >
-                    <input
-                      className="border rounded px-2 py-1"
-                      placeholder="Mood"
-                      value={form.mood}
-                      onChange={(e) => setForm((f) => ({ ...f, mood: e.target.value }))}
-                      disabled={submitting}
-                      aria-label="Mood"
-                    />
-                    <textarea
-                      className="border rounded px-2 py-1"
-                      placeholder="Notes"
-                      value={form.notes}
-                      onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                      disabled={submitting}
-                      aria-label="Notes"
-                    />
-                    <button className="button" type="submit" disabled={submitting}>
-                      Save New Version
-                    </button>
-                    <button
-                      className="button"
-                      type="button"
-                      onClick={() => setEditingLogId(null)}
+
+      {/* Log History */}
+      <div className="bg-white border rounded-lg p-4">
+        <h3 className="text-lg font-semibold mb-4">Log History</h3>
+        {logs.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <div className="text-4xl mb-2">📝</div>
+            <p>No logs yet</p>
+          </div>
+        ) : (
+          <ul className="space-y-4">
+            {logs.map((log: any) => {
+              const fields = parseLogContent(log.content);
+              return (
+                <li key={log.id} className="border-b pb-4 last:border-b-0">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm text-gray-600">
+                      <span className="font-semibold">v{log.version}</span> · {log.authorName} · {new Date(log.createdAt).toLocaleString()}
+                    </div>
+                    {user && user.clerkUserId === log.authorId && !editingLogId && (
+                      <button
+                        className="text-sm px-3 py-1 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition-colors"
+                        onClick={() => {
+                          setEditingLogId(log.id);
+                          setForm({ ...fields });
+                        }}
+                        disabled={submitting}
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  
+                  {editingLogId === log.id ? (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleEdit(log.id);
+                      }}
+                      className="space-y-2 mt-3 bg-blue-50 p-3 rounded"
                     >
-                      Cancel
-                    </button>
-                    {error && <div className="text-red-600">{error}</div>}
-                  </form>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                      <input
+                        className="w-full border rounded px-3 py-2"
+                        placeholder="Mood"
+                        value={form.mood}
+                        onChange={(e) => setForm((f) => ({ ...f, mood: e.target.value }))}
+                        disabled={submitting}
+                        aria-label="Mood"
+                      />
+                      <textarea
+                        className="w-full border rounded px-3 py-2"
+                        placeholder="Notes"
+                        rows={3}
+                        value={form.notes}
+                        onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                        disabled={submitting}
+                        aria-label="Notes"
+                      />
+                      <div className="flex gap-2">
+                        <button 
+                          className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                          type="submit" 
+                          disabled={submitting}
+                        >
+                          Save New Version
+                        </button>
+                        <button
+                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition-colors"
+                          type="button"
+                          onClick={() => {
+                            setEditingLogId(null);
+                            setForm({ mood: "", notes: "" });
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="bg-gray-50 p-3 rounded">
+                      <div className="mb-2">
+                        <span className="font-medium text-gray-700">Mood:</span> 
+                        <span className="text-gray-900 ml-2">{fields.mood || 'Not specified'}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-700">Notes:</span>
+                        <p className="text-gray-900 mt-1">{fields.notes || 'No notes provided'}</p>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
-      <div className="mt-4">
-        <AuditTrail residentId={residentId} />
-      </div>
+
+      <AuditTrail residentId={residentId} />
     </div>
   );
 }
+
+// ============================================================================
+// ISP TAB
+// ============================================================================
 
 function ISPTab({ residentId }: { residentId: string }) {
   const [ispFiles, setIspFiles] = useState<any[]>([]);
@@ -439,7 +522,6 @@ function ISPTab({ residentId }: { residentId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const [downloading, setDownloading] = useState<string | null>(null);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [editingISP, setEditingISP] = useState<any | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -454,7 +536,6 @@ function ISPTab({ residentId }: { residentId: string }) {
     file: null as File | null,
   });
 
-  // Separate form for editing
   const [editForm, setEditForm] = useState({
     versionLabel: "",
     effectiveDate: "",
@@ -489,7 +570,6 @@ function ISPTab({ residentId }: { residentId: string }) {
 
   useEffect(() => {
     fetchIspData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [residentId]);
 
   const activeISP = ispFiles.find(file => file.status === "active");
@@ -530,7 +610,6 @@ function ISPTab({ residentId }: { residentId: string }) {
 
     setUploading(true);
     try {
-      // Step 1: Upload file to /api/uploads
       const formData = new FormData();
       formData.append('file', uploadForm.file);
       formData.append('fileType', 'isp-files');
@@ -540,14 +619,11 @@ function ISPTab({ residentId }: { residentId: string }) {
         body: formData,
       });
 
-      if (!uploadRes.ok) {
-        throw new Error("File upload failed");
-      }
+      if (!uploadRes.ok) throw new Error("File upload failed");
 
       const uploadData = await uploadRes.json();
       const fileId = uploadData.fileId;
 
-      // Step 2: Create ISP record
       const res = await fetch('/api/care/isp-files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -578,7 +654,7 @@ function ISPTab({ residentId }: { residentId: string }) {
         notes: "",
         file: null,
       });
-      await fetchIspData(); // Refresh data
+      await fetchIspData();
     } catch (error: any) {
       console.error("Upload error:", error);
       toast.error(error.message || "Upload failed");
@@ -588,14 +664,14 @@ function ISPTab({ residentId }: { residentId: string }) {
   };
 
   const startEditing = (file: any) => {
-      setEditingISP(file);
-      setEditForm({
-          versionLabel: file.versionLabel,
-          effectiveDate: new Date(file.effectiveDate).toISOString().split('T')[0],
-          preparedBy: file.preparedBy || "",
-          notes: file.notes || "",
-      });
-      setShowUploadForm(false); // Close upload form if open
+    setEditingISP(file);
+    setEditForm({
+      versionLabel: file.versionLabel,
+      effectiveDate: new Date(file.effectiveDate).toISOString().split('T')[0],
+      preparedBy: file.preparedBy || "",
+      notes: file.notes || "",
+    });
+    setShowUploadForm(false);
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -603,41 +679,41 @@ function ISPTab({ residentId }: { residentId: string }) {
     if (!editingISP) return;
     
     if (!editForm.versionLabel.trim() || !editForm.effectiveDate) {
-        alert("Please fill in all required fields");
-        return;
+      alert("Please fill in all required fields");
+      return;
     }
 
     setUploading(true);
     try {
-        const res = await fetch(`/api/care/isp-files`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                ispFileId: editingISP.id,
-                versionLabel: editForm.versionLabel.trim(),
-                effectiveDate: editForm.effectiveDate, 
-                preparedBy: editForm.preparedBy.trim() || undefined,
-                notes: editForm.notes.trim() || undefined,
-            }),
-        });
+      const res = await fetch(`/api/care/isp-files`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ispFileId: editingISP.id,
+          versionLabel: editForm.versionLabel.trim(),
+          effectiveDate: editForm.effectiveDate, 
+          preparedBy: editForm.preparedBy.trim() || undefined,
+          notes: editForm.notes.trim() || undefined,
+        }),
+      });
 
-        if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.error || 'Failed to update ISP file');
-        }
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || 'Failed to update ISP file');
+      }
 
-        toast.success("ISP file updated successfully");
-        setEditingISP(null);
-        await fetchIspData();
+      toast.success("ISP file updated successfully");
+      setEditingISP(null);
+      await fetchIspData();
     } catch (error: any) {
-        toast.error(error.message || "Update failed");
+      toast.error(error.message || "Update failed");
     } finally {
-        setUploading(false);
+      setUploading(false);
     }
   };
 
   const handleDownload = (ispFileId: string, fileStorageId: string) => {
-     window.open(`/api/uploads?fileId=${fileStorageId}`, '_blank');
+    window.open(`/api/uploads?fileId=${fileStorageId}`, '_blank');
   };
 
   const handleActivate = async (ispFileId: string) => {
@@ -655,7 +731,7 @@ function ISPTab({ residentId }: { residentId: string }) {
 
       if (!res.ok) throw new Error('Failed to activate ISP file');
       toast.success("ISP file activated successfully");
-      await fetchIspData(); // Refresh data
+      await fetchIspData();
     } catch (error: any) {
       toast.error(error.message || "Activation failed");
     } finally {
@@ -678,7 +754,7 @@ function ISPTab({ residentId }: { residentId: string }) {
 
       if (!res.ok) throw new Error('Failed to delete ISP file');
       toast.success("ISP file deleted successfully");
-      await fetchIspData(); // Refresh data
+      await fetchIspData();
     } catch (error: any) {
       toast.error(error.message || "Delete failed");
     } finally {
@@ -690,12 +766,12 @@ function ISPTab({ residentId }: { residentId: string }) {
   const canActivate = userRole?.role === "admin" || userRole?.role === "supervisor";
   const canDelete = userRole?.role === "admin";
 
-  if (loading) return <div>Loading ISP data...</div>;
-  if (error) return <div className="text-red-600">{error}</div>;
+  if (loading) return <div className="p-4">Loading ISP data...</div>;
+  if (error) return <div className="text-red-600 p-4">{error}</div>;
 
   return (
     <div className="space-y-6">
-      {/* Header with Upload Button */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold">ISP Management</h3>
@@ -726,7 +802,7 @@ function ISPTab({ residentId }: { residentId: string }) {
                   value={uploadForm.versionLabel}
                   onChange={(e) => setUploadForm(prev => ({ ...prev, versionLabel: e.target.value }))}
                   placeholder="e.g., 2024-Q1, Annual Review 2024"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
                   required
                   aria-label="Version Label"
                 />
@@ -739,7 +815,7 @@ function ISPTab({ residentId }: { residentId: string }) {
                   type="date"
                   value={uploadForm.effectiveDate}
                   onChange={(e) => setUploadForm(prev => ({ ...prev, effectiveDate: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
                   required
                 />
               </div>
@@ -754,7 +830,7 @@ function ISPTab({ residentId }: { residentId: string }) {
                 value={uploadForm.preparedBy}
                 onChange={(e) => setUploadForm(prev => ({ ...prev, preparedBy: e.target.value }))}
                 placeholder="Name of person who prepared this ISP"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
               />
             </div>
 
@@ -767,7 +843,7 @@ function ISPTab({ residentId }: { residentId: string }) {
                 onChange={(e) => setUploadForm(prev => ({ ...prev, notes: e.target.value }))}
                 placeholder="Administrative notes (NO personal health information)"
                 rows={3}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
               />
               <p className="text-xs text-red-600 mt-1">
                 ⚠️ Do not include any personal health information in notes
@@ -782,7 +858,7 @@ function ISPTab({ residentId }: { residentId: string }) {
                 type="file"
                 accept=".pdf,.docx"
                 onChange={handleFileSelect}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
                 required
               />
               <p className="text-xs text-gray-500 mt-1">
@@ -824,7 +900,7 @@ function ISPTab({ residentId }: { residentId: string }) {
                   type="text"
                   value={editForm.versionLabel}
                   onChange={(e) => setEditForm(prev => ({ ...prev, versionLabel: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
                   required
                 />
               </div>
@@ -836,10 +912,22 @@ function ISPTab({ residentId }: { residentId: string }) {
                   type="date"
                   value={editForm.effectiveDate}
                   onChange={(e) => setEditForm(prev => ({ ...prev, effectiveDate: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Prepared By (Optional)
+              </label>
+              <input
+                type="text"
+                value={editForm.preparedBy}
+                onChange={(e) => setEditForm(prev => ({ ...prev, preparedBy: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+              />
             </div>
 
             <div>
@@ -850,7 +938,7 @@ function ISPTab({ residentId }: { residentId: string }) {
                 value={editForm.notes}
                 onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
                 rows={3}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
               />
             </div>
 
@@ -875,176 +963,48 @@ function ISPTab({ residentId }: { residentId: string }) {
       )}
 
       {/* Active ISP */}
-      <div>
-        <h3 className="text-lg font-semibold mb-3">Active ISP</h3>
-        {activeISP ? (
-          <div className="border border-green-200 bg-green-50 rounded-lg p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <div className="flex items-center space-x-2 mb-2">
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    Active
-                  </span>
-                  <span className="font-medium">{activeISP.versionLabel}</span>
-                </div>
-                <div className="text-sm text-gray-700 space-y-1">
-                  <div><span className="font-medium">Effective Date:</span> {new Date(activeISP.effectiveDate).toLocaleDateString()}</div>
-                  <div><span className="font-medium">File:</span> {activeISP.fileName}</div>
-                  <div><span className="font-medium">Size:</span> {(activeISP.fileSize / 1024).toFixed(1)} KB</div>
-                  {activeISP.preparedBy && <div><span className="font-medium">Prepared By:</span> {activeISP.preparedBy}</div>}
-                  {activeISP.notes && <div><span className="font-medium">Notes:</span> {activeISP.notes}</div>}
-                  <div><span className="font-medium">Activated:</span> {new Date(activeISP.activatedAt!).toLocaleString()}</div>
-                </div>
-              </div>
-              <div className="flex flex-col space-y-2">
-                <button
-                  onClick={() => handleDownload(activeISP.id, activeISP.fileStorageId)}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  📥 Download
-                </button>
-                {canEdit && (
-                    <button
-                        onClick={() => startEditing(activeISP)}
-                        className="px-4 py-2 bg-blue-50 text-blue-700 text-sm rounded-md border border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50"
-                    >
-                        ✎ Edit
-                    </button>
-                )}
-                {canDelete && (
-                  <button
-                    onClick={() => handleDelete(activeISP.id)}
-                    disabled={deletingId === activeISP.id}
-                    className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
-                  >
-                    {deletingId === activeISP.id ? "Deleting..." : "🗑 Delete"}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="text-center py-8 text-gray-500 border border-gray-200 rounded-lg">
-            <div className="text-4xl mb-2">📋</div>
-            <p>No active ISP</p>
-            <p className="text-sm">Upload and activate an ISP above</p>
-          </div>
-        )}
-      </div>
+      <ISPFileCard
+        title="Active ISP"
+        files={activeISP ? [activeISP] : []}
+        emptyMessage="No active ISP"
+        emptyIcon="📋"
+        statusColor="green"
+        onDownload={handleDownload}
+        onEdit={canEdit ? startEditing : undefined}
+        onActivate={undefined}
+        onDelete={canDelete ? handleDelete : undefined}
+        activatingId={activatingId}
+        deletingId={deletingId}
+      />
 
       {/* Draft ISPs */}
       {draftISPs.length > 0 && (
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Draft ISPs ({draftISPs.length})</h3>
-          <div className="space-y-3">
-            {draftISPs.map((isp) => (
-              <div key={isp.id} className="border border-yellow-200 bg-yellow-50 rounded-lg p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                        Draft
-                      </span>
-                      <span className="font-medium">{isp.versionLabel}</span>
-                    </div>
-                    <div className="text-sm text-gray-700 space-y-1">
-                      <div><span className="font-medium">Effective Date:</span> {new Date(isp.effectiveDate).toLocaleDateString()}</div>
-                      <div><span className="font-medium">File:</span> {isp.fileName}</div>
-                      <div><span className="font-medium">Uploaded:</span> {new Date(isp.uploadedAt).toLocaleString()}</div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col space-y-2">
-                    <button
-                      onClick={() => handleDownload(isp.id, isp.fileStorageId)}
-                      className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                      📥 Download
-                    </button>
-                    {canEdit && (
-                        <button
-                            onClick={() => startEditing(isp)}
-                            className="px-4 py-2 bg-blue-50 text-blue-700 text-sm rounded-md border border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50"
-                        >
-                            ✎ Edit
-                        </button>
-                    )}
-                    {canActivate && (
-                      <button
-                        onClick={() => handleActivate(isp.id)}
-                        disabled={activatingId === isp.id}
-                        className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
-                      >
-                        {activatingId === isp.id ? "Activating..." : "✓ Activate"}
-                      </button>
-                    )}
-                    {canDelete && (
-                      <button
-                        onClick={() => handleDelete(isp.id)}
-                        disabled={deletingId === isp.id}
-                        className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
-                      >
-                        {deletingId === isp.id ? "Deleting..." : "🗑 Delete"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ISPFileCard
+          title={`Draft ISPs (${draftISPs.length})`}
+          files={draftISPs}
+          statusColor="yellow"
+          onDownload={handleDownload}
+          onEdit={canEdit ? startEditing : undefined}
+          onActivate={canActivate ? handleActivate : undefined}
+          onDelete={canDelete ? handleDelete : undefined}
+          activatingId={activatingId}
+          deletingId={deletingId}
+        />
       )}
 
       {/* Archived ISPs */}
       {archivedISPs.length > 0 && (
-        <div>
-          <h3 className="text-lg font-semibold mb-3">Archived ISPs ({archivedISPs.length})</h3>
-          <div className="space-y-3">
-            {archivedISPs.map((isp) => (
-              <div key={isp.id} className="border border-gray-200 bg-gray-50 rounded-lg p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                        Archived
-                      </span>
-                      <span className="font-medium">{isp.versionLabel}</span>
-                    </div>
-                    <div className="text-sm text-gray-700 space-y-1">
-                      <div><span className="font-medium">Effective Date:</span> {new Date(isp.effectiveDate).toLocaleDateString()}</div>
-                      <div><span className="font-medium">File:</span> {isp.fileName}</div>
-                      <div><span className="font-medium">Archived:</span> {new Date(isp.archivedAt!).toLocaleString()}</div>
-                    </div>
-                  </div>
-                  <div className="flex flex-col space-y-2">
-                    <button
-                      onClick={() => handleDownload(isp.id, isp.fileStorageId)}
-                      className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                      📥 Download
-                    </button>
-                    {canEdit && (
-                        <button
-                            onClick={() => startEditing(isp)}
-                            className="px-4 py-2 bg-blue-50 text-blue-700 text-sm rounded-md border border-blue-200 hover:bg-blue-100 transition-colors disabled:opacity-50"
-                        >
-                            ✎ Edit
-                        </button>
-                    )}
-                     {canDelete && (
-                      <button
-                        onClick={() => handleDelete(isp.id)}
-                        disabled={deletingId === isp.id}
-                        className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
-                      >
-                        {deletingId === isp.id ? "Deleting..." : "🗑 Delete"}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <ISPFileCard
+          title={`Archived ISPs (${archivedISPs.length})`}
+          files={archivedISPs}
+          statusColor="gray"
+          onDownload={handleDownload}
+          onEdit={canEdit ? startEditing : undefined}
+          onActivate={undefined}
+          onDelete={canDelete ? handleDelete : undefined}
+          activatingId={activatingId}
+          deletingId={deletingId}
+        />
       )}
 
       {/* Empty state */}
@@ -1052,12 +1012,141 @@ function ISPTab({ residentId }: { residentId: string }) {
         <div className="text-center py-12 text-gray-500">
           <div className="text-5xl mb-4">📋</div>
           <p className="text-lg font-medium mb-2">No ISP files yet</p>
-          <p className="text-sm">Click &quot;Upload New ISP&quot; above to get started</p>
+          <p className="text-sm">Click "Upload New ISP" above to get started</p>
         </div>
       )}
     </div>
   );
 }
+
+interface ISPFileCardProps {
+  title: string;
+  files: any[];
+  emptyMessage?: string;
+  emptyIcon?: string;
+  statusColor: 'green' | 'yellow' | 'gray';
+  onDownload: (ispFileId: string, fileStorageId: string) => void;
+  onEdit?: (file: any) => void;
+  onActivate?: (ispFileId: string) => void;
+  onDelete?: (ispFileId: string) => void;
+  activatingId: string | null;
+  deletingId: string | null;
+}
+
+function ISPFileCard({
+  title,
+  files,
+  emptyMessage,
+  emptyIcon,
+  statusColor,
+  onDownload,
+  onEdit,
+  onActivate,
+  onDelete,
+  activatingId,
+  deletingId
+}: ISPFileCardProps) {
+  const colorClasses = {
+    green: 'border-green-200 bg-green-50',
+    yellow: 'border-yellow-200 bg-yellow-50',
+    gray: 'border-gray-200 bg-gray-50'
+  };
+
+  const statusClasses = {
+    green: 'bg-green-100 text-green-800',
+    yellow: 'bg-yellow-100 text-yellow-800',
+    gray: 'bg-gray-100 text-gray-800'
+  };
+
+  const statusLabels = {
+    green: 'Active',
+    yellow: 'Draft',
+    gray: 'Archived'
+  };
+
+  if (files.length === 0 && emptyMessage) {
+    return (
+      <div>
+        <h3 className="text-lg font-semibold mb-3">{title}</h3>
+        <div className="text-center py-8 text-gray-500 border border-gray-200 rounded-lg">
+          <div className="text-4xl mb-2">{emptyIcon}</div>
+          <p>{emptyMessage}</p>
+          <p className="text-sm">Upload and activate an ISP above</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h3 className="text-lg font-semibold mb-3">{title}</h3>
+      <div className="space-y-3">
+        {files.map((file) => (
+          <div key={file.id} className={`border rounded-lg p-4 ${colorClasses[statusColor]}`}>
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center space-x-2 mb-2">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClasses[statusColor]}`}>
+                    {statusLabels[statusColor]}
+                  </span>
+                  <span className="font-medium">{file.versionLabel}</span>
+                </div>
+                <div className="text-sm text-gray-700 space-y-1">
+                  <div><span className="font-medium">Effective Date:</span> {new Date(file.effectiveDate).toLocaleDateString()}</div>
+                  <div><span className="font-medium">File:</span> {file.fileName}</div>
+                  <div><span className="font-medium">Size:</span> {(file.fileSize / 1024).toFixed(1)} KB</div>
+                  {file.preparedBy && <div><span className="font-medium">Prepared By:</span> {file.preparedBy}</div>}
+                  {file.notes && <div><span className="font-medium">Notes:</span> {file.notes}</div>}
+                  {file.activatedAt && <div><span className="font-medium">Activated:</span> {new Date(file.activatedAt).toLocaleString()}</div>}
+                  {file.archivedAt && <div><span className="font-medium">Archived:</span> {new Date(file.archivedAt).toLocaleString()}</div>}
+                  {file.uploadedAt && !file.activatedAt && <div><span className="font-medium">Uploaded:</span> {new Date(file.uploadedAt).toLocaleString()}</div>}
+                </div>
+              </div>
+              <div className="flex flex-col space-y-2">
+                <button
+                  onClick={() => onDownload(file.id, file.fileStorageId)}
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  📥 Download
+                </button>
+                {onEdit && (
+                  <button
+                    onClick={() => onEdit(file)}
+                    className="px-4 py-2 bg-blue-50 text-blue-700 text-sm rounded-md border border-blue-200 hover:bg-blue-100 transition-colors"
+                  >
+                    ✎ Edit
+                  </button>
+                )}
+                {onActivate && (
+                  <button
+                    onClick={() => onActivate(file.id)}
+                    disabled={activatingId === file.id}
+                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
+                  >
+                    {activatingId === file.id ? "Activating..." : "✓ Activate"}
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    onClick={() => onDelete(file.id)}
+                    disabled={deletingId === file.id}
+                    className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
+                  >
+                    {deletingId === file.id ? "Deleting..." : "🗑 Delete"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// OTHER TABS
+// ============================================================================
 
 function FireEvacTab({ residentId, residentName }: { residentId: string; residentName: string }) {
   return <FireEvacManagement residentId={residentId} residentName={residentName} />;
@@ -1107,9 +1196,6 @@ function DocumentsTab({ residentId }: { residentId: string }) {
 
     setUploadingDocument(true);
     try {
-      // In a real application, you would implement an API endpoint for document uploads
-      // Similar to ISP file upload, you'd get an upload URL, upload the file,
-      // then record the metadata in your database.
       console.log("Uploading document for resident:", residentId);
       console.log("Document details:", documentForm);
       toast.success("Document uploaded successfully (simulated)");
@@ -1120,7 +1206,6 @@ function DocumentsTab({ residentId }: { residentId: string }) {
         notes: "",
         file: null,
       });
-      // await fetchDocumentsData(); // Refresh data if you had a list of documents
     } catch (error: any) {
       toast.error(error.message || "Document upload failed (simulated)");
     } finally {
@@ -1129,141 +1214,173 @@ function DocumentsTab({ residentId }: { residentId: string }) {
   };
 
   return (
-		<div className="space-y-6">
-			{/* Header with Upload Button */}
-			<div className="flex items-center justify-between">
-				<div>
-					<h3 className="text-lg font-semibold">Other Documents</h3>
-					<p className="text-sm text-gray-600">
-						Upload and manage additional documents (not ISP or Fire Evac)
-					</p>
-				</div>
-				<button
-					onClick={() => setShowUploadForm(!showUploadForm)}
-					className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
-					{showUploadForm ? 'Cancel Upload' : 'Upload Document'}
-				</button>
-			</div>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Other Documents</h3>
+          <p className="text-sm text-gray-600">
+            Upload and manage additional documents (not ISP or Fire Evac)
+          </p>
+        </div>
+        <button
+          onClick={() => setShowUploadForm(!showUploadForm)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        >
+          {showUploadForm ? 'Cancel Upload' : 'Upload Document'}
+        </button>
+      </div>
 
-			{/* Upload Form */}
-			{showUploadForm && (
-				<div className="bg-white rounded-lg shadow-sm border p-6">
-					<h4 className="text-md font-semibold mb-4">Upload New Document</h4>
-					<form onSubmit={handleDocumentUpload} className="space-y-4">
-						<div>
-							<label
-								htmlFor="documentTitle"
-								className="block text-sm font-medium text-gray-700 mb-2">
-								Document Title *
-							</label>
-							<input
-								id="documentTitle"
-								type="text"
-								value={documentForm.title}
-								onChange={(e) =>
-									setDocumentForm((prev) => ({...prev, title: e.target.value}))
-								}
-								placeholder="e.g., Medical Records, Consent Form"
-								className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-								required
-								aria-label="Document Title"
-							/>
-						</div>
+      {showUploadForm && (
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <h4 className="text-md font-semibold mb-4">Upload New Document</h4>
+          <form onSubmit={handleDocumentUpload} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Document Title *
+              </label>
+              <input
+                type="text"
+                value={documentForm.title}
+                onChange={(e) => setDocumentForm(prev => ({ ...prev, title: e.target.value }))}
+                placeholder="e.g., Medical Records, Consent Form"
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                required
+                aria-label="Document Title"
+              />
+            </div>
 
-						<div>
-							<label
-								htmlFor="documentType"
-								className="block text-sm font-medium text-gray-700 mb-2">
-								Document Type
-							</label>
-							<select
-								id="documentType"
-								value={documentForm.type}
-								onChange={(e) =>
-									setDocumentForm((prev) => ({...prev, type: e.target.value}))
-								}
-								className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-								aria-label="Document Type">
-								<option value="medical">Medical Records</option>
-								<option value="consent">Consent Form</option>
-								<option value="assessment">Assessment</option>
-								<option value="other">Other</option>
-							</select>
-						</div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Document Type
+              </label>
+              <select
+                value={documentForm.type}
+                onChange={(e) => setDocumentForm(prev => ({ ...prev, type: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                aria-label="Document Type"
+              >
+                <option value="medical">Medical Records</option>
+                <option value="consent">Consent Form</option>
+                <option value="assessment">Assessment</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
 
-						<div>
-							<label
-								htmlFor="documentNotes"
-								className="block text-sm font-medium text-gray-700 mb-2">
-								Notes (Optional)
-							</label>
-							<textarea
-								id="documentNotes"
-								value={documentForm.notes}
-								onChange={(e) =>
-									setDocumentForm((prev) => ({...prev, notes: e.target.value}))
-								}
-								placeholder="Additional notes about this document"
-								rows={3}
-								className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-								aria-label="Document Notes"
-							/>
-						</div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Notes (Optional)
+              </label>
+              <textarea
+                value={documentForm.notes}
+                onChange={(e) => setDocumentForm(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Additional notes about this document"
+                rows={3}
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                aria-label="Document Notes"
+              />
+            </div>
 
-						<div>
-							<label
-								htmlFor="documentFile"
-								className="block text-sm font-medium text-gray-700 mb-2">
-								File (PDF or DOCX) *
-							</label>
-							<input
-								id="documentFile"
-								type="file"
-								accept=".pdf,.docx"
-								onChange={handleDocumentFileSelect}
-								className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-								required
-								aria-label="Document File"
-							/>
-							<p className="text-xs text-gray-500 mt-1">
-								Only PDF and DOCX files are allowed. Maximum size: 10MB
-							</p>
-						</div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                File (PDF or DOCX) *
+              </label>
+              <input
+                type="file"
+                accept=".pdf,.docx"
+                onChange={handleDocumentFileSelect}
+                className="w-full border border-gray-300 rounded-md px-3 py-2"
+                required
+                aria-label="Document File"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Only PDF and DOCX files are allowed. Maximum size: 10MB
+              </p>
+            </div>
 
-						<div className="flex justify-end space-x-3">
-							<button
-								type="button"
-								onClick={() => setShowUploadForm(false)}
-								className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors">
-								Cancel
-							</button>
-							<button
-								type="submit"
-								disabled={uploadingDocument}
-								className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50">
-								{uploadingDocument ? 'Uploading...' : 'Upload Document'}
-							</button>
-						</div>
-					</form>
-				</div>
-			)}
+            <div className="flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={() => setShowUploadForm(false)}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={uploadingDocument}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {uploadingDocument ? 'Uploading...' : 'Upload Document'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
-			{/* Documents List - Empty State */}
-			<div className="text-center py-12 text-gray-500">
-				<div className="text-5xl mb-4">📄</div>
-				<p className="text-lg font-medium mb-2">No other documents yet</p>
-				<p className="text-sm">
-					Click &quot;Upload New Document&quot; above to get started
-				</p>
-				<p className="text-xs text-gray-400 mt-4">
-					Note: ISP and Fire Evac plans are managed in their respective tabs
-				</p>
-			</div>
-		</div>
-	);
+      <div className="text-center py-12 text-gray-500">
+        <div className="text-5xl mb-4">📄</div>
+        <p className="text-lg font-medium mb-2">No other documents yet</p>
+        <p className="text-sm">Click "Upload Document" above to get started</p>
+        <p className="text-xs text-gray-400 mt-4">
+          Note: ISP and Fire Evac plans are managed in their respective tabs
+        </p>
+      </div>
+    </div>
+  );
 }
 
-// Show audit trail for log actions
+function IncidentReportsTab({ 
+  residentId, 
+  residentName, 
+  location 
+}: { 
+  residentId: string; 
+  residentName: string; 
+  location: string;
+}) {
+  const [isCreating, setIsCreating] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const handleSuccess = () => {
+    setIsCreating(false);
+    setRefreshTrigger(prev => prev + 1);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Incident Reports</h3>
+          <p className="text-sm text-gray-600">Track and manage incident reports</p>
+        </div>
+        {!isCreating && (
+          <button
+            onClick={() => setIsCreating(true)}
+            className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+          >
+            Report New Incident
+          </button>
+        )}
+      </div>
+
+      {isCreating ? (
+        <IncidentReportForm
+          residentId={residentId}
+          residentName={residentName}
+          location={location}
+          onSuccess={handleSuccess}
+          onCancel={() => setIsCreating(false)}
+        />
+      ) : (
+        <IncidentReportsList 
+          residentId={residentId} 
+          refreshTrigger={refreshTrigger} 
+        />
+      )}
+    </div>
+  );
+}
+
 function AuditTrail({ residentId }: { residentId: string }) {
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1288,18 +1405,18 @@ function AuditTrail({ residentId }: { residentId: string }) {
     fetchAuditLogs();
   }, [residentId]);
 
-  if (loading) return <div>Loading audit trail...</div>;
-  if (error) return <div className="text-red-600">{error}</div>;
+  if (loading) return <div className="text-sm text-gray-500">Loading audit trail...</div>;
+  if (error) return <div className="text-red-600 text-sm">{error}</div>;
   if (!logs.length) return null;
 
   return (
-    <div>
-      <b>Audit Trail:</b>
-      <ul className="text-xs mt-1">
+    <div className="bg-white border rounded-lg p-4">
+      <h4 className="font-semibold mb-3">Audit Trail</h4>
+      <ul className="text-xs space-y-1 text-gray-600">
         {logs.map((log: any) => (
           <li key={log.id}>
-            {new Date(log.timestamp).toLocaleString()} - {log.event}{" "}
-            {log.details && <span>({log.details})</span>}
+            {new Date(log.timestamp).toLocaleString()} - {log.event}
+            {log.details && <span className="text-gray-500"> ({log.details})</span>}
           </li>
         ))}
       </ul>
