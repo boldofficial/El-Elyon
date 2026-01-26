@@ -62,20 +62,10 @@ export default function IncidentReportsList({
 		}
 	}
 
-	// ADDED: Download attachment handler
-	const handleDownloadAttachment = async (fileKey: string) => {
-		try {
-			const res = await fetch(
-				`/api/care/incidents/download-url?fileKey=${fileKey}`
-			);
-			if (!res.ok) throw new Error('Failed to get download URL');
-
-			const {downloadUrl} = await res.json();
-			window.open(downloadUrl, '_blank');
-		} catch (error) {
-			console.error('Download error:', error);
-			toast.error('Failed to download attachment');
-		}
+	// ARTIFACT_UPDATE: Use standardized download endpoint
+	const handleDownloadAttachment = (fileKey: string) => {
+		// Use the central uploads API which handles presigned URL redirection
+		window.open(`/api/uploads?fileId=${fileKey}`, '_blank');
 	};
 
 	if (loading) {
