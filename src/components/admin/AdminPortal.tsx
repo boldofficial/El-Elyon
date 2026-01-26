@@ -17,6 +17,7 @@ import DeviceManagementWorkspace from './DeviceManagementWorkspace';
 import AdminDeviceBadge from './AdminDeviceBadge';
 import EmployeeHRManagement from './EmployeeHRManagement';
 import ResidentProfileManagement from './ResidentProfileManagement';
+import DocumentsWorkspace from './DocumentsWorkspace';
 
 export default function AdminPortal() {
 	const [activeView, setActiveView] = useState('dashboard');
@@ -117,6 +118,8 @@ export default function AdminPortal() {
 				return <DataCleanupWorkspace />;
 			case 'settings':
 				return <SettingsWorkspace />;
+			case 'documents':
+				return <DocumentsWorkspace />;
 			default:
 				return <AdminDashboard onNavigate={handleNavigate} />;
 		}
