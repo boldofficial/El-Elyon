@@ -2,6 +2,7 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
+import SharedLogsTable from './SharedLogsTable';
 
 export default function CareLogsWorkspace() {
 	const [activeTab, setActiveTab] = useState<'create' | 'view' | 'search'>(
@@ -137,58 +138,9 @@ export default function CareLogsWorkspace() {
 		}
 	};
 
-	const formatLogContent = (content: string, template: string | undefined) => {
-		// Handle empty or invalid content
-		if (!content || content.trim() === '') {
-			return 'No content provided';
-		}
 
-		try {
-			// Parse the content - might need multiple parses if double-encoded
-			let parsed = JSON.parse(content);
-			
-			// If it's still a string after first parse, parse again (double-encoded case)
-			if (typeof parsed === 'string') {
-				parsed = JSON.parse(parsed);
-			}
 
-			// If parsed is still a string or empty object, show default message
-			if (typeof parsed === 'string' || Object.keys(parsed).length === 0) {
-				return 'No content provided';
-			}
-
-			const templateData = templates.find((t) => t.id === template);
-
-			if (!templateData || !templateData.fields) {
-				// If no template found, display the parsed object as JSON
-				return Object.entries(parsed)
-					.map(([key, value]) => `${key}: ${value || 'Not specified'}`)
-					.join('\n') || 'No content provided';
-			}
-
-			// Format according to template fields
-			const formattedContent = templateData.fields
-				.map((field: any) => {
-					const value = parsed[field.name];
-					// Only show fields that have values
-					if (!value || value.trim() === '') {
-						return null;
-					}
-					return `${field.label}: ${value}`;
-				})
-				.filter(Boolean) // Remove null entries
-				.join('\n');
-
-			return formattedContent || 'No content provided';
-		} catch (error) {
-			console.error('Error parsing log content:', error);
-			// If parsing fails completely, try to show something useful
-			return content.length > 100 
-				? 'Invalid content format' 
-				: content;
-		}
-	};
-
+    // Removed local LogsTable and formatLogContent as they are now shared
 	const renderCreateTab = () => (
 		<div className="space-y-6">
 			<div className="bg-white rounded-lg shadow-sm border p-6">
@@ -422,67 +374,7 @@ export default function CareLogsWorkspace() {
 				</div>
 			)}
 
-			<div className="bg-white rounded-lg shadow-sm border">
-				<div className="px-6 py-4 border-b border-gray-200">
-					<h3 className="text-lg font-semibold">Recent Log Entries</h3>
-					<p className="text-sm text-gray-600">
-						All logs from your accessible locations
-					</p>
-				</div>
-
-				<div className="divide-y divide-gray-200">
-					{!recentLogs || recentLogs.length === 0 ? (
-						<div className="p-8 text-center text-gray-500">
-							<div className="text-4xl mb-4">📝</div>
-							<p className="text-lg font-medium mb-2">No logs found</p>
-							<p className="text-sm">
-								Log entries will appear here once created
-							</p>
-						</div>
-					) : (
-						recentLogs.map((log) => (
-							<div key={log.id} className="p-6">
-								<div className="flex items-start justify-between">
-									<div className="flex-1">
-										<div className="flex items-center space-x-3 mb-2">
-											<h4 className="text-lg font-medium text-gray-900">
-												{log.residentName}
-											</h4>
-											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-												{log.template
-													?.replace(/_/g, ' ')
-													.replace(/\b\w/g, (l: string) => l.toUpperCase()) ||
-													'Unknown'}
-											</span>
-											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-												{log.residentLocation}
-											</span>
-										</div>
-
-										<div className="text-sm text-gray-600 mb-3">
-											<div className="flex items-center space-x-4">
-												<span>By: {log.authorName}</span>
-												<span>Version: {log.version}</span>
-												<span>
-													{log.createdAt
-														? new Date(log.createdAt).toLocaleString()
-														: 'Unknown date'}
-												</span>
-											</div>
-										</div>
-
-										<div className="bg-gray-50 rounded-lg p-3">
-											<pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
-												{formatLogContent(log.content, log.template)}
-											</pre>
-										</div>
-									</div>
-								</div>
-							</div>
-						))
-					)}
-				</div>
-			</div>
+            <SharedLogsTable logs={recentLogs} />
 		</div>
 	);
 
@@ -592,67 +484,12 @@ export default function CareLogsWorkspace() {
 				</div>
 			</div>
 
-			<div className="bg-white rounded-lg shadow-sm border">
-				<div className="px-6 py-4 border-b border-gray-200">
-					<h3 className="text-lg font-semibold">Search Results</h3>
-					{searchResults && (
-						<p className="text-sm text-gray-600">
-							{searchResults.length} logs found
-						</p>
-					)}
-				</div>
-
-				<div className="divide-y divide-gray-200">
-					{!searchResults || searchResults.length === 0 ? (
-						<div className="p-8 text-center text-gray-500">
-							<div className="text-4xl mb-4">🔍</div>
-							<p className="text-lg font-medium mb-2">No results found</p>
-							<p className="text-sm">Try adjusting your search criteria</p>
-						</div>
-					) : (
-						searchResults.map((log) => (
-							<div key={log.id} className="p-6">
-								<div className="flex items-start justify-between">
-									<div className="flex-1">
-										<div className="flex items-center space-x-3 mb-2">
-											<h4 className="text-lg font-medium text-gray-900">
-												{log.residentName}
-											</h4>
-											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-												{log.template
-													?.replace(/_/g, ' ')
-													.replace(/\b\w/g, (l: string) => l.toUpperCase()) ||
-													'Unknown'}
-											</span>
-											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-												{log.residentLocation}
-											</span>
-										</div>
-
-										<div className="text-sm text-gray-600 mb-3">
-											<div className="flex items-center space-x-4">
-												<span>By: {log.authorName}</span>
-												<span>Version: {log.version}</span>
-												<span>
-													{log.createdAt
-														? new Date(log.createdAt).toLocaleString()
-														: 'Unknown date'}
-												</span>
-											</div>
-										</div>
-
-										<div className="bg-gray-50 rounded-lg p-3">
-											<pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
-												{formatLogContent(log.content, log.template)}
-											</pre>
-										</div>
-									</div>
-								</div>
-							</div>
-						))
-					)}
-				</div>
-			</div>
+            {searchResults && searchResults.length > 0 && (
+                <div className="mb-2 text-sm text-gray-600">
+                    {searchResults.length} logs found
+                </div>
+            )}
+            <SharedLogsTable logs={searchResults || []} />
 		</div>
 	);
 
