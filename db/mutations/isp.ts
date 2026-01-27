@@ -21,8 +21,23 @@ export async function updateIsp(ispId: string, data: IspUpdate) {
 }
 
 // Mutation: List ISP Files for a resident
-export async function listISPFiles(clerkUserId: string, residentId: string) {
+// Mutation: List ISP Files for a resident or all for admin
+export async function listISPFiles(clerkUserId: string, residentId?: string) {
   const userRole = await requireCareAccess(clerkUserId);
+
+  if (!residentId) {
+    if (userRole.role !== 'admin' && userRole.role !== 'supervisor') {
+        throw new Error('Access denied: Only admins and supervisors can view all ISP files.');
+    }
+    // Return all files with resident details
+    return await db.query.ispFiles.findMany({
+        with: {
+            resident: true,
+        },
+        orderBy: (ispFiles, { desc }) => [desc(ispFiles.uploadedAt)],
+        limit: 100, 
+    });
+  }
 
   const resident = await db.query.residents.findFirst({
     where: eq(residents.id, residentId),
@@ -40,6 +55,9 @@ export async function listISPFiles(clerkUserId: string, residentId: string) {
 
   return await db.query.ispFiles.findMany({
     where: eq(ispFiles.residentId, residentId),
+    with: {
+        resident: true, // Also include resident here for consistency
+    },
     orderBy: (ispFiles, { desc }) => [desc(ispFiles.uploadedAt)],
   });
 }

@@ -20,11 +20,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const residentId = searchParams.get('residentId');
 
-    if (!residentId) {
-      return NextResponse.json({ error: 'Resident ID is required' }, { status: 400 });
-    }
-
-    const ispFiles = await listISPFiles(userId, residentId);
+    // Allow listing all files if residentId is not provided (handled by listISPFiles authorization)
+    const ispFiles = await listISPFiles(userId, residentId || undefined);
     return NextResponse.json(ispFiles);
   } catch (error: any) {
     console.error('Error listing ISP files:', error);
