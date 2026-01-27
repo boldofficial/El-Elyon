@@ -91,7 +91,11 @@ export default function CareDocumentsWorkspace() {
                                     {doc.residentName}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
-                                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 capitalize">
+                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full capitalize ${
+                                        doc.source === 'isp' ? 'bg-purple-100 text-purple-800' :
+                                        doc.source === 'fire_evac' ? 'bg-red-100 text-red-800' :
+                                        'bg-blue-100 text-blue-800'
+                                    }`}>
                                         {doc.type}
                                     </span>
                                 </td>

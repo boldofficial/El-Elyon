@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireCareAccess } from '@/lib/db-helpers';
 import { db } from '../../../../../db';
-import { residentDocuments, residents } from '../../../../../db/schema';
+import { residentDocuments, residents, ispFiles, fireEvac } from '../../../../../db/schema';
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { eq, desc, and, inArray } from 'drizzle-orm';
+import { eq, desc, and, inArray, sql } from 'drizzle-orm';
 
 // GET all documents or filtered by residentId
 export async function GET(req: NextRequest) {
@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const residentId = searchParams.get('residentId');
 
-    // Build query
-    let query = db
+    // 1. Generic Documents
+    let docsQuery = db
       .select({
         id: residentDocuments.id,
         residentId: residentDocuments.residentId,
@@ -31,32 +31,93 @@ export async function GET(req: NextRequest) {
         uploadedAt: residentDocuments.uploadedAt,
         uploadedBy: residentDocuments.uploadedBy,
         description: residentDocuments.description,
+        source: sql<'generic' | 'isp' | 'fire_evac'>`'generic'`,
       })
       .from(residentDocuments)
-      .leftJoin(residents, eq(residentDocuments.residentId, residents.id))
-      .orderBy(desc(residentDocuments.uploadedAt));
-    
-    // Apply filters
+      .leftJoin(residents, eq(residentDocuments.residentId, residents.id));
+
+    // 2. ISP Files
+    let ispQuery = db
+      .select({
+        id: ispFiles.id,
+        residentId: ispFiles.residentId,
+        residentName: residents.name,
+        title: ispFiles.versionLabel, // Map versionLabel to title
+        type: sql<string>`'ISP'`,
+        fileName: ispFiles.fileName,
+        fileSize: ispFiles.fileSize,
+        fileStorageId: ispFiles.fileStorageId,
+        uploadedAt: ispFiles.uploadedAt,
+        uploadedBy: ispFiles.uploadedBy,
+        description: ispFiles.notes,
+        source: sql<'generic' | 'isp' | 'fire_evac'>`'isp'`,
+      })
+      .from(ispFiles)
+      .leftJoin(residents, eq(ispFiles.residentId, residents.id));
+
+    // 3. Fire Evac Plans
+    let fireEvacQuery = db
+        .select({
+            id: fireEvac.id,
+            residentId: fireEvac.residentId,
+            residentName: residents.name,
+            // Map version to title essentially
+            title: sql<string>`'Fire Evac Plan (v' || ${fireEvac.version} || ')'`, 
+            type: sql<string>`'Fire Evac'`, 
+            fileName: fireEvac.fileName,
+            fileSize: fireEvac.fileSize,
+            fileStorageId: fireEvac.fileStorageId,
+            uploadedAt: fireEvac.createdAt, // createdAt matches uploadedAt concept
+            uploadedBy: fireEvac.createdBy,
+            description: fireEvac.notes,
+            source: sql<'generic' | 'isp' | 'fire_evac'>`'fire_evac'`,
+        })
+        .from(fireEvac)
+        .leftJoin(residents, eq(fireEvac.residentId, residents.id));
+
+    // Apply Filters and Execute
     if (residentId) {
         // @ts-ignore
-        query = query.where(eq(residentDocuments.residentId, residentId));
+        docsQuery = docsQuery.where(eq(residentDocuments.residentId, residentId));
+        // @ts-ignore
+        ispQuery = ispQuery.where(eq(ispFiles.residentId, residentId));
+        // @ts-ignore
+        fireEvacQuery = fireEvacQuery.where(eq(fireEvac.residentId, residentId));
     } else {
          if (userRole.role !== 'admin') {
              const userLocations = userRole.locations || [];
              if (userLocations.length > 0) {
                  // @ts-ignore
-                 query = query.where(inArray(residents.location, userLocations));
-             } else {
-                 // No locations assigned? Return nothing or authorized failure?
-                 // For safety return empty by impossible condition
+                 docsQuery = docsQuery.where(inArray(residents.location, userLocations));
                  // @ts-ignore
-                 query = query.where(eq(residents.id, 'impossible'));
+                 ispQuery = ispQuery.where(inArray(residents.location, userLocations));
+                 // @ts-ignore
+                 fireEvacQuery = fireEvacQuery.where(inArray(residents.location, userLocations));
+             } else {
+                 // @ts-ignore
+                 docsQuery = docsQuery.where(eq(residents.id, 'impossible'));
+                 // @ts-ignore
+                 ispQuery = ispQuery.where(eq(residents.id, 'impossible'));
+                 // @ts-ignore
+                 fireEvacQuery = fireEvacQuery.where(eq(residents.id, 'impossible'));
              }
          }
     }
 
-    const docs = await query;
-    return NextResponse.json(docs);
+    const [docs, isps, fireEvacs] = await Promise.all([
+        docsQuery,
+        ispQuery,
+        fireEvacQuery
+    ]);
+
+    // Combine and Sort
+    const allDocs = [...docs, ...isps, ...fireEvacs].sort((a, b) => {
+        const dateA = new Date(a.uploadedAt || 0).getTime();
+        const dateB = new Date(b.uploadedAt || 0).getTime();
+        return dateB - dateA; // Descending
+    });
+
+    return NextResponse.json(allDocs);
   } catch (error: any) {
     console.error('Error fetching documents:', error);
     return NextResponse.json(
