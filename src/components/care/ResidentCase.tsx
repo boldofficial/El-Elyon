@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import FireEvacManagement from "../admin/FireEvacManagement";
+import ResidentDocuments from "./ResidentDocumentsWorkspace"; // Import the existing component
 import { toast } from 'sonner';
 import ResidentActivityHistory from "./ResidentActivityHistory";
 import IncidentReportsList from "./IncidentReportsList";
@@ -118,7 +119,7 @@ export default function ResidentCase({ residentId, onBack }: Props) {
             location={resident.location} 
           />
         )}
-        {tab === "documents" && <DocumentsTab residentId={residentId} />}
+        {tab === "documents" && <ResidentDocuments residentId={residentId} />}
       </div>
     </div>
   );
@@ -1152,182 +1153,7 @@ function FireEvacTab({ residentId, residentName }: { residentId: string; residen
   return <FireEvacManagement residentId={residentId} residentName={residentName} />;
 }
 
-function DocumentsTab({ residentId }: { residentId: string }) {
-  const [showUploadForm, setShowUploadForm] = useState(false);
-  const [documentForm, setDocumentForm] = useState({
-    title: "",
-    type: "medical",
-    notes: "",
-    file: null as File | null,
-  });
-  const [uploadingDocument, setUploadingDocument] = useState(false);
-
-  const handleDocumentFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const allowedTypes = [
-      "application/pdf",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ];
-
-    if (!allowedTypes.includes(file.type)) {
-      alert("Only PDF and DOCX files are allowed");
-      e.target.value = "";
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      alert("File size must be less than 10MB");
-      e.target.value = "";
-      return;
-    }
-
-    setDocumentForm(prev => ({ ...prev, file }));
-  };
-
-  const handleDocumentUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!documentForm.file || !documentForm.title.trim()) {
-      alert("Please fill in all required fields");
-      return;
-    }
-
-    setUploadingDocument(true);
-    try {
-      console.log("Uploading document for resident:", residentId);
-      console.log("Document details:", documentForm);
-      toast.success("Document uploaded successfully (simulated)");
-      setShowUploadForm(false);
-      setDocumentForm({
-        title: "",
-        type: "medical",
-        notes: "",
-        file: null,
-      });
-    } catch (error: any) {
-      toast.error(error.message || "Document upload failed (simulated)");
-    } finally {
-      setUploadingDocument(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">Other Documents</h3>
-          <p className="text-sm text-gray-600">
-            Upload and manage additional documents (not ISP or Fire Evac)
-          </p>
-        </div>
-        <button
-          onClick={() => setShowUploadForm(!showUploadForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-        >
-          {showUploadForm ? 'Cancel Upload' : 'Upload Document'}
-        </button>
-      </div>
-
-      {showUploadForm && (
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-          <h4 className="text-md font-semibold mb-4">Upload New Document</h4>
-          <form onSubmit={handleDocumentUpload} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Document Title *
-              </label>
-              <input
-                type="text"
-                value={documentForm.title}
-                onChange={(e) => setDocumentForm(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="e.g., Medical Records, Consent Form"
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                required
-                aria-label="Document Title"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Document Type
-              </label>
-              <select
-                value={documentForm.type}
-                onChange={(e) => setDocumentForm(prev => ({ ...prev, type: e.target.value }))}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                aria-label="Document Type"
-              >
-                <option value="medical">Medical Records</option>
-                <option value="consent">Consent Form</option>
-                <option value="assessment">Assessment</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Notes (Optional)
-              </label>
-              <textarea
-                value={documentForm.notes}
-                onChange={(e) => setDocumentForm(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="Additional notes about this document"
-                rows={3}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                aria-label="Document Notes"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                File (PDF or DOCX) *
-              </label>
-              <input
-                type="file"
-                accept=".pdf,.docx"
-                onChange={handleDocumentFileSelect}
-                className="w-full border border-gray-300 rounded-md px-3 py-2"
-                required
-                aria-label="Document File"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Only PDF and DOCX files are allowed. Maximum size: 10MB
-              </p>
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={() => setShowUploadForm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={uploadingDocument}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {uploadingDocument ? 'Uploading...' : 'Upload Document'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      <div className="text-center py-12 text-gray-500">
-        <div className="text-5xl mb-4">📄</div>
-        <p className="text-lg font-medium mb-2">No other documents yet</p>
-        <p className="text-sm">Click "Upload Document" above to get started</p>
-        <p className="text-xs text-gray-400 mt-4">
-          Note: ISP and Fire Evac plans are managed in their respective tabs
-        </p>
-      </div>
-    </div>
-  );
-}
+// function DocumentsTab removed in favor of ResidentDocumentsWorkspace
 
 function IncidentReportsTab({ 
   residentId, 

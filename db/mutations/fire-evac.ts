@@ -58,7 +58,7 @@ export async function createFireEvacPlan(args: {
     uploadedBy,
   } = args;
 
-  await requireSupervisorAccess(uploadedBy); // Ensure supervisor/admin access
+  await requireCareAccess(uploadedBy); // Allow care staff to upload plans
 
   // Get current resident's location for the plan record
   const resident = await db.query.residents.findFirst({

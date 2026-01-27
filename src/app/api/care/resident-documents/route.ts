@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireCareAccess } from '@/lib/db-helpers';
 import { db } from '../../../../../db';
 import { residentDocuments, residents } from '../../../../../db/schema';
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, inArray } from 'drizzle-orm';
 
 // GET all documents or filtered by residentId
 export async function GET(req: NextRequest) {
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const userRole = await requireCareAccess(userId);
 
     const { searchParams } = new URL(req.url);
     const residentId = searchParams.get('residentId');
@@ -36,8 +38,21 @@ export async function GET(req: NextRequest) {
     
     // Apply filters
     if (residentId) {
-        // @ts-ignore - complex type inference issue with simple where
+        // @ts-ignore
         query = query.where(eq(residentDocuments.residentId, residentId));
+    } else {
+         if (userRole.role !== 'admin') {
+             const userLocations = userRole.locations || [];
+             if (userLocations.length > 0) {
+                 // @ts-ignore
+                 query = query.where(inArray(residents.location, userLocations));
+             } else {
+                 // No locations assigned? Return nothing or authorized failure?
+                 // For safety return empty by impossible condition
+                 // @ts-ignore
+                 query = query.where(eq(residents.id, 'impossible'));
+             }
+         }
     }
 
     const docs = await query;
