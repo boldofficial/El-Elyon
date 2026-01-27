@@ -41,6 +41,9 @@ export async function GET(request: Request) {
 		const reports = await db.query.incidentReports.findMany({
 			where: whereClause,
 			orderBy: (reports, {desc}) => [desc(reports.incidentDate)],
+			with: {
+				resident: true,
+			},
 		});
 
 		return NextResponse.json(reports);

@@ -4,41 +4,40 @@ import {auth} from '@clerk/nextjs/server';
 import {NextRequest, NextResponse} from 'next/server';
 import {db} from '@/db/index';
 import {residentLogs, residents} from '@/db/schema';
-import {eq, desc} from 'drizzle-orm';
+import {eq, desc, SQL} from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
 	try {
 		const {userId} = await auth();
 
 		if (!userId) {
-			return NextResponse.json({error: 'Not authenticated'}, {status: 401});
+			return NextResponse.json({error: 'Not uuuuuuuuauthenticated'}, {status: 401});
 		}
 
-		const residentId = req.nextUrl.searchParams.get('residentId');
-		const limit = parseInt(req.nextUrl.searchParams.get('limit') || '20');
+		const searchParams = req.nextUrl.searchParams;
+		const residentId = searchParams.get('residentId');
+		const location = searchParams.get('location');
+		const limit = parseInt(searchParams.get('limit') || '50');
 
-		let logs;
+		const conditions: SQL[] = [];
 
 		if (residentId) {
-			logs = await db.query.residentLogs.findMany({
-				where: eq(residentLogs.residentId, residentId),
-				limit,
-				orderBy: [desc(residentLogs.createdAt)],
-				with: {
-					resident: true,
-          activities: true,
-				},
-			});
-		} else {
-			logs = await db.query.residentLogs.findMany({
-				limit,
-				orderBy: [desc(residentLogs.createdAt)],
-				with: {
-					resident: true,
-          activities: true,
-				},
-			});
+			conditions.push(eq(residentLogs.residentId, residentId));
 		}
+
+		if (location) {
+			conditions.push(eq(residentLogs.location, location));
+		}
+
+		const logs = await db.query.residentLogs.findMany({
+			where: conditions.length > 0 ? (residentLogs, {and}) => and(...conditions) : undefined,
+			limit,
+			orderBy: [desc(residentLogs.createdAt)],
+			with: {
+				resident: true,
+				activities: true,
+			},
+		});
 
 		return NextResponse.json(logs);
 	} catch (error) {
