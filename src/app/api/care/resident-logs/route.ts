@@ -39,7 +39,13 @@ export async function GET(req: NextRequest) {
 			},
 		});
 
-		return NextResponse.json(logs);
+		const formattedLogs = logs.map((log: any) => ({
+			...log,
+			residentName: log.resident?.name,
+			residentLocation: log.resident?.location,
+		}));
+
+		return NextResponse.json(formattedLogs);
 	} catch (error) {
 		console.error('Error getting logs:', error);
 		return NextResponse.json({error: 'Internal server error'}, {status: 500});

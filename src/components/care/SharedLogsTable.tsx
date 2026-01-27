@@ -79,87 +79,125 @@ export const formatLogContent = (content: string, template: string | undefined, 
     }
 };
 
+// ... formatLogContent function remains identical (lines 8-80) ...
+
 export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
-    // We need templates to properly format content if we want to be 100% accurate, 
-    // but the previous inline version relied on `logs` having the `template` ID 
-    // and `CareLogsWorkspace` having the `templates` state.
-    // However, the `formatLogContent` function needs `templates`. 
-    // We should probably pass `templates` or (better) let the consumer format it?
-    // Actually, `CareLogsWorkspace` was using `templates` state.
-    // For `CareResidentsWorkspace` and others, we might not have templates loaded?
-    // Let's assume the logs coming in might have expanded content OR we pass templates.
-    // To be safe and reuse logic, let's just do best-effort formatting or pass templates.
-    // Or, for now, let's keep the logic self-contained if possible, or accept `templates` as prop.
-    // The previous `LogsTable` in `CareLogsWorkspace` used `formatLogContent` which closed over `templates`.
-    
-    // To make this truly shared, we either need to fetch templates here (overhead) 
-    // or pass them in.
-    // Let's modify props to accept optional `templates`? Or just rely on raw content if missing?
-    
-    // Actually, `formatLogContent` is the tricky part. 
-    // Let's try to infer as much as possible or accept `templates` as a prop.
-    
-    // WAIT: `CareResidentsWorkspace` does NOT fetch templates currently. 
-    // It just fetches logs. If `logs` don't have expanded content, we might miss labels.
-    // But `formatLogContent` fallback (key-value) is decent.
-    
+    const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
+
+    const toggleExpand = (id: string) => {
+        const newExpanded = new Set(expandedIds);
+        if (newExpanded.has(id)) {
+            newExpanded.delete(id);
+        } else {
+            newExpanded.add(id);
+        }
+        setExpandedIds(newExpanded);
+    };
+
     return (
-        <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Resident</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Template</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider flex-1">Content</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Author</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {logs.length === 0 ? (
-                            <tr>
-                                <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
-                                    <div className="text-4xl mb-3">📝</div>
-                                    <p>No logs found</p>
-                                </td>
-                            </tr>
-                        ) : (
-                            logs.map((log) => (
-                                <tr key={log.id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+        <div className="space-y-3">
+             {logs.length === 0 ? (
+                <div className="bg-white rounded-lg shadow-sm border p-8 text-center text-gray-500">
+                    <div className="text-4xl mb-3">📝</div>
+                    <p>No logs found</p>
+                </div>
+            ) : (
+                logs.map((log) => {
+                    const isExpanded = expandedIds.has(log.id);
+                    return (
+                        <div 
+                            key={log.id} 
+                            className={`bg-white rounded-lg shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-1 ring-blue-500 border-blue-500' : 'hover:border-gray-300'}`}
+                        >
+                            <button
+                                onClick={() => toggleExpand(log.id)}
+                                className="w-full text-left px-4 py-3 sm:px-6 flex items-center justify-between gap-4 focus:outline-none"
+                            >
+                                <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                                    {/* Date */}
+                                    <div className="md:col-span-3 text-sm text-gray-500">
                                         {new Date(log.createdAt).toLocaleString()}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-900">{log.residentName || '-'}</div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                    </div>
+                                    
+                                    {/* Resident */}
+                                    <div className="md:col-span-3">
+                                        <div className="text-sm font-medium text-gray-900 truncate">
+                                            {log.residentName || 'Unknown Resident'}
+                                        </div>
+                                    </div>
+
+                                    {/* Template */}
+                                    <div className="md:col-span-3">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                            log.template === 'daily_activities' 
+                                            ? 'bg-purple-100 text-purple-800'
+                                            : 'bg-blue-100 text-blue-800'
+                                        }`}>
                                             {log.template
                                                 ?.replace(/_/g, ' ')
                                                 .replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Log'}
                                         </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-gray-700 max-w-md break-words">
-                                        {/* We can pass empty array for templates if we don't have them, 
-                                            it will fall back to key-value display which is acceptable */}
-                                        {formatLogContent(log.content, log.template, [])}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    </div>
+
+                                    {/* Author (Desktop only usually, but responsive grid) */}
+                                    <div className="hidden md:block md:col-span-3 text-sm text-gray-500 truncate">
                                         {log.authorName || 'Unknown'}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                            {log.residentLocation || '-'}
-                                        </span>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
+                                    </div>
+                                </div>
+
+                                {/* Arrow Icon */}
+                                <div className="ml-2 flex-shrink-0 text-gray-400">
+                                    <svg 
+                                        className={`h-5 w-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
+                                        viewBox="0 0 20 20" 
+                                        fill="currentColor"
+                                    >
+                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                    </svg>
+                                </div>
+                            </button>
+
+                            {/* Expanded Content */}
+                            {isExpanded && (
+                                <div className="border-t px-4 py-4 sm:px-6 bg-gray-50 rounded-b-lg">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="col-span-2 md:col-span-1">
+                                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                                Content
+                                            </h4>
+                                            <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
+                                                {formatLogContent(log.content, log.template, [])}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div>
+                                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+                                                    Details
+                                                </h4>
+                                                <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm">
+                                                    <div className="flex justify-between">
+                                                        <dt className="text-gray-500">Author:</dt>
+                                                        <dd className="font-medium text-gray-900">{log.authorName || 'Unknown'}</dd>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <dt className="text-gray-500">Location:</dt>
+                                                        <dd className="font-medium text-gray-900">{log.residentLocation || '-'}</dd>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <dt className="text-gray-500">Log ID:</dt>
+                                                        <dd className="font-mono text-xs text-gray-400">{log.id.substring(0, 8)}...</dd>
+                                                    </div>
+                                                </dl>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })
+            )}
         </div>
     );
 }
