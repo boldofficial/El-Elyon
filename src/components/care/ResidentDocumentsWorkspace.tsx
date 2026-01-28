@@ -228,7 +228,7 @@ export default function ResidentDocuments({ residentId }: { residentId: string }
                 <div key={doc.id} className="flex items-center justify-between p-4 bg-white border rounded shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-start gap-3">
                         <div className="text-2xl">
-                            {doc.contentType.includes('pdf') ? '📄' : doc.contentType.includes('image') ? '🖼️' : '📁'}
+                            {(doc.contentType || '').includes('pdf') ? '📄' : (doc.contentType || '').includes('image') ? '🖼️' : '📁'}
                         </div>
                         <div>
                             <h4 className="font-semibold text-gray-900">{doc.title}</h4>
