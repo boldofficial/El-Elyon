@@ -175,7 +175,7 @@ export default function CareLogsWorkspace() {
 				</div>
 			</div>
 
-			<div className="bg-white rounded-lg shadow-sm border overflow-hidden min-h-[400px]">
+			<div className="bg-white rounded-lg shadow-sm border overflow-hidden min-h-[400pxx]">
 				{loading ? (
 					<div className="flex flex-col items-center justify-center p-12">
 						<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>

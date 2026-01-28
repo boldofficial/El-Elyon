@@ -2,6 +2,7 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
+import SharedLogsTable from '../care/SharedLogsTable';
 
 interface AdminDashboardProps {
 	onNavigate: (view: string) => void;
@@ -129,57 +130,7 @@ export default function AdminDashboard({onNavigate}: AdminDashboardProps) {
 		.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
 		.slice(0, 3);
 
-	const formatLogContent = (content: string, template: string) => {
-		try {
-			const parsed = JSON.parse(content);
-			if (template === 'daily_notes') {
-				return `Mood: ${parsed.mood || 'N/A'}, Activities: ${
-					parsed.activities || 'N/A'
-				}`;
-			} else if (template === 'incident_report') {
-				return `${parsed.incident_type || 'Incident'}: ${
-					parsed.description || 'No description'
-				}`;
-			} else if (template === 'medication_log') {
-				return `${parsed.medication || 'Medication'} - ${
-					parsed.dosage || 'N/A'
-				}`;
-			}
-			return content.substring(0, 100) + (content.length > 100 ? '...' : '');
-		} catch {
-			return content.substring(0, 100) + (content.length > 100 ? '...' : '');
-		}
-	};
 
-	const getTemplateIcon = (template: string) => {
-		switch (template) {
-			case 'daily_notes':
-				return '📝';
-			case 'incident_report':
-				return '⚠️';
-			case 'medication_log':
-				return '💊';
-			case 'care_plan_update':
-				return '📋';
-			default:
-				return '📄';
-		}
-	};
-
-	const getTemplateColor = (template: string) => {
-		switch (template) {
-			case 'daily_notes':
-				return 'bg-blue-100 text-blue-800';
-			case 'incident_report':
-				return 'bg-red-100 text-red-800';
-			case 'medication_log':
-				return 'bg-green-100 text-green-800';
-			case 'care_plan_update':
-				return 'bg-purple-100 text-purple-800';
-			default:
-				return 'bg-gray-100 text-gray-800';
-		}
-	};
 
 	if (loading) {
 		return (
@@ -268,49 +219,7 @@ export default function AdminDashboard({onNavigate}: AdminDashboardProps) {
 								No recent care logs
 							</p>
 						) : (
-							<div className="space-y-4">
-								{recentLogs.slice(0, 5).map((log, index) => (
-									<div
-										key={`${log._id}-${log._creationTime}-${index}`}
-										className="border-l-4 border-blue-200 pl-4"
-									>
-										<div className="flex items-start justify-between">
-											<div className="flex-1">
-												<div className="flex items-center gap-2 mb-1">
-													<span className="text-lg">
-														{getTemplateIcon(log.template || '')}
-													</span>
-													<span
-														className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getTemplateColor(
-															log.template || ''
-														)}`}
-													>
-														{log.template
-															?.replace(/_/g, ' ')
-															.replace(/\b\w/g, (l: string) => l.toUpperCase()) ||
-															'Unknown'}
-													</span>
-												</div>
-												<p className="font-medium text-sm">Resident Log</p>
-												<p className="text-xs text-gray-600 mb-2">
-													{log.location || 'Unknown'}
-												</p>
-												<p className="text-sm text-gray-700">
-													{formatLogContent(log.content, log.template || '')}
-												</p>
-											</div>
-											<div className="text-right ml-4">
-												<p className="text-xs text-gray-500">Staff</p>
-												<p className="text-xs text-gray-400">
-													{new Date(
-														log.createdAt || log._creationTime
-													).toLocaleDateString()}
-												</p>
-											</div>
-										</div>
-									</div>
-								))}
-							</div>
+							<SharedLogsTable logs={recentLogs.slice(0, 5)} />
 						)}
 					</div>
 				</div>

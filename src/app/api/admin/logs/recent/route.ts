@@ -11,14 +11,23 @@ export async function GET(req: NextRequest) {
 	try {
 		await requireRole(['admin']);
 
-		const limit = parseInt(req.nextUrl.searchParams.get('limit') || '50');
-
+		const logsCount = parseInt(req.nextUrl.searchParams.get('limit') || '50');
 		const logs = await db.query.residentLogs.findMany({
-			limit,
+			limit: logsCount,
 			orderBy: [desc(residentLogs.createdAt)],
+			with: {
+				resident: true,
+				activities: true,
+			},
 		});
 
-		return NextResponse.json(logs);
+		const formattedLogs = logs.map((log: any) => ({
+			...log,
+			residentName: log.resident?.name,
+			residentLocation: log.resident?.location,
+		}));
+
+		return NextResponse.json(formattedLogs);
 	} catch (error) {
 		console.error('Error getting recent logs:', error);
 		return NextResponse.json({error: 'Internal server error'}, {status: 500});
