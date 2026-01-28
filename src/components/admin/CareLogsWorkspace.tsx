@@ -2,6 +2,8 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
+import SharedLogsTable from '../care/SharedLogsTable';
+import SharedIncidentsAccordion from '../care/SharedIncidentsAccordion';
 
 export default function CareLogsWorkspace() {
 	const [activeTab, setActiveTab] = useState<'logs' | 'incidents'>('logs');
@@ -181,129 +183,10 @@ export default function CareLogsWorkspace() {
 					</div>
 				) : activeTab === 'logs' ? (
 					// LOGS VIEW
-					logs.length === 0 ? (
-						<div className="p-12 text-center text-gray-500">
-							No logs found matching your filters.
-						</div>
-					) : (
-						<div className="divide-y divide-gray-200">
-							{logs.map((log: any) => (
-								<div
-									key={log.id}
-									className="p-4 hover:bg-gray-50 transition-colors">
-									<div className="flex justify-between items-start mb-2">
-										<div className="flex items-center gap-2">
-											<span className="font-semibold text-gray-900">
-												{log.resident?.name || 'Unknown Resident'}
-											</span>
-											<span className="text-gray-300">•</span>
-											<span className="text-sm font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
-												{log.logType || 'General Log'}
-											</span>
-											{log.location && (
-												<>
-													<span className="text-gray-300">•</span>
-													<span className="text-xs text-gray-500 flex items-center gap-1">
-														📍 {log.location}
-													</span>
-												</>
-											)}
-										</div>
-										<span className="text-xs text-gray-500 whitespace-nowrap font-mono">
-											{new Date(log.createdAt).toLocaleString()}
-										</span>
-									</div>
-									
-									<p className="text-gray-700 text-sm whitespace-pre-wrap pl-1 border-l-2 border-gray-100 ml-1">
-										{log.content}
-									</p>
-									
-									{log.activities && log.activities.length > 0 && (
-										<div className="mt-3 flex flex-wrap gap-2 ml-1">
-											{log.activities.map((act: any) => (
-												<span
-													key={act.id}
-													className={`text-xs px-2 py-1 rounded-md border flex items-center gap-1.5 ${
-														act.completed
-															? 'bg-green-50 border-green-200 text-green-700'
-															: 'bg-yellow-50 border-yellow-200 text-yellow-700'
-													}`}>
-													{act.completed ? '✓' : '○'} {act.activityType}
-												</span>
-											))}
-										</div>
-									)}
-									
-									<div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
-										<span>By {log.authorName || 'Unknown'}</span>
-									</div>
-								</div>
-							))}
-						</div>
-					)
-				) : // INCIDENTS VIEW
-				incidents.length === 0 ? (
-					<div className="p-12 text-center text-gray-500">
-						No incident reports found.
-					</div>
+					<SharedLogsTable logs={logs} />
 				) : (
-					<table className="min-w-full divide-y divide-gray-200">
-						<thead className="bg-gray-50">
-							<tr>
-								<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-									Date
-								</th>
-								<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-									Resident
-								</th>
-								<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-									Type / Severity
-								</th>
-								<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-									Location
-								</th>
-								<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-									Description
-								</th>
-							</tr>
-						</thead>
-						<tbody className="bg-white divide-y divide-gray-200">
-							{incidents.map((inc: any) => (
-								<tr key={inc.id} className="hover:bg-gray-50 transition-colors">
-									<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-										{new Date(inc.incidentDate).toLocaleDateString()}
-									</td>
-									<td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-										{inc.resident?.name || 'Unknown'}
-									</td>
-									<td className="px-6 py-4 whitespace-nowrap">
-										<div className="text-sm text-gray-900 capitalize font-medium">
-											{inc.incidentType}
-										</div>
-										<span
-											className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full mt-1 ${
-												inc.severity === 'critical' ||
-												inc.severity === 'high'
-													? 'bg-red-100 text-red-800'
-													: inc.severity === 'medium'
-													? 'bg-yellow-100 text-yellow-800'
-													: 'bg-green-100 text-green-800'
-											}`}>
-											{inc.severity}
-										</span>
-									</td>
-									<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-										{inc.location}
-									</td>
-									<td
-										className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate cursor-help"
-										title={inc.description}>
-										{inc.description}
-									</td>
-								</tr>
-							))}
-						</tbody>
-					</table>
+					// INCIDENTS VIEW
+					<SharedIncidentsAccordion incidents={incidents} />
 				)}
 			</div>
 		</div>
