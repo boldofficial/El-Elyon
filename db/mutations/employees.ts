@@ -226,10 +226,60 @@ export async function createEmployee(
 			clerkUserId = newClerkUser.clerkUserId;
 			console.log('✅ New Clerk user created:', clerkUserId);
 		} catch (error) {
-			console.error('❌ Failed to create Clerk user:', error);
-			throw new Error(
-				`Failed to create employee account: ${error instanceof Error ? error.message : String(error)}`
-			);
+			// ✅ COMPREHENSIVE ERROR DEBUGGING
+			console.error('❌ Failed to create Clerk user - FULL ERROR DETAILS:');
+			console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+			
+			// Log the entire error object
+			console.error('📋 Full error object:', JSON.stringify(error, null, 2));
+			
+			// Log all error properties
+			if (error && typeof error === 'object') {
+				console.error('📋 Error keys:', Object.keys(error));
+				console.error('📋 Error type:', typeof error);
+				console.error('📋 Error constructor:', error.constructor?.name);
+			}
+			
+			// Check if it's a Clerk error with the errors array
+			if (error && typeof error === 'object' && 'errors' in error) {
+				const clerkError = error as any;
+				console.error('📋 Clerk error detected!');
+				console.error('📋 Clerk errors array:', JSON.stringify(clerkError.errors, null, 2));
+				console.error('📋 Clerk code:', clerkError.code);
+				console.error('📋 Clerk status:', clerkError.status);
+				console.error('📋 Clerk message:', clerkError.message);
+				console.error('📋 Clerk longMessage:', clerkError.longMessage);
+				console.error('📋 Clerk traceId:', clerkError.clerkTraceId);
+				
+				// Extract human-readable error messages
+				if (Array.isArray(clerkError.errors)) {
+					const errorMessages = clerkError.errors
+						.map((e: any) => {
+							console.error('  → Error item:', JSON.stringify(e, null, 2));
+							return e.message || e.long_message || e.code;
+						})
+						.filter(Boolean)
+						.join('; ');
+					
+					console.error('📋 Extracted error messages:', errorMessages);
+					console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+					
+					throw new Error(`Clerk validation error: ${errorMessages}`);
+				}
+			}
+			
+			// Log standard error properties
+			if (error instanceof Error) {
+				console.error('📋 Error.message:', error.message);
+				console.error('📋 Error.name:', error.name);
+				console.error('📋 Error.stack:', error.stack);
+			}
+			
+			console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+			
+			// Throw a cleaner error message
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			throw new Error(`Failed to create employee account: ${errorMessage}`);
 		}
 	}
 
