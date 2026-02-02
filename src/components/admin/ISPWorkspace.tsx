@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
+import { FileText, Upload, Download, Check, Trash2, X, AlertCircle } from "lucide-react";
 
 // Define interfaces for data structures
 interface ISPFile {
-  id: string; // Use 'id' instead of '_id' for consistency with Next.js API responses
+  id: string; 
   residentId: string;
   fileStorageId: string;
   fileName: string;
@@ -20,7 +21,8 @@ interface ISPFile {
   versionLabel: string;
   preparedBy?: string;
   activatedAt?: number;
-  url: string; // URL to download the file
+  uploadedBy?: string;
+  activatedBy?: string;
 }
 
 interface UserRole {
@@ -35,13 +37,21 @@ interface ISPWorkspaceProps {
 
 export default function ISPWorkspace({ residentId, residentName, onClose }: ISPWorkspaceProps) {
   const [showUploadForm, setShowUploadForm] = useState(false);
+  const [editingISP, setEditingISP] = useState<ISPFile | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [ispFiles, setIspFiles] = useState<ISPFile[]>([]);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [loadingData, setLoadingData] = useState(true);
+  
+  // Use a separate form state for editing to avoid conflicts
+  const [editForm, setEditForm] = useState({
+    versionLabel: "",
+    effectiveDate: "",
+    preparedBy: "",
+    notes: "",
+  });
 
   const [uploadForm, setUploadForm] = useState({
     versionLabel: "",
@@ -55,14 +65,21 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
     setLoadingData(true);
     try {
       const [ispFilesRes, userRoleRes] = await Promise.all([
-        fetch(`/api/supervisor/isps?residentId=${residentId}`),
+        fetch(`/api/care/isp-files?residentId=${residentId}`),
         fetch('/api/users/role'),
       ]);
 
+      if (!ispFilesRes.ok) throw new Error('Failed to fetch ISP files');
+      
       const ispFilesData: ISPFile[] = await ispFilesRes.json();
       const userRoleData: UserRole = await userRoleRes.json();
 
-      setIspFiles(ispFilesData);
+      // Sort by creation date descending
+      const sortedFiles = ispFilesData.sort((a, b) => 
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      setIspFiles(sortedFiles);
       setUserRole(userRoleData);
     } catch (error) {
       console.error('Error fetching ISP data:', error);
@@ -80,7 +97,6 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     const allowedTypes = [
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -92,7 +108,6 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
       return;
     }
 
-    // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast.error("File size must be less than 10MB");
       e.target.value = "";
@@ -112,16 +127,28 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
 
     setUploading(true);
     try {
-      // Step 1: Request upload URL and create ISP file metadata
-      const res = await fetch('/api/supervisor/isps', {
+      const formData = new FormData();
+      formData.append('file', uploadForm.file);
+      formData.append('fileType', 'isp-files');
+
+      const uploadRes = await fetch('/api/uploads', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        body: formData,
+      });
+
+      if (!uploadRes.ok) throw new Error("File upload failed");
+
+      const uploadData = await uploadRes.json();
+      const fileId = uploadData.fileId;
+
+      const res = await fetch('/api/care/isp-files', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           residentId,
           versionLabel: uploadForm.versionLabel.trim(),
           effectiveDate: new Date(uploadForm.effectiveDate).getTime(),
+          fileStorageId: fileId,
           fileName: uploadForm.file.name,
           fileSize: uploadForm.file.size,
           contentType: uploadForm.file.type,
@@ -132,20 +159,7 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to prepare ISP upload");
-      }
-
-      const { uploadUrl } = await res.json(); // Assuming API returns uploadUrl
-
-      // Step 2: Upload file to the received URL
-      const uploadResult = await fetch(uploadUrl, {
-        method: "PUT", // Use PUT for direct S3/blob storage upload
-        headers: { "Content-Type": uploadForm.file.type },
-        body: uploadForm.file,
-      });
-
-      if (!uploadResult.ok) {
-        throw new Error("File upload failed");
+        throw new Error(errorData.error || "Failed to create ISP record");
       }
 
       toast.success("ISP file uploaded successfully");
@@ -157,53 +171,76 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
         notes: "",
         file: null,
       });
-      await fetchAllData(); // Refresh data
+      await fetchAllData();
     } catch (error: any) {
+      console.error("Upload error:", error);
       toast.error(error.message || "Upload failed");
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDownload = async (ispFileId: string, fileName: string) => {
-    setDownloadingId(ispFileId);
+  const startEditing = (file: ISPFile) => {
+      setEditingISP(file);
+      setEditForm({
+          versionLabel: file.versionLabel,
+          effectiveDate: new Date(file.effectiveDate).toISOString().split('T')[0],
+          preparedBy: file.preparedBy || "",
+          notes: file.notes || "",
+      });
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingISP) return;
+    
+    if (!editForm.versionLabel.trim() || !editForm.effectiveDate) {
+        toast.error("Please fill in all required fields");
+        return;
+    }
+
+    setUploading(true);
     try {
-      const res = await fetch(`/api/supervisor/isps/${ispFileId}/download`);
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to generate download URL');
-      }
-      const { downloadUrl } = await res.json();
-      
-      // Create a temporary link to download the file
-      const link = document.createElement("a");
-      link.href = downloadUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success("Download started");
+        const res = await fetch(`/api/care/isp-files`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                ispFileId: editingISP.id,
+                versionLabel: editForm.versionLabel.trim(),
+                effectiveDate: editForm.effectiveDate, // Backend expects string YYYY-MM-DD or parseable
+                preparedBy: editForm.preparedBy.trim() || undefined,
+                notes: editForm.notes.trim() || undefined,
+            }),
+        });
+
+        if (!res.ok) {
+            const errorData = await res.json();
+            throw new Error(errorData.error || 'Failed to update ISP file');
+        }
+
+        toast.success("ISP file updated successfully");
+        setEditingISP(null);
+        await fetchAllData();
     } catch (error: any) {
-      toast.error(error.message || "Download failed");
+        toast.error(error.message || "Update failed");
     } finally {
-      setDownloadingId(null);
+        setUploading(false);
     }
   };
 
+  const handleDownload = (fileStorageId: string) => {
+    window.open(`/api/uploads?fileId=${fileStorageId}`, '_blank');
+  };
+
   const handleActivate = async (ispFileId: string) => {
-    if (!window.confirm("Are you sure you want to activate this ISP version? This will archive the current active version.")) {
-      return;
-    }
+    if (!window.confirm("Are you sure you want to activate this ISP version?")) return;
 
     setActivatingId(ispFileId);
     try {
-      const res = await fetch(`/api/supervisor/isps/${ispFileId}/publish`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}), // No specific body needed for this API
+      const res = await fetch(`/api/care/isp-files`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ispFileId }), 
       });
 
       if (!res.ok) {
@@ -212,7 +249,7 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
       }
 
       toast.success("ISP file activated successfully");
-      await fetchAllData(); // Refresh data
+      await fetchAllData();
     } catch (error: any) {
       toast.error(error.message || "Activation failed");
     } finally {
@@ -221,14 +258,14 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
   };
 
   const handleDelete = async (ispFileId: string) => {
-    if (!window.confirm("Are you sure you want to delete this ISP file? This action cannot be undone.")) {
-      return;
-    }
+    if (!window.confirm("Are you sure you want to delete this ISP file? This action cannot be undone.")) return;
 
     setDeletingId(ispFileId);
     try {
-      const res = await fetch(`/api/supervisor/isps/${ispFileId}`, {
+      const res = await fetch(`/api/care/isp-files`, {
         method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ispFileId }) 
       });
 
       if (!res.ok) {
@@ -237,7 +274,7 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
       }
 
       toast.success("ISP file deleted successfully");
-      await fetchAllData(); // Refresh data
+      await fetchAllData();
     } catch (error: any) {
       toast.error(error.message || "Delete failed");
     } finally {
@@ -245,246 +282,312 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
     }
   };
 
+  const canEdit = userRole?.role === "admin" || userRole?.role === "supervisor";
   const canActivate = userRole?.role === "admin" || userRole?.role === "supervisor";
   const canDelete = userRole?.role === "admin";
 
+  const activeISP = ispFiles.find(f => f.status === 'active');
+  const otherISPs = ispFiles.filter(f => f.status !== 'active');
+
+  // Styles
+  const inputClass = "flex h-9 w-full rounded-md border border-gray-300 bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50";
+  const btnPrimary = "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-blue-600 text-white shadow hover:bg-blue-700 h-9 px-4 py-2";
+  const btnSecondary = "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-gray-200 bg-white shadow-sm hover:bg-gray-100 hover:text-gray-900 h-9 px-4 py-2";
+  const btnDestructive = "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 border border-red-200 bg-white text-red-600 shadow-sm hover:bg-red-50 h-8 px-3 text-xs";
+
   if (loadingData) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading ISP files...</p>
+      <div className="flex h-[300px] w-full items-center justify-center text-sm text-gray-500">
+        <div className="flex flex-col items-center gap-2">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <p>Loading ISP data...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6 h-full max-h-[80vh] overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between border-b pb-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">ISP Files for {residentName}</h2>
-          <p className="text-gray-600">Individual Service Plans</p>
+          <h2 className="text-xl font-semibold leading-none tracking-tight">ISP Management</h2>
+          <p className="text-sm text-gray-500 mt-1.5">Manage Individual Service Plans for {residentName}</p>
         </div>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setShowUploadForm(!showUploadForm)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-          >
-            {showUploadForm ? "Cancel" : "Upload ISP (Draft)"}
-          </button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Close
+        <div className="flex items-center gap-2">
+            {!showUploadForm && !editingISP && (
+                <button
+                    onClick={() => setShowUploadForm(true)}
+                    className={btnPrimary}
+                >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload New ISP
+                </button>
+            )}
+          <button onClick={onClose} className="rounded-full p-1.5 hover:bg-gray-100 transition-colors">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
           </button>
         </div>
       </div>
 
-      {/* Upload Form */}
-      {showUploadForm && (
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-          <h3 className="text-lg font-semibold mb-4">Upload New ISP File</h3>
-          <form onSubmit={(e) => void handleUpload(e)} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="version-label" className="block text-sm font-medium text-gray-700 mb-2">
-                  Version Label *
-                </label>
-                <input
-                  id="version-label"
-                  type="text"
-                  value={uploadForm.versionLabel}
-                  onChange={(e) => setUploadForm(prev => ({ ...prev, versionLabel: e.target.value }))}
-                  placeholder="e.g., 2024-Q1, Annual Review 2024"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="effective-date" className="block text-sm font-medium text-gray-700 mb-2">
-                  Effective Date *
-                </label>
-                <input
-                  id="effective-date"
-                  type="date"
-                  value={uploadForm.effectiveDate}
-                  onChange={(e) => setUploadForm(prev => ({ ...prev, effectiveDate: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="prepared-by" className="block text-sm font-medium text-gray-700 mb-2">
-                Prepared By (Optional)
-              </label>
-              <input
-                id="prepared-by"
-                type="text"
-                value={uploadForm.preparedBy}
-                onChange={(e) => setUploadForm(prev => ({ ...prev, preparedBy: e.target.value }))}
-                placeholder="Name of person who prepared this ISP"
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="admin-notes" className="block text-sm font-medium text-gray-700 mb-2">
-                Administrative Notes (Optional)
-              </label>
-              <textarea
-                id="admin-notes"
-                value={uploadForm.notes}
-                onChange={(e) => setUploadForm(prev => ({ ...prev, notes: e.target.value }))}
-                placeholder="Administrative notes (NO personal health information)"
-                rows={3}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-red-600 mt-1">
-                ⚠️ Do not include any personal health information in notes
-              </p>
-            </div>
-
-            <div>
-              <label htmlFor="isp-file" className="block text-sm font-medium text-gray-700 mb-2">
-                ISP File (PDF or DOCX) *
-              </label>
-              <input
-                id="isp-file"
-                type="file"
-                accept=".pdf,.docx"
-                onChange={handleFileSelect}
-                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Only PDF and DOCX files are allowed. Maximum size: 10MB
-              </p>
-            </div>
-
-            <div className="flex justify-end space-x-3">
-              <button
-                type="button"
-                onClick={() => setShowUploadForm(false)}
-                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={uploading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {uploading ? "Uploading..." : "Upload ISP"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ISP Files List */}
-      <div className="bg-white rounded-lg shadow-sm border">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h3 className="text-lg font-semibold">ISP Files ({ispFiles.length})</h3>
-          <p className="text-sm text-gray-600">
-            All files are treated as Protected Health Information (PHI)
-          </p>
-        </div>
-
-        {ispFiles.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">
-            <div className="text-4xl mb-4">📋</div>
-            <p className="text-lg font-medium mb-2">No ISP files uploaded</p>
-            <p className="text-sm">Upload the first ISP file to get started</p>
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-200">
-            {ispFiles.map((file) => (
-              <div key={file.id} className="p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h4 className="text-lg font-medium text-gray-900">
-                        {file.versionLabel}
-                      </h4>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        file.status === "active" 
-                          ? "bg-green-100 text-green-800" 
-                          : file.status === "draft"
-                          ? "bg-yellow-100 text-yellow-800"
-                          : "bg-gray-100 text-gray-800"
-                      }`}>
-                        {file.status.charAt(0).toUpperCase() + file.status.slice(1)}
-                      </span>
-                    </div>
-                    
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <div className="flex items-center space-x-4">
-                        <span>
-                          <span className="font-medium">Effective:</span> {new Date(file.effectiveDate).toLocaleDateString()}
-                        </span>
-                        <span>
-                          <span className="font-medium">Size:</span> {Math.round(file.fileSize / 1024)} KB
-                        </span>
-                        <span>
-                          <span className="font-medium">Type:</span> {file.contentType.includes('pdf') ? 'PDF' : 'DOCX'}
-                        </span>
-                      </div>
-                      {file.preparedBy && (
-                        <div>
-                          <span className="font-medium">Prepared by:</span> {file.preparedBy}
-                        </div>
-                      )}
-                      <div>
-                        <span className="font-medium">Uploaded:</span> {new Date(file.createdAt).toLocaleDateString()}
-                      </div>
-                      {file.activatedAt && (
-                        <div>
-                          <span className="font-medium">Activated:</span> {new Date(file.activatedAt).toLocaleDateString()}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-col items-end space-y-2">
-                    <button
-                      onClick={() => void handleDownload(file.id, file.fileName)}
-                      disabled={downloadingId === file.id}
-                      className="px-3 py-1 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                      {downloadingId === file.id ? "Downloading..." : "Download"}
-                    </button>
-                    
-                    {canActivate && file.status === "draft" && (
-                      <button
-                        onClick={() => void handleActivate(file.id)}
-                        disabled={activatingId === file.id}
-                        className="px-3 py-1 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 transition-colors disabled:opacity-50"
-                      >
-                        {activatingId === file.id ? "Activating..." : "Activate"}
-                      </button>
-                    )}
-                    
-                    {canDelete && (
-                      <button
-                        onClick={() => void handleDelete(file.id)}
-                        disabled={deletingId === file.id}
-                        className="px-3 py-1 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 transition-colors disabled:opacity-50"
-                      >
-                        {deletingId === file.id ? "Deleting..." : "Delete"}
-                      </button>
-                    )}
-                  </div>
+      <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+        
+        {/* Upload Form */}
+        {showUploadForm && (
+            <div className="rounded-lg border bg-gray-50/50 p-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium">Upload New Document</h3>
+                    <button onClick={() => setShowUploadForm(false)} className="text-xs text-gray-500 hover:text-gray-900">Cancel</button>
                 </div>
-              </div>
-            ))}
-          </div>
+                <form onSubmit={(e) => void handleUpload(e)} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Version Label <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                className={inputClass}
+                                placeholder="e.g. 2024 Annual Review"
+                                value={uploadForm.versionLabel}
+                                onChange={e => setUploadForm({...uploadForm, versionLabel: e.target.value})}
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Effective Date <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="date"
+                                className={inputClass}
+                                value={uploadForm.effectiveDate}
+                                onChange={e => setUploadForm({...uploadForm, effectiveDate: e.target.value})}
+                                required
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                            ISP File (PDF/DOCX) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="file"
+                            accept=".pdf,.docx"
+                            className={inputClass}
+                            onChange={handleFileSelect}
+                            required
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                            Notes (Optional)
+                        </label>
+                        <textarea
+                            className="flex min-h-[60px] w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            placeholder="Administrative notes only. No PHI."
+                            value={uploadForm.notes}
+                            onChange={e => setUploadForm({...uploadForm, notes: e.target.value})}
+                        />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                        <button type="button" onClick={() => setShowUploadForm(false)} className={btnSecondary}>Cancel</button>
+                        <button type="submit" disabled={uploading} className={btnPrimary}>
+                            {uploading && <div className="mr-2 h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+                            Upload Document
+                        </button>
+                    </div>
+                </form>
+            </div>
+        )}
+
+        {/* Edit Form */}
+        {editingISP && (
+            <div className="rounded-lg border bg-blue-50/50 p-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-medium">Edit ISP Details</h3>
+                    <button onClick={() => setEditingISP(null)} className="text-xs text-gray-500 hover:text-gray-900">Cancel</button>
+                </div>
+                <form onSubmit={(e) => void handleUpdate(e)} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Version Label <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                className={inputClass}
+                                value={editForm.versionLabel}
+                                onChange={e => setEditForm({...editForm, versionLabel: e.target.value})}
+                                required
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                Effective Date <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="date"
+                                className={inputClass}
+                                value={editForm.effectiveDate}
+                                onChange={e => setEditForm({...editForm, effectiveDate: e.target.value})}
+                                required
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                        <label className="text-xs font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                            Notes (Optional)
+                        </label>
+                        <textarea
+                            className="flex min-h-[60px] w-full rounded-md border border-gray-300 bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-gray-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+                            value={editForm.notes}
+                            onChange={e => setEditForm({...editForm, notes: e.target.value})}
+                        />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2">
+                        <button type="button" onClick={() => setEditingISP(null)} className={btnSecondary}>Cancel</button>
+                        <button type="submit" disabled={uploading} className={btnPrimary}>
+                            {uploading && <div className="mr-2 h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+                            Save Changes
+                        </button>
+                    </div>
+                </form>
+            </div>
+        )}
+
+        {/* Active ISP Card */}
+        <div>
+            <h3 className="text-sm font-medium mb-3 text-gray-500 uppercase tracking-wider">Current Active Plan</h3>
+            {activeISP ? (
+                <div className="rounded-lg border bg-white p-4 shadow-sm flex items-start justify-between gap-4">
+                    <div className="flex gap-4">
+                        <div className="h-10 w-10 rounded bg-blue-50 flex items-center justify-center text-blue-600">
+                            <FileText className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h4 className="font-semibold text-gray-900">{activeISP.versionLabel}</h4>
+                                <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700 ring-1 ring-inset ring-green-600/20">
+                                    Active
+                                </span>
+                            </div>
+                            <div className="text-sm text-gray-500 mt-1 flex gap-4">
+                                <span>Effective: {new Date(activeISP.effectiveDate).toLocaleDateString()}</span>
+                                <span>Uploaded: {new Date(activeISP.createdAt).toLocaleDateString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => handleDownload(activeISP.fileStorageId)} className={btnSecondary}>
+                            <Download className="mr-2 h-4 w-4" />
+                            Download
+                        </button>
+                        {canEdit && (
+                            <button onClick={() => startEditing(activeISP)} className={btnSecondary} title="Edit Details">
+                                <FileText className="h-4 w-4" /> 
+                            </button>
+                        )}
+                        {canDelete && (
+                            <button 
+                                onClick={() => void handleDelete(activeISP.id)}
+                                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50"
+                                title="Delete Active ISP"
+                                disabled={deletingId === activeISP.id}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <div className="rounded-lg border border-dashed p-8 text-center bg-gray-50/50">
+                    <AlertCircle className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                    <p className="text-sm font-medium text-gray-900">No active ISP found</p>
+                    <p className="text-xs text-gray-500 mt-1">Upload a new plan or activate a draft below.</p>
+                </div>
+            )}
+        </div>
+
+        {/* History Table */}
+        {otherISPs.length > 0 && (
+            <div>
+                 <h3 className="text-sm font-medium mb-3 text-gray-500 uppercase tracking-wider">History & Drafts</h3>
+                 <div className="rounded-md border">
+                    <table className="w-full caption-bottom text-sm text-left">
+                        <thead className="[&_tr]:border-b">
+                            <tr className="border-b transition-colors hover:bg-gray-100/50 data-[state=selected]:bg-gray-100">
+                                <th className="h-10 px-4 align-middle font-medium text-gray-500">Version</th>
+                                <th className="h-10 px-4 align-middle font-medium text-gray-500">Status</th>
+                                <th className="h-10 px-4 align-middle font-medium text-gray-500">Date</th>
+                                <th className="h-10 px-4 align-middle font-medium text-gray-500 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="[&_tr:last-child]:border-0">
+                            {otherISPs.map((file) => (
+                                <tr key={file.id} className="border-b transition-colors hover:bg-gray-100/50">
+                                    <td className="p-4 align-middle font-medium">{file.versionLabel}</td>
+                                    <td className="p-4 align-middle">
+                                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                                            file.status === 'draft' ? 'bg-yellow-50 text-yellow-800 ring-yellow-600/20' : 'bg-gray-50 text-gray-600 ring-gray-500/10'
+                                        }`}>
+                                            {file.status === 'draft' ? 'Draft' : 'Archived'}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 align-middle text-gray-500">{new Date(file.createdAt).toLocaleDateString()}</td>
+                                    <td className="p-4 align-middle text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button 
+                                                onClick={() => handleDownload(file.fileStorageId)}
+                                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-900 hover:bg-gray-100"
+                                                title="Download"
+                                            >
+                                                <Download className="h-4 w-4" />
+                                            </button>
+                                            {canEdit && (
+                                                <button 
+                                                    onClick={() => startEditing(file)}
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-900 hover:bg-gray-100"
+                                                    title="Edit"
+                                                >
+                                                    <FileText className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                            {canActivate && file.status === 'draft' && (
+                                                <button 
+                                                    onClick={() => void handleActivate(file.id)}
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                                                    title="Activate"
+                                                    disabled={activatingId === file.id}
+                                                >
+                                                    <Check className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                            {canDelete && (
+                                                <button 
+                                                    onClick={() => void handleDelete(file.id)}
+                                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                                                    title="Delete"
+                                                    disabled={deletingId === file.id}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                 </div>
+            </div>
         )}
       </div>
     </div>
   );
 }
+

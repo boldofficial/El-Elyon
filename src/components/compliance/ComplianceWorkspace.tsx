@@ -431,27 +431,35 @@ export default function ComplianceWorkspace() {
 
 			{/* ISP Workspace Modal */}
 			{showISPWorkspace && (
-				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-					<div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+				<>
+					<div 
+						className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm duration-200 ease-in-out" 
+						onClick={() => setShowISPWorkspace(null)}
+					/>
+					<div className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-4xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-white p-6 shadow-lg duration-200 sm:rounded-xl">
 						<ISPWorkspace
 							residentId={showISPWorkspace.residentId}
 							residentName={showISPWorkspace.residentName}
 							onClose={() => setShowISPWorkspace(null)}
 						/>
 					</div>
-				</div>
+				</>
 			)}
 
 			{showFireEvacManagement && (
-				<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-					<div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+				<>
+					<div 
+						className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm duration-200 ease-in-out"
+						onClick={() => setShowFireEvacManagement(null)}
+					/>
+					<div className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-4xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-white p-6 shadow-lg duration-200 sm:rounded-xl">
 						<FireEvacManagement
 							residentId={showFireEvacManagement.residentId}
 							residentName={showFireEvacManagement.residentName}
 							onClose={() => setShowFireEvacManagement(null)}
 						/>
 					</div>
-				</div>
+				</>
 			)}
 		</div>
 	);

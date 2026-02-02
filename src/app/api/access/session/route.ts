@@ -3,6 +3,7 @@ import {NextResponse} from 'next/server';
 import {getUserByClerkId} from '@/db/queries/users';
 import {getEmployeeByClerkId} from '@/db/queries/employees';
 import {getRoleByClerkId} from '@/db/queries/roles';
+import {getAllLocations} from '@/db/queries/locations';
 
 export async function GET() {
 	try {
@@ -48,6 +49,14 @@ export async function GET() {
 			defaultRoute = '/care';
 		}
 
+		// Determine locations
+		let assignedLocations = role.locations || employee.locations || [];
+		
+		// If admin, give access to all locations
+		if (role.role === 'admin') {
+			assignedLocations = await getAllLocations();
+		}
+
 		// Check if this is a kiosk session (based on device assignment)
 		const isKiosk = employee.assignedDeviceId ? true : false;
 
@@ -60,7 +69,7 @@ export async function GET() {
 				email: user.email,
 			},
 			role: role.role,
-			locations: role.locations || employee.locations || [],
+			locations: assignedLocations,
 			defaultRoute,
 			employmentStatus: employee.employmentStatus,
 			assignedDeviceId: employee.assignedDeviceId,

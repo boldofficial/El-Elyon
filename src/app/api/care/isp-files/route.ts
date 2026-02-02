@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireCareAccess, requireAdminAccess, requireSupervisorAccess } from '@/lib/db-helpers';
+import { requireCareAccess, requireAdminAccess, requireAdminOrSupervisorAccess } from '@/lib/db-helpers';
 import {
   listISPFiles,
   createISPFile,
   activateISPFile,
   deleteISPFile,
+  updateISPFile,
 } from '@/db/mutations/isp';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 
@@ -19,11 +20,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const residentId = searchParams.get('residentId');
 
-    if (!residentId) {
-      return NextResponse.json({ error: 'Resident ID is required' }, { status: 400 });
-    }
-
-    const ispFiles = await listISPFiles(userId, residentId);
+    // Allow listing all files if residentId is not provided (handled by listISPFiles authorization)
+    const ispFiles = await listISPFiles(userId, residentId || undefined);
     return NextResponse.json(ispFiles);
   } catch (error: any) {
     console.error('Error listing ISP files:', error);
@@ -37,7 +35,7 @@ export async function POST(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    await requireSupervisorAccess(userId); // Only supervisors/admins can create/manage ISP files
+    await requireAdminOrSupervisorAccess(userId); // Only supervisors/admins can create/manage ISP files
 
     const {
       residentId,
@@ -94,7 +92,7 @@ export async function PUT(req: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-    await requireSupervisorAccess(userId); // Only supervisors/admins can activate ISP files
+    await requireAdminOrSupervisorAccess(userId); // Only supervisors/admins can activate ISP files
 
     const { ispFileId } = await req.json();
 
@@ -133,6 +131,33 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ message: 'ISP file deleted successfully' });
   } catch (error: any) {
     console.error('Error deleting ISP file:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    await requireAdminOrSupervisorAccess(userId); // Only supervisors/admins can edit ISP files
+
+    const { ispFileId, versionLabel, effectiveDate, notes, preparedBy } = await req.json();
+
+    if (!ispFileId) {
+      return NextResponse.json({ error: 'ISP File ID is required' }, { status: 400 });
+    }
+
+    const updatedISP = await updateISPFile(ispFileId, {
+      versionLabel,
+      effectiveDate,
+      notes,
+      preparedBy,
+    });
+    return NextResponse.json(updatedISP);
+  } catch (error: any) {
+    console.error('Error updating ISP file:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

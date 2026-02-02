@@ -141,8 +141,8 @@ export async function linkUserToEmployee(
 	return {success: true, role: roleToAssign, locations: locationsToAssign};
 }
 
-// Mutation: Create employee with Clerk account (admin only)
-// ✅ FIX: Skip admin check if this is the first admin being created
+// Mutation: Create employee with Clerk account (admin only, OR self-sync, OR first admin)
+// ✅ FIX: Skip admin check if this is the first admin being created OR if user is syncing themselves
 
 export async function createEmployee(
 	args: {
@@ -158,11 +158,18 @@ export async function createEmployee(
 	const admins = await checkForAdmins();
 	const isFirstAdmin = admins.length === 0;
 
-	// Only require admin access if NOT creating first admin
-	if (!isFirstAdmin) {
+	// ✅ FIX: Check if this is a self-sync (user creating their own employee record)
+	// This happens when a user logs in and their Clerk metadata has role/locations but no employee record exists
+	const clerkUser = await getClerkUser(adminClerkUserId);
+	const isSelfSync = clerkUser?.email === args.email;
+
+	// Only require admin access if NOT creating first admin AND NOT self-sync
+	if (!isFirstAdmin && !isSelfSync) {
 		await requireAdminAccess(adminClerkUserId);
-	} else {
+	} else if (isFirstAdmin) {
 		console.log('🎖️  Creating first admin - skipping admin check');
+	} else if (isSelfSync) {
+		console.log('✅ Self-sync allowed - user creating their own employee record');
 	}
 
 	// Check if employee with this email already exists
@@ -219,10 +226,60 @@ export async function createEmployee(
 			clerkUserId = newClerkUser.clerkUserId;
 			console.log('✅ New Clerk user created:', clerkUserId);
 		} catch (error) {
-			console.error('❌ Failed to create Clerk user:', error);
-			throw new Error(
-				`Failed to create employee account: ${error instanceof Error ? error.message : String(error)}`
-			);
+			// ✅ COMPREHENSIVE ERROR DEBUGGING
+			console.error('❌ Failed to create Clerk user - FULL ERROR DETAILS:');
+			console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+			
+			// Log the entire error object
+			console.error('📋 Full error object:', JSON.stringify(error, null, 2));
+			
+			// Log all error properties
+			if (error && typeof error === 'object') {
+				console.error('📋 Error keys:', Object.keys(error));
+				console.error('📋 Error type:', typeof error);
+				console.error('📋 Error constructor:', error.constructor?.name);
+			}
+			
+			// Check if it's a Clerk error with the errors array
+			if (error && typeof error === 'object' && 'errors' in error) {
+				const clerkError = error as any;
+				console.error('📋 Clerk error detected!');
+				console.error('📋 Clerk errors array:', JSON.stringify(clerkError.errors, null, 2));
+				console.error('📋 Clerk code:', clerkError.code);
+				console.error('📋 Clerk status:', clerkError.status);
+				console.error('📋 Clerk message:', clerkError.message);
+				console.error('📋 Clerk longMessage:', clerkError.longMessage);
+				console.error('📋 Clerk traceId:', clerkError.clerkTraceId);
+				
+				// Extract human-readable error messages
+				if (Array.isArray(clerkError.errors)) {
+					const errorMessages = clerkError.errors
+						.map((e: any) => {
+							console.error('  → Error item:', JSON.stringify(e, null, 2));
+							return e.message || e.long_message || e.code;
+						})
+						.filter(Boolean)
+						.join('; ');
+					
+					console.error('📋 Extracted error messages:', errorMessages);
+					console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+					
+					throw new Error(`Clerk validation error: ${errorMessages}`);
+				}
+			}
+			
+			// Log standard error properties
+			if (error instanceof Error) {
+				console.error('📋 Error.message:', error.message);
+				console.error('📋 Error.name:', error.name);
+				console.error('📋 Error.stack:', error.stack);
+			}
+			
+			console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+			
+			// Throw a cleaner error message
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			throw new Error(`Failed to create employee account: ${errorMessage}`);
 		}
 	}
 
@@ -317,7 +374,7 @@ export async function createEmployee(
 	};
 }
 
-// Mutation: Update employee (admin only)
+// Mutation: Update employee (admin only, OR self-update during sync)
 export async function updateEmployee(
 	args: {
 		employeeId: string;
@@ -337,12 +394,18 @@ export async function updateEmployee(
 	},
 	clerkUserId: string
 ) {
-	await requireAdminAccess(clerkUserId);
-
 	const employee = await db.query.employees.findFirst({
 		where: eq(employees.id, args.employeeId),
 	});
 	if (!employee) throw new Error('Employee not found');
+
+	// ✅ CRITICAL FIX: Allow self-updates during sync (user updating their own record)
+	const isSelfUpdate = employee.clerkUserId === clerkUserId;
+	if (!isSelfUpdate) {
+		await requireAdminAccess(clerkUserId);
+	} else {
+		console.log('✅ Self-update allowed for user:', clerkUserId);
+	}
 
 	await db
 		.update(employees)

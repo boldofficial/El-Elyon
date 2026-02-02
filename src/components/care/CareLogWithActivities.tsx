@@ -27,6 +27,7 @@ interface ResidentLog {
 	residentId: string;
 	content: string;
 	createdAt: string;
+	template?: string; // Add template field
 	// other fields you might fetch
 }
 
@@ -77,8 +78,9 @@ export default function CareLogWithActivities({
 
 				let latestLog: ResidentLog | undefined;
 				if (logs.length > 0) {
-					// Assuming the API returns logs sorted by creation, take the first one (most recent)
-					latestLog = logs[0];
+					// Find the latest log that matches the 'daily_activities' template
+                    // This prevents picking up 'daily_notes' (JSON) logs or other types
+					latestLog = logs.find(l => l.template === 'daily_activities');
 				}
 
 				if (latestLog) {

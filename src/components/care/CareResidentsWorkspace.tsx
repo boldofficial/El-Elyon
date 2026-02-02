@@ -3,6 +3,7 @@
 'use client';
 
 import React, {useState, useEffect} from 'react';
+import SharedLogsTable from './SharedLogsTable';
 
 interface CareResidentsWorkspaceProps {
 	onResidentSelect?: (resident: any) => void;
@@ -169,32 +170,7 @@ export default function CareResidentsWorkspace({
 						<div className="border-t pt-4">
 							<h3 className="font-semibold text-gray-900 mb-2">Recent Logs</h3>
 							{residentLogs && residentLogs.length > 0 ? (
-								<div className="space-y-2">
-									{residentLogs.map((log: any) => (
-										<div key={log.id} className="bg-gray-50 rounded-lg p-3">
-											<div className="flex justify-between items-start">
-												<div className="flex-1">
-													<p className="text-sm font-medium text-gray-900">
-														{log.template
-															?.replace(/_/g, ' ')
-															.replace(/\b\w/g, (l: string) => l.toUpperCase())}
-													</p>
-													<p className="text-sm text-gray-600 mt-1">
-														By: {log.authorName}
-													</p>
-													<p className="text-sm text-gray-600 mt-1 line-clamp-2">
-														{log.content.length > 100
-															? log.content.substring(0, 100) + '...'
-															: log.content}
-													</p>
-												</div>
-												<div className="text-xs text-gray-500 ml-4">
-													{new Date(log.createdAt).toLocaleDateString()}
-												</div>
-											</div>
-										</div>
-									))}
-								</div>
+								<SharedLogsTable logs={residentLogs} />
 							) : (
 								<p className="text-gray-500 text-sm">No recent logs</p>
 							)}

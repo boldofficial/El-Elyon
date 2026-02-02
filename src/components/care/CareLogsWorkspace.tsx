@@ -2,6 +2,7 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
+import SharedLogsTable from './SharedLogsTable';
 
 export default function CareLogsWorkspace() {
 	const [activeTab, setActiveTab] = useState<'create' | 'view' | 'search'>(
@@ -24,23 +25,26 @@ export default function CareLogsWorkspace() {
 	const [recentLogs, setRecentLogs] = useState<any[]>([]);
 	const [logsSummary, setLogsSummary] = useState<any>(null);
 	const [searchResults, setSearchResults] = useState<any[]>([]);
+	const [currentUser, setCurrentUser] = useState<any>(null);
 
 	// Fetch initial data
 	useEffect(() => {
 		async function fetchData() {
 			try {
-				const [residentsRes, templatesRes, logsRes, summaryRes] =
+				const [residentsRes, templatesRes, logsRes, summaryRes, userRes] =
 					await Promise.all([
 						fetch('/api/care/residents'),
 						fetch('/api/care/log-templates'),
 						fetch('/api/care/resident-logs?limit=20'),
 						fetch('/api/care/logs-summary'),
+						fetch('/api/users/current'),
 					]);
 
 				setResidents(await residentsRes.json());
 				setTemplates(await templatesRes.json());
 				setRecentLogs(await logsRes.json());
 				setLogsSummary(await summaryRes.json());
+				setCurrentUser(await userRes.json());
 			} catch (error) {
 				console.error('Error fetching logs data:', error);
 			}
@@ -134,24 +138,9 @@ export default function CareLogsWorkspace() {
 		}
 	};
 
-	const formatLogContent = (content: string, template: string | undefined) => {
-		try {
-			const parsed = JSON.parse(content);
-			const templateData = templates.find((t) => t.id === template);
 
-			if (!templateData) return content;
 
-			return templateData.fields
-				.map((field: any) => {
-					const value = parsed[field.name] || 'Not specified';
-					return `${field.label}: ${value}`;
-				})
-				.join('\n');
-		} catch {
-			return content;
-		}
-	};
-
+    // Removed local LogsTable and formatLogContent as they are now shared
 	const renderCreateTab = () => (
 		<div className="space-y-6">
 			<div className="bg-white rounded-lg shadow-sm border p-6">
@@ -385,67 +374,7 @@ export default function CareLogsWorkspace() {
 				</div>
 			)}
 
-			<div className="bg-white rounded-lg shadow-sm border">
-				<div className="px-6 py-4 border-b border-gray-200">
-					<h3 className="text-lg font-semibold">Recent Log Entries</h3>
-					<p className="text-sm text-gray-600">
-						All logs from your accessible locations
-					</p>
-				</div>
-
-				<div className="divide-y divide-gray-200">
-					{!recentLogs || recentLogs.length === 0 ? (
-						<div className="p-8 text-center text-gray-500">
-							<div className="text-4xl mb-4">📝</div>
-							<p className="text-lg font-medium mb-2">No logs found</p>
-							<p className="text-sm">
-								Log entries will appear here once created
-							</p>
-						</div>
-					) : (
-						recentLogs.map((log) => (
-							<div key={log.id} className="p-6">
-								<div className="flex items-start justify-between">
-									<div className="flex-1">
-										<div className="flex items-center space-x-3 mb-2">
-											<h4 className="text-lg font-medium text-gray-900">
-												{log.residentName}
-											</h4>
-											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-												{log.template
-													?.replace(/_/g, ' ')
-													.replace(/\b\w/g, (l: string) => l.toUpperCase()) ||
-													'Unknown'}
-											</span>
-											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-												{log.residentLocation}
-											</span>
-										</div>
-
-										<div className="text-sm text-gray-600 mb-3">
-											<div className="flex items-center space-x-4">
-												<span>By: {log.authorName}</span>
-												<span>Version: {log.version}</span>
-												<span>
-													{log.createdAt
-														? new Date(log.createdAt).toLocaleString()
-														: 'Unknown date'}
-												</span>
-											</div>
-										</div>
-
-										<div className="bg-gray-50 rounded-lg p-3">
-											<pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
-												{formatLogContent(log.content, log.template)}
-											</pre>
-										</div>
-									</div>
-								</div>
-							</div>
-						))
-					)}
-				</div>
-			</div>
+            <SharedLogsTable logs={recentLogs} />
 		</div>
 	);
 
@@ -555,67 +484,12 @@ export default function CareLogsWorkspace() {
 				</div>
 			</div>
 
-			<div className="bg-white rounded-lg shadow-sm border">
-				<div className="px-6 py-4 border-b border-gray-200">
-					<h3 className="text-lg font-semibold">Search Results</h3>
-					{searchResults && (
-						<p className="text-sm text-gray-600">
-							{searchResults.length} logs found
-						</p>
-					)}
-				</div>
-
-				<div className="divide-y divide-gray-200">
-					{!searchResults || searchResults.length === 0 ? (
-						<div className="p-8 text-center text-gray-500">
-							<div className="text-4xl mb-4">🔍</div>
-							<p className="text-lg font-medium mb-2">No results found</p>
-							<p className="text-sm">Try adjusting your search criteria</p>
-						</div>
-					) : (
-						searchResults.map((log) => (
-							<div key={log.id} className="p-6">
-								<div className="flex items-start justify-between">
-									<div className="flex-1">
-										<div className="flex items-center space-x-3 mb-2">
-											<h4 className="text-lg font-medium text-gray-900">
-												{log.residentName}
-											</h4>
-											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-												{log.template
-													?.replace(/_/g, ' ')
-													.replace(/\b\w/g, (l: string) => l.toUpperCase()) ||
-													'Unknown'}
-											</span>
-											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-												{log.residentLocation}
-											</span>
-										</div>
-
-										<div className="text-sm text-gray-600 mb-3">
-											<div className="flex items-center space-x-4">
-												<span>By: {log.authorName}</span>
-												<span>Version: {log.version}</span>
-												<span>
-													{log.createdAt
-														? new Date(log.createdAt).toLocaleString()
-														: 'Unknown date'}
-												</span>
-											</div>
-										</div>
-
-										<div className="bg-gray-50 rounded-lg p-3">
-											<pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">
-												{formatLogContent(log.content, log.template)}
-											</pre>
-										</div>
-									</div>
-								</div>
-							</div>
-						))
-					)}
-				</div>
-			</div>
+            {searchResults && searchResults.length > 0 && (
+                <div className="mb-2 text-sm text-gray-600">
+                    {searchResults.length} logs found
+                </div>
+            )}
+            <SharedLogsTable logs={searchResults || []} />
 		</div>
 	);
 
@@ -632,7 +506,9 @@ export default function CareLogsWorkspace() {
 				<nav className="-mb-px flex space-x-8">
 					{[
 						{id: 'view', label: 'View Logs', icon: '👁️'},
-						{id: 'create', label: 'Create Log', icon: '✏️'},
+						...(currentUser?.role !== 'admin' 
+							? [{id: 'create', label: 'Create Log', icon: '✏️'}] 
+							: []),
 						{id: 'search', label: 'Search', icon: '🔍'},
 					].map((tab) => (
 						<button

@@ -53,30 +53,22 @@ export default function EmployeeTrainingManagement({
 
 	const handleCertificateUpload = async (file: File) => {
 		setUploading('certificate');
+		const formData = new FormData();
+		formData.append('file', file);
+		formData.append('fileType', 'training_certificates');
+
 		try {
-			const urlResponse = await fetch('/api/hr/generate-upload-url', {
+			const res = await fetch('/api/uploads', {
 				method: 'POST',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify({
-					filename: file.name,
-					contentType: file.type,
-					fileType: 'training_certificates',
-				}),
+				body: formData,
 			});
 
-			if (!urlResponse.ok) throw new Error('Failed to get upload URL');
-			const {uploadUrl, fileKey} = await urlResponse.json();
-
-			const uploadResponse = await fetch(uploadUrl, {
-				method: 'PUT',
-				body: file,
-				headers: {'Content-Type': file.type},
-			});
-
-			if (!uploadResponse.ok) throw new Error('Failed to upload file');
+			if (!res.ok) throw new Error('Failed to upload file');
+			
+			const data = await res.json();
 
 			toast.success('Certificate uploaded successfully');
-			return fileKey;
+			return data.fileId;
 		} catch (error) {
 			console.error('Upload error:', error);
 			toast.error('Failed to upload certificate');
@@ -86,17 +78,8 @@ export default function EmployeeTrainingManagement({
 		}
 	};
 
-	const handleDownloadCertificate = async (fileKey: string) => {
-		try {
-			const res = await fetch(`/api/hr/download-url?fileKey=${fileKey}`);
-			if (!res.ok) throw new Error('Failed to get download URL');
-
-			const {downloadUrl} = await res.json();
-			window.open(downloadUrl, '_blank');
-		} catch (error) {
-			console.error('Download error:', error);
-			toast.error('Failed to download certificate');
-		}
+	const handleDownloadCertificate = (fileKey: string) => {
+		window.open(`/api/uploads?fileId=${fileKey}`, '_blank');
 	};
 
 	useEffect(() => {

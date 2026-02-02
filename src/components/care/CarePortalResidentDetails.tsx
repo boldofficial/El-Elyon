@@ -4,6 +4,7 @@
 
 import React, {useState, useEffect} from 'react';
 import CareLogWithActivities from './CareLogWithActivities';
+import ResidentActivityHistory from './ResidentActivityHistory';
 import IncidentReportForm from './IncidentReportForm';
 import IncidentReportsList from './IncidentReportsList';
 
@@ -19,7 +20,7 @@ interface Resident {
 	weight?: string;
 	height?: string;
 	hairColor?: string;
-	diagnostics?: string;
+	diagnosis?: string;
 	supportBroker?: string;
 	importantRelationships?: string;
 	fundingAgency?: string;
@@ -141,12 +142,12 @@ export default function CarePortalResidentDetails({
 					</p>
 				</div>
 
-				{(resident.diagnostics || resident.importantRelationships) && (
+				{(resident.diagnosis || resident.importantRelationships) && (
 					<div className="col-span-full border-t pt-4 mt-4">
-						{resident.diagnostics && (
+						{resident.diagnosis && (
 							<p className="mt-2">
-								<span className="font-medium">Diagnostics:</span>{' '}
-								{resident.diagnostics}
+								<span className="font-medium">Diagnosis:</span>{' '}
+								{resident.diagnosis}
 							</p>
 						)}
 						{resident.importantRelationships && (
@@ -240,9 +241,7 @@ export default function CarePortalResidentDetails({
 					)}
 
 					{activeTab === 'history' && (
-						<div className="text-center py-12 text-gray-500">
-							<p>Activity history coming soon...</p>
-						</div>
+						<ResidentActivityHistory residentId={resident.id} />
 					)}
 				</div>
 			</div>

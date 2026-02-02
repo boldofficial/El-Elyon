@@ -55,7 +55,15 @@ export async function createClerkUser(args: {
 	assignedDeviceId?: string;
 }) {
 	const client = await clerkClient();
-	const username = args.email.split('@')[0].toLowerCase();
+	
+	// ✅ FIX: Generate valid username by removing dots and special characters
+	// Clerk usernames can only contain letters, numbers, hyphens, and underscores
+	const username = args.email
+		.split('@')[0]
+		.toLowerCase()
+		.replace(/[^a-z0-9_-]/g, '_'); // Replace dots and other invalid chars with underscore
+	
+	console.log('🔐 Creating Clerk user with username:', username, 'for email:', args.email);
 
 	const user = await client.users.createUser({
 		emailAddress: [args.email],

@@ -32,15 +32,17 @@ export async function logAudit(args: {
 // Helper: Check if user has care access
 export async function requireCareAccess(clerkUserId: string) {
 	const userRole = await getUserRoleDoc(clerkUserId);
+	const role = userRole?.role?.toLowerCase() || '';
+	
 	if (
 		!userRole ||
-		!userRole.role ||
-		!['admin', 'supervisor', 'staff'].includes(userRole.role)
+		!role ||
+		!['admin', 'supervisor', 'staff'].includes(role)
 	) {
 		await logAudit({
 			clerkUserId: clerkUserId,
 			event: 'access_denied',
-			details: 'care_access_required',
+			details: `care_access_required_actual_${role}`,
 			deviceId: 'system',
 			location: '',
 		});
@@ -52,11 +54,13 @@ export async function requireCareAccess(clerkUserId: string) {
 // Helper: Check supervisor access
 export async function requireSupervisorAccess(clerkUserId: string) {
 	const userRole = await getUserRoleDoc(clerkUserId);
-	if (!userRole || !['admin', 'supervisor'].includes(userRole.role || '')) {
+	const role = userRole?.role?.toLowerCase() || '';
+	
+	if (!userRole || !['admin', 'supervisor'].includes(role)) {
 		await logAudit({
 			clerkUserId: clerkUserId,
 			event: 'access_denied',
-			details: 'supervisor_access_required',
+			details: `supervisor_access_required_actual_${role}`,
 			deviceId: 'system',
 			location: '',
 		});
@@ -68,11 +72,13 @@ export async function requireSupervisorAccess(clerkUserId: string) {
 // Helper: Check admin access
 export async function requireAdminAccess(clerkUserId: string) {
 	const userRole = await getUserRoleDoc(clerkUserId);
-	if (!userRole || userRole.role !== 'admin') {
+	const role = userRole?.role?.toLowerCase() || '';
+
+	if (!userRole || role !== 'admin') {
 		await logAudit({
 			clerkUserId: clerkUserId,
 			event: 'access_denied',
-			details: 'admin_access_required',
+			details: `admin_access_required_actual_${role}`,
 			deviceId: 'system',
 			location: '',
 		});
@@ -83,11 +89,13 @@ export async function requireAdminAccess(clerkUserId: string) {
 
 export async function requireAdminOrSupervisorAccess(clerkUserId: string) {
 	const userRole = await getUserRoleDoc(clerkUserId);
-	if (!userRole || !['admin', 'supervisor'].includes(userRole.role || '')) {
+	const role = userRole?.role?.toLowerCase() || '';
+
+	if (!userRole || !['admin', 'supervisor'].includes(role)) {
 		await logAudit({
 			clerkUserId: clerkUserId,
 			event: 'access_denied',
-			details: 'admin_or_supervisor_access_required',
+			details: `admin_or_supervisor_access_required_actual_${role}`,
 			deviceId: 'system',
 			location: '',
 		});

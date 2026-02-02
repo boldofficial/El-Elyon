@@ -11,6 +11,7 @@ import CareProfileWorkspace from './CareProfileWorkspace';
 import SupervisorComplianceWorkspace from '../supervisor/SupervisorComplianceWorkspace';
 import SupervisorTeamWorkspace from '../supervisor/SupervisorTeamWorkspace';
 import CarePortalResidentDetails from './CarePortalResidentDetails';
+import CareDocumentsWorkspace from './CareDocumentsWorkspace';
 
 export default function CarePortal() {
 	const [activeView, setActiveView] = useState('shift');
@@ -56,7 +57,19 @@ export default function CarePortal() {
 			icon: '🏠',
 			description: 'Location-scoped list',
 		},
-		{id: 'logs', label: 'Logs', icon: '📝', description: 'Create & view logs', hasNotification: true},
+        {
+            id: 'logs', 
+            label: 'Logs', 
+            icon: '📝', 
+            description: 'Create & view logs', 
+            hasNotification: true
+        },
+        {
+            id: 'documents',
+            label: 'Documents',
+            icon: '📁',
+            description: 'All resident docs',
+        },
 		{
 			id: 'profile',
 			label: 'My Profile',
@@ -128,6 +141,8 @@ export default function CarePortal() {
 				);
 			case 'logs':
 				return <CareLogsWorkspace />;
+			case 'documents':
+				return <CareDocumentsWorkspace />;
 			case 'profile':
 				return <CareProfileWorkspace />;
 			case 'team':
