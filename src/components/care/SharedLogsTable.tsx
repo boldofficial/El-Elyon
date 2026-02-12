@@ -83,13 +83,31 @@ export const formatLogContent = (content: string, template: string | undefined, 
 
 export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
     const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
+    const [activitiesById, setActivitiesById] = React.useState<Record<string, any[]>>({});
+    const [loadingActivities, setLoadingActivities] = React.useState<Record<string, boolean>>({});
 
-    const toggleExpand = (id: string) => {
+    const fetchActivitiesIfMissing = async (log: any) => {
+        if ((log.activities && log.activities.length > 0) || activitiesById[log.id]) return;
+        setLoadingActivities((prev) => ({...prev, [log.id]: true}));
+        try {
+            const res = await fetch(`/api/care/resident-logs/${log.id}/activities`);
+            if (!res.ok) return;
+            const activities = await res.json();
+            setActivitiesById((prev) => ({...prev, [log.id]: activities}));
+        } catch (_err) {
+            // Silent failure; we still show "No activities recorded"
+        } finally {
+            setLoadingActivities((prev) => ({...prev, [log.id]: false}));
+        }
+    };
+
+    const toggleExpand = (log: any) => {
         const newExpanded = new Set(expandedIds);
-        if (newExpanded.has(id)) {
-            newExpanded.delete(id);
+        if (newExpanded.has(log.id)) {
+            newExpanded.delete(log.id);
         } else {
-            newExpanded.add(id);
+            newExpanded.add(log.id);
+            fetchActivitiesIfMissing(log);
         }
         setExpandedIds(newExpanded);
     };
@@ -110,7 +128,7 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
                             className={`bg-white rounded-lg shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-1 ring-blue-500 border-blue-500' : 'hover:border-gray-300'}`}
                         >
                             <button
-                                onClick={() => toggleExpand(log.id)}
+                                onClick={() => toggleExpand(log)}
                                 className="w-full text-left px-4 py-3 sm:px-6 flex items-center justify-between gap-4 focus:outline-none"
                             >
                                 <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
@@ -161,12 +179,59 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
                             {isExpanded && (
                                 <div className="border-t px-4 py-4 sm:px-6 bg-gray-50 rounded-b-lg">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div className="col-span-2 md:col-span-1">
-                                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                                                Content
-                                            </h4>
-                                            <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
-                                                {formatLogContent(log.content, log.template, [])}
+                                        <div className="col-span-2 md:col-span-1 space-y-3">
+                                            <div>
+                                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                                    Content
+                                                </h4>
+                                                <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
+                                                    {formatLogContent(log.content, log.template, [])}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                                    Activities
+                                                </h4>
+                                                {(activitiesById[log.id] || log.activities || []).length > 0 ? (
+                                                    <ul className="space-y-2">
+                                                        {(activitiesById[log.id] || log.activities || [])
+                                                            // Only show activities that were completed or have notes; omit untouched ones
+                                                            .filter((activity: any) => activity.completed || (activity.notes && activity.notes.trim() !== ''))
+                                                            .map((activity: any) => (
+                                                            <li
+                                                                key={activity.id}
+                                                                className="flex items-start justify-between bg-white p-3 rounded border text-sm"
+                                                            >
+                                                                <div className="flex-1 pr-3">
+                                                                    <div className="font-medium text-gray-900">
+                                                                        {activity.activityType}
+                                                                    </div>
+                                                                    {activity.notes ? (
+                                                                        <div className="text-gray-600 mt-1 whitespace-pre-wrap">
+                                                                            {activity.notes}
+                                                                        </div>
+                                                                    ) : null}
+                                                                </div>
+                                                                <span
+                                                                    className={`px-2 py-1 rounded text-xs font-semibold ${
+                                                                        activity.completed
+                                                                            ? 'bg-green-100 text-green-800'
+                                                                            : 'bg-gray-100 text-gray-600'
+                                                                    }`}
+                                                                >
+                                                                    {activity.completed ? 'Done' : 'Pending'}
+                                                                </span>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                ) : (
+                                                    <div className="text-sm text-gray-500 bg-white p-3 rounded border">
+                                                        {loadingActivities[log.id]
+                                                            ? 'Loading activities...'
+                                                            : 'No activities recorded'}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 

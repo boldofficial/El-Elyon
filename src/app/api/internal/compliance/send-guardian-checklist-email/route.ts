@@ -4,7 +4,25 @@ import {sendGuardianChecklistEmail} from '@/lib/emails/guardian';
 
 export async function POST(req: NextRequest) {
 	try {
-		// TODO: Add internal API key authentication
+		// Verify internal API key
+		const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace('Bearer ', '');
+		const expectedKey = process.env.INTERNAL_API_KEY;
+
+		if (!expectedKey) {
+			return NextResponse.json(
+				{error: 'Internal API not configured'},
+				{status: 500}
+			);
+		}
+
+		if (apiKey !== expectedKey) {
+			console.log('🚨 Unauthorized internal API call to send-guardian-checklist-email');
+			return NextResponse.json(
+				{error: 'Unauthorized'},
+				{status: 401}
+			);
+		}
+
 		const {linkId, token} = await req.json();
 
 		if (!linkId || !token) {

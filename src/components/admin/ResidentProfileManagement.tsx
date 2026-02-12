@@ -4,6 +4,7 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
+import ResidentActivityHistory from '../care/ResidentActivityHistory';
 
 interface Resident {
 	id: string;
@@ -36,6 +37,7 @@ export default function ResidentProfileManagement({
 	const [resident, setResident] = useState<Resident | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
+	const [activeTab, setActiveTab] = useState<'profile' | 'logs'>('profile');
 
 	useEffect(() => {
 		async function fetchResident() {
@@ -101,7 +103,42 @@ export default function ResidentProfileManagement({
 
 	return (
 		<div className="space-y-6">
-			{/* Personal Information */}
+			{/* Tab Navigation */}
+			<div className="border-b border-gray-200">
+				<nav className="-mb-px flex space-x-8">
+					<button
+						onClick={() => setActiveTab('profile')}
+						className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+							activeTab === 'profile'
+								? 'border-blue-500 text-blue-600'
+								: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+						}`}>
+						Profile
+					</button>
+					<button
+						onClick={() => setActiveTab('logs')}
+						className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+							activeTab === 'logs'
+								? 'border-blue-500 text-blue-600'
+								: 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+						}`}>
+						Log History
+					</button>
+				</nav>
+			</div>
+
+			{/* Tab Content */}
+			{activeTab === 'logs' ? (
+				<div className="space-y-4">
+					<div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+						<h3 className="text-lg font-semibold text-blue-900 mb-2">📝 Log History</h3>
+						<p className="text-sm text-blue-800">View all logs for {resident.name}</p>
+					</div>
+					<ResidentActivityHistory residentId={residentId} />
+				</div>
+			) : (
+				<>
+					{/* Personal Information */}
 			<div className="bg-white rounded-lg shadow p-6">
 				<h2 className="text-xl font-bold mb-4">Personal Information</h2>
 				<div className="grid grid-cols-2 gap-4">
@@ -334,6 +371,8 @@ export default function ResidentProfileManagement({
 					{saving ? 'Saving...' : 'Save Changes'}
 				</button>
 			</div>
+				</>
+			)}
 		</div>
 	);
 }

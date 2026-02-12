@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireCareAccess, logAudit} from '../../../../lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {listResidentsByLocation, listAllResidents, getGuardianChecklistTemplates} from '../../../../db/queries/people';
 import {insertResident} from '../../../../db/mutations/people';
 import {insertGuardian} from '../../../../db/mutations/guardians';
@@ -31,15 +32,8 @@ export async function GET(request: Request) {
         }
 
         return NextResponse.json(residents);
-    } catch (error: any) {
-        await logAudit({
-            clerkUserId: userId,
-            event: 'GET_RESIDENTS_FAILED',
-            details: error.message,
-            deviceId: 'system', // Placeholder, actual deviceId might be passed in headers
-            location: '', // Placeholder, actual location might be passed in headers
-        });
-        return NextResponse.json({error: error.message}, {status: 500});
+    } catch (error) {
+        return internalServerError(error, 'GetPeopleResidents');
     }
 }
 
@@ -122,14 +116,7 @@ export async function POST(request: Request) {
             location: location, // Use provided location
         });
         return NextResponse.json({id: newResident.id}, {status: 201});
-    } catch (error: any) {
-        await logAudit({
-            clerkUserId: userId,
-            event: 'CREATE_RESIDENT_FAILED',
-            details: error.message,
-            deviceId: 'system', // Placeholder
-            location: '', // Placeholder
-        });
-        return NextResponse.json({error: error.message}, {status: 500});
+    } catch (error) {
+        return internalServerError(error, 'CreateResident');
     }
 }

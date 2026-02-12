@@ -317,36 +317,46 @@ export async function createEmployee(
 	// ✅ Fallback: If webhook failed, create manually
 	console.log("⚠️  Webhook didn't create employee, creating manually...");
 
-	const [newEmployee] = await db
-		.insert(employees)
-		.values({
-			name: args.name,
-			email: args.email,
-			workEmail: args.email,
-			role: args.role,
-			locations: args.locations,
-			assignedDeviceId: args.assignedDeviceId,
-			clerkUserId: clerkUserId,
-			createdAt: new Date(),
-			createdBy: adminClerkUserId,
-			employmentStatus: isFirstAdmin ? 'active' : 'pending',
-		})
-		.returning();
+	// Use transaction to ensure employee and role are created together
+	const {withTransaction} = await import('../index');
+	
+	const {newEmployee, newRole} = await withTransaction(async (tx) => {
+		const [employee] = await tx
+			.insert(employees)
+			.values({
+				name: args.name,
+				email: args.email,
+				workEmail: args.email,
+				role: args.role,
+				locations: args.locations,
+				assignedDeviceId: args.assignedDeviceId,
+				clerkUserId: clerkUserId,
+				createdAt: new Date(),
+				createdBy: adminClerkUserId,
+				employmentStatus: isFirstAdmin ? 'active' : 'pending',
+			})
+			.returning();
 
-	if (!newEmployee) {
-		throw new Error('Failed to create employee record');
-	}
+		if (!employee) {
+			throw new Error('Failed to create employee record');
+		}
 
-	// Create role record
-	await db.insert(roles).values({
-		clerkUserId,
-		role: args.role,
-		locations: args.locations,
-		assignedAt: new Date(),
-		assignedBy: adminClerkUserId,
+		// Create role record
+		const [role] = await tx
+			.insert(roles)
+			.values({
+				clerkUserId,
+				role: args.role,
+				locations: args.locations,
+				assignedAt: new Date(),
+				assignedBy: adminClerkUserId,
+			})
+			.returning();
+
+		return {newEmployee: employee, newRole: role};
 	});
 
-	// Log audit
+	// Log audit (outside transaction since it's non-critical)
 	await logAudit({
 		clerkUserId: adminClerkUserId,
 		event: 'create_employee',

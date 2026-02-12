@@ -3,6 +3,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireCareAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {getResidentIncidentReports} from '@/db/queries/incident-reports';
 // import {getClerkUser} from "@/lib/clerk";
 import {createIncidentReport} from '@/db/mutations/incident-reports';
@@ -24,9 +25,8 @@ export async function GET(
 		const reports = await getResidentIncidentReports(residentId, userId);
 
 		return NextResponse.json(reports);
-	} catch (error: any) {
-		console.error('Error fetching incident reports:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'GetResidentIncidents');
 	}
 }
 
@@ -69,8 +69,7 @@ export async function POST(
 		});
 
 		return NextResponse.json(report, {status: 201});
-	} catch (error: any) {
-		console.error('Error creating incident report:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'CreateIncidentReport');
 	}
 }

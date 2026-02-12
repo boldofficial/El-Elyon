@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {createEmployee, generateInviteLink} from '@/db/mutations/employees';
 import {getEmployeeByClerkId} from '@/db/queries/employees'; // Assuming this function exists
 
@@ -50,14 +51,7 @@ export async function POST(request: Request) {
             role,
             locations,
         }, {status: 201});
-    } catch (error: any) {
-        await logAudit({
-            clerkUserId: userId,
-            event: 'ONBOARD_EMPLOYEE_FAILED',
-            details: error.message,
-            deviceId: 'system', // Placeholder
-            location: '', // Placeholder
-        });
-        return NextResponse.json({error: error.message}, {status: 500});
+    } catch (error) {
+        return internalServerError(error, 'OnboardEmployee');
     }
 }

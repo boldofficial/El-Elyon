@@ -3,6 +3,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {
 	createEmployeeTraining,
 	updateEmployeeTraining,
@@ -33,9 +34,8 @@ export async function GET(
 		});
 
 		return NextResponse.json(trainings);
-	} catch (error: any) {
-		console.error('Error fetching employee trainings:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'GetEmployeeTrainings');
 	}
 }
 
@@ -77,9 +77,8 @@ export async function POST(
 		});
 
 		return NextResponse.json(newTraining, {status: 201});
-	} catch (error: any) {
-		console.error('Error creating employee training:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'CreateEmployeeTraining');
 	}
 }
 
@@ -142,9 +141,8 @@ export async function PATCH(
 		}
 
 		return NextResponse.json(updatedTraining);
-	} catch (error: any) {
-		console.error('Error updating employee training:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'UpdateEmployeeTraining');
 	}
 }
 
@@ -182,8 +180,7 @@ export async function DELETE(
 		});
 
 		return NextResponse.json({success: true});
-	} catch (error: any) {
-		console.error('Error deleting employee training:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'DeleteEmployeeTraining');
 	}
 }

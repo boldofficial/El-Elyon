@@ -41,7 +41,12 @@ interface CareLogWithActivitiesProps {
 }
 
 const COMMON_ACTIVITIES = [
-	'Took Meds',
+	'7 AM Meds',
+	'8 AM Meds',
+	'2 PM Meds',
+	'5 PM Meds',
+	'8 PM Meds',
+	'PRN Meds',
 	'Breakfast',
 	'Lunch',
 	'Dinner',
@@ -64,6 +69,24 @@ export default function CareLogWithActivities({
 	const [submitting, setSubmitting] = useState(false);
 	const [currentLog, setCurrentLog] = useState<ResidentLog | null>(null);
 	const [loading, setLoading] = useState(true);
+
+	const safeErrorMessage = async (res: Response) => {
+		try {
+			const data = await res.json();
+			return data?.error || data?.message;
+		} catch (_err) {
+			return undefined;
+		}
+	};
+
+	const toLogId = (value: any): string | undefined => {
+		if (!value) return undefined;
+		if (typeof value === 'string') return value;
+		if (typeof value === 'object' && 'id' in value && typeof value.id === 'string') {
+			return value.id;
+		}
+		return String(value);
+	};
 
 	useEffect(() => {
 		async function fetchLogAndActivities() {
@@ -211,7 +234,7 @@ export default function CareLogWithActivities({
 		setSubmitting(true);
 
 		try {
-			let logIdToUse = currentLog?.id;
+			let logIdToUse = toLogId(currentLog?.id);
 
 			// 1. Create/Update the main resident log (for general notes)
 			if (!logIdToUse) {
@@ -228,10 +251,24 @@ export default function CareLogWithActivities({
 						// authorName, // This should be derived from clerkUserId in API
 					}),
 				});
-				if (!logRes.ok) throw new Error('Failed to create resident log');
-				const newLogId = await logRes.json();
+				if (!logRes.ok) {
+					const message = await safeErrorMessage(logRes);
+					throw new Error(message || 'Failed to create resident log');
+				}
+				const newLog = await logRes.json();
+				const newLogId = toLogId(newLog);
+				if (!newLogId) throw new Error('Invalid log id returned');
 				logIdToUse = newLogId;
-				setCurrentLog((prev) => (prev ? {...prev, id: newLogId} : {id: newLogId, residentId, content: generalNotes, createdAt: new Date().toISOString()}));
+				setCurrentLog((prev) =>
+					prev
+						? {...prev, id: newLogId}
+						: {
+							id: newLogId,
+							residentId,
+							content: generalNotes,
+							createdAt: new Date().toISOString(),
+						}
+				);
 			} else {
 				// Update existing log's general notes
 				const logRes = await fetch(`/api/care/edit-log`, {
@@ -245,12 +282,19 @@ export default function CareLogWithActivities({
 						// authorName,
 					}),
 				});
-				if (!logRes.ok) throw new Error('Failed to update resident log');
+				if (!logRes.ok) {
+					const message = await safeErrorMessage(logRes);
+					throw new Error(message || 'Failed to update resident log');
+				}
 				setCurrentLog((prev) => (prev ? {...prev, content: generalNotes} : null));
 			}
 
 			if (!logIdToUse) {
 				throw new Error('Could not determine log ID');
+			}
+			const logIdForActivities = toLogId(logIdToUse);
+			if (!logIdForActivities) {
+				throw new Error('Invalid log ID for activities');
 			}
 
 			// 2. Process activities
@@ -259,7 +303,7 @@ export default function CareLogWithActivities({
 
 				if (activity.id) {
 					// Existing activity: Update or delete
-					await fetch(`/api/care/resident-logs/${logIdToUse}/activities`, {
+					await fetch(`/api/care/resident-logs/${logIdForActivities}/activities`, {
 						method: 'PATCH',
 						headers: {'Content-Type': 'application/json'},
 						body: JSON.stringify({
@@ -272,7 +316,7 @@ export default function CareLogWithActivities({
 				} else if (activity.isNew || activity.activityType) {
 					// New activity: Create
 					const activityRes = await fetch(
-						`/api/care/resident-logs/${logIdToUse}/activities`,
+						`/api/care/resident-logs/${logIdForActivities}/activities`,
 						{
 							method: 'POST',
 							headers: {'Content-Type': 'application/json'},
@@ -284,7 +328,10 @@ export default function CareLogWithActivities({
 							}),
 						}
 					);
-					if (!activityRes.ok) throw new Error('Failed to create activity');
+					if (!activityRes.ok) {
+						const message = await safeErrorMessage(activityRes);
+						throw new Error(message || 'Failed to create activity');
+					}
 					// Update the activity with the new ID from the backend
 					const newActivity = await activityRes.json();
 					setActivities((prev) =>
@@ -322,9 +369,9 @@ export default function CareLogWithActivities({
 				{/* Common Activities */}
 				<div>
 					<h3 className="text-lg font-semibold mb-3">Common Activities</h3>
-					<div className="space-y-3">
+					<div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 						{activities.map((activity, index) => (
-							<div key={activity.id || index} className="border rounded-lg p-4">
+							<div key={activity.id || index} className="border rounded-lg p-4 h-full flex flex-col gap-3">
 								<div className="flex items-start gap-3">
 									<input
 										type="checkbox"
@@ -358,15 +405,17 @@ export default function CareLogWithActivities({
 											className="w-full border rounded px-3 py-2 text-sm mt-2"
 										/>
 									</div>
-									{!COMMON_ACTIVITIES.includes(activity.activityType) && (
+								</div>
+								{!COMMON_ACTIVITIES.includes(activity.activityType) && (
+									<div className="flex justify-end">
 										<button
 											type="button"
 											onClick={() => handleRemoveActivity(index)}
 											className="text-red-600 hover:text-red-800 text-sm">
 											Remove
 										</button>
-									)}
-								</div>
+									</div>
+								)}
 							</div>
 						))}
 					</div>

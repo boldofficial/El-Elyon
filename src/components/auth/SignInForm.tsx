@@ -2,11 +2,12 @@
 
 import {SignIn, SignUp} from '@clerk/nextjs';
 import {useEffect, useState} from 'react';
+import Image from 'next/image';
 
-// Enhanced appearance configuration for purple Canva-style theme
+// Enhanced appearance configuration for sky-blue theme
 const clerkAppearance = {
 	variables: {
-		colorPrimary: '#7c3aed', // Purple
+		colorPrimary: '#0ea5e9', // Sky blue
 		colorBackground: '#ffffff',
 		colorText: '#1f2937',
 		colorTextSecondary: '#6b7280',
@@ -37,22 +38,22 @@ const clerkAppearance = {
 		
 		// Form fields - improved spacing and styling
 		formFieldLabel: 'text-sm font-semibold text-gray-700 mb-2',
-		formFieldInput: 'border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200 text-base',
+		formFieldInput: 'border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-sky-400 focus:border-sky-400 transition-all duration-200 text-base',
 		formFieldInputShowPasswordButton: 'text-gray-500 hover:text-gray-700 transition-colors',
 		
 		// Row for first/last name
 		formFieldRow: 'gap-4',
 		
 		// Primary button - enhanced with better hover effects
-		formButtonPrimary: 'bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg py-3.5 px-6 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5',
+		formButtonPrimary: 'bg-sky-500 hover:bg-sky-600 text-white font-semibold rounded-lg py-3.5 px-6 transition-all duration-200 shadow-md hover:shadow-lg transform hover:-translate-y-0.5',
 		
 		// Footer actions
 		footerAction: 'hidden',
-		footerActionLink: 'text-purple-600 hover:text-purple-700 font-medium transition-colors',
+		footerActionLink: 'text-sky-600 hover:text-sky-700 font-medium transition-colors',
 		footerActionText: 'text-gray-600 text-sm',
 		
 		// Identity preview
-		identityPreviewEditButton: 'text-purple-600 hover:text-purple-700 transition-colors',
+		identityPreviewEditButton: 'text-sky-600 hover:text-sky-700 transition-colors',
 		identityPreviewText: 'text-gray-900 font-medium',
 		
 		// Alerts/Errors - better styling
@@ -60,10 +61,10 @@ const clerkAppearance = {
 		alertText: 'text-red-700 text-sm font-medium',
 		
 		// OTP/Verification code input
-		otpCodeFieldInput: 'border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-center text-lg font-semibold',
+		otpCodeFieldInput: 'border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-400 focus:border-sky-400 text-center text-lg font-semibold',
 		
 		// Back button
-		backLink: 'text-purple-600 hover:text-purple-700 inline-flex items-center gap-1 transition-colors',
+		backLink: 'text-sky-600 hover:text-sky-700 inline-flex items-center gap-1 transition-colors',
 		
 		// Form - increased spacing
 		form: 'space-y-5',
@@ -135,11 +136,11 @@ export function SignInForm() {
 	// Enhanced loading state
 	if (hasAdmin === undefined) {
 		return (
-			<div className="w-full min-h-screen bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center">
+			<div className="w-full min-h-screen bg-gradient-to-br from-sky-400 to-sky-600 flex items-center justify-center">
 				<div className="text-center">
 					<div className="relative mb-6">
-						<div className="animate-spin rounded-full h-16 w-16 border-4 border-purple-200 border-t-white mx-auto"></div>
-						<div className="absolute inset-0 rounded-full h-16 w-16 border-4 border-transparent border-t-purple-300 animate-ping mx-auto"></div>
+						<div className="animate-spin rounded-full h-16 w-16 border-4 border-sky-200 border-t-white mx-auto"></div>
+						<div className="absolute inset-0 rounded-full h-16 w-16 border-4 border-transparent border-t-sky-300 animate-ping mx-auto"></div>
 					</div>
 					<p className="text-white text-lg font-medium">Loading El-Elyon Portal...</p>
 				</div>
@@ -148,7 +149,7 @@ export function SignInForm() {
 	}
 
 	return (
-		<div className="w-full min-h-screen bg-purple-600 flex items-center justify-center p-4">
+		<div className="w-full min-h-screen bg-sky-400 flex items-center justify-center p-4">
 			{/* Modal Container */}
 			<div className="bg-white rounded-2xl shadow-2xl overflow-hidden max-w-4xl w-full flex">
 				{/* Left Panel - Auth Form */}
@@ -184,14 +185,14 @@ export function SignInForm() {
 								appearance={clerkAppearance}
 							/>
 							{/* Enhanced Employee Login Banner */}
-							<div className="mt-8 p-4 bg-gradient-to-r from-purple-50 to-indigo-50 border-l-4 border-purple-500 rounded-lg shadow-sm">
+							<div className="mt-8 p-4 bg-gradient-to-r from-sky-50 to-blue-50 border-l-4 border-sky-400 rounded-lg shadow-sm">
 								<div className="flex items-start gap-3">
 									<span className="text-2xl">👋</span>
 									<div>
-										<p className="text-sm font-semibold text-purple-900 mb-1">
+										<p className="text-sm font-semibold text-sky-900 mb-1">
 											Employee Login
 										</p>
-										<p className="text-xs text-purple-700">
+										<p className="text-xs text-sky-700">
 											Use the credentials provided by your administrator to access the portal.
 										</p>
 									</div>
@@ -204,11 +205,11 @@ export function SignInForm() {
 					<div className="mt-8 text-center">
 						<p className="text-sm text-gray-600 leading-relaxed">
 							By continuing, you agree to El-Elyon&apos;s{' '}
-							<a href="/terms" className="text-purple-600 hover:text-purple-700 font-medium underline decoration-1 underline-offset-2 transition-colors">
+							<a href="/terms" className="text-sky-600 hover:text-sky-700 font-medium underline decoration-1 underline-offset-2 transition-colors">
 								Terms of Use
 							</a>
 							.{' '}Read our{' '}
-							<a href="/privacy" className="text-purple-600 hover:text-purple-700 font-medium underline decoration-1 underline-offset-2 transition-colors">
+							<a href="/privacy" className="text-sky-600 hover:text-sky-700 font-medium underline decoration-1 underline-offset-2 transition-colors">
 								Privacy Policy
 							</a>
 							.
@@ -227,41 +228,41 @@ export function SignInForm() {
 				</div>
 
 				{/* Right Panel - Enhanced Branding */}
-				<div className="hidden md:flex md:w-1/2 relative bg-gradient-to-br from-purple-100 via-purple-50 to-indigo-100 items-center justify-center p-12">
+				<div className="hidden md:flex md:w-1/2 relative bg-gradient-to-br from-sky-100 via-sky-50 to-blue-100 items-center justify-center p-12">
 					<div className="text-center relative z-10">
 						{/* Enhanced Logo */}
-						<div className="w-36 h-36 mx-auto mb-8 rounded-full bg-white shadow-xl flex items-center justify-center transform hover:scale-105 transition-transform duration-300">
-							<span className="text-6xl">🏠</span>
+						<div className="w-36 h-36 mx-auto mb-8 rounded-full bg-white shadow-xl flex items-center justify-center transform hover:scale-105 transition-transform duration-300 overflow-hidden">
+							<Image src="/icons/icon-192x192.png" alt="El-Elyon Logo" width={120} height={120} className="object-contain" priority />
 						</div>
 						
-						<h2 className="text-3xl font-bold text-purple-900 mb-3">
+						<h2 className="text-3xl font-bold text-sky-900 mb-3">
 							El-Elyon Properties
 						</h2>
-						<p className="text-lg text-purple-700 mb-8 font-medium">
+						<p className="text-lg text-sky-700 mb-8 font-medium">
 							Care Management Portal
 						</p>
 						
 						{/* Enhanced Feature List */}
 						<div className="mt-10 space-y-3 text-left max-w-xs mx-auto">
-							<div className="flex items-center gap-3 text-purple-700">
-								<span className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs font-bold">✓</span>
+							<div className="flex items-center gap-3 text-sky-700">
+								<span className="flex-shrink-0 w-6 h-6 rounded-full bg-sky-500 text-white flex items-center justify-center text-xs font-bold">✓</span>
 								<span className="text-sm font-medium">Resident Care Tracking</span>
 							</div>
-							<div className="flex items-center gap-3 text-purple-700">
-								<span className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs font-bold">✓</span>
+							<div className="flex items-center gap-3 text-sky-700">
+								<span className="flex-shrink-0 w-6 h-6 rounded-full bg-sky-500 text-white flex items-center justify-center text-xs font-bold">✓</span>
 								<span className="text-sm font-medium">Staff Management</span>
 							</div>
-							<div className="flex items-center gap-3 text-purple-700">
-								<span className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs font-bold">✓</span>
+							<div className="flex items-center gap-3 text-sky-700">
+								<span className="flex-shrink-0 w-6 h-6 rounded-full bg-sky-500 text-white flex items-center justify-center text-xs font-bold">✓</span>
 								<span className="text-sm font-medium">Compliance Monitoring</span>
 							</div>
 						</div>
 					</div>
 					
 					{/* Enhanced decorative elements with animation */}
-					<div className="absolute top-8 left-8 w-20 h-20 bg-purple-300 rounded-full opacity-40 blur-2xl animate-pulse"></div>
-					<div className="absolute bottom-12 right-12 w-32 h-32 bg-purple-400 rounded-full opacity-30 blur-2xl animate-pulse" style={{animationDelay: '1s'}}></div>
-					<div className="absolute top-1/3 right-8 w-10 h-10 bg-purple-500 rounded-full opacity-25"></div>
+					<div className="absolute top-8 left-8 w-20 h-20 bg-sky-300 rounded-full opacity-40 blur-2xl animate-pulse"></div>
+					<div className="absolute bottom-12 right-12 w-32 h-32 bg-sky-400 rounded-full opacity-30 blur-2xl animate-pulse" style={{animationDelay: '1s'}}></div>
+					<div className="absolute top-1/3 right-8 w-10 h-10 bg-sky-500 rounded-full opacity-25"></div>
 				</div>
 			</div>
 		</div>

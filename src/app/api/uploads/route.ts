@@ -3,6 +3,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {
 	uploadFile,
 	generateFileKey,
@@ -79,9 +80,8 @@ export async function POST(request: Request) {
 			contentType: file.type,
 			uploadedAt: new Date().toISOString(),
 		});
-	} catch (error: any) {
-		console.error('Error uploading file:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'UploadFile');
 	}
 }
 
@@ -108,9 +108,8 @@ export async function GET(request: Request) {
 
 		// Redirect the user to the presigned URL
 		return NextResponse.redirect(url);
-	} catch (error: any) {
-		console.error('Error getting file URL:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'GetFileURL');
 	}
 }
 
@@ -142,8 +141,7 @@ export async function DELETE(request: Request) {
 		});
 
 		return NextResponse.json({success: true, message: 'File deleted'});
-	} catch (error: any) {
-		console.error('Error deleting file:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'DeleteFile');
 	}
 }

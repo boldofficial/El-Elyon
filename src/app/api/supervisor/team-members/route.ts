@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireSupervisorAccess} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {db} from '@/db/index';
 import {roles, employees, shifts} from '@/db/schema'; // Include shifts for future clock-in status
 import {eq, InferSelectModel} from 'drizzle-orm';
@@ -53,8 +54,7 @@ export async function GET() {
         );
 
         return NextResponse.json(teamMembers.filter(Boolean));
-    } catch (error: any) {
-        console.error('Error getting team members:', error);
-        return NextResponse.json({error: error.message}, {status: 500});
+    } catch (error) {
+        return internalServerError(error, 'GetTeamMembers');
     }
 }

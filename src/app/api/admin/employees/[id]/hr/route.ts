@@ -4,6 +4,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {updateEmployeeHRDocs} from '@/db/mutations/employee-hr';
 import {getEmployeeHRDetails} from '@/db/queries/employee-hr';
 
@@ -26,9 +27,8 @@ export async function GET(
 		}
 
 		return NextResponse.json(employee);
-	} catch (error: any) {
-		console.error('Error fetching employee HR details:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'GetEmployeeHR');
 	}
 }
 
@@ -71,8 +71,7 @@ export async function PATCH(
 		});
 
 		return NextResponse.json(updated);
-	} catch (error: any) {
-		console.error('Error updating employee HR:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'UpdateEmployeeHR');
 	}
 }

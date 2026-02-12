@@ -40,7 +40,23 @@ export default function ResidentActivityHistory({residentId}: Props) {
 				);
 				if (!res.ok) throw new Error('Failed to fetch logs');
 				const data = await res.json();
-				setLogs(data);
+
+				// Ensure activities are present by hydrating from the activities endpoint when missing
+				const logsWithActivities = await Promise.all(
+					(data as any[]).map(async (log) => {
+						if (log.activities && log.activities.length > 0) return log;
+						try {
+							const actRes = await fetch(`/api/care/resident-logs/${log.id}/activities`);
+							if (!actRes.ok) return log;
+							const activities = await actRes.json();
+							return {...log, activities};
+						} catch (_err) {
+							return log;
+						}
+					})
+				);
+
+				setLogs(logsWithActivities);
 			} catch (error: any) {
 				console.error('Error fetching logs:', error);
                 setError(error.message || 'Failed to load history');

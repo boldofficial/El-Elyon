@@ -9,12 +9,32 @@ import {getRoleByClerkId} from '@/db/queries/roles';
 import {getClerkUser} from '@/lib/clerk';
 import { createRole, updateRole } from '@/db/mutations/roles';
 
-export async function POST() {
+export async function POST(req: Request) {
 	try {
 		const {userId} = await auth();
 
 		if (!userId) {
 			return NextResponse.json({error: 'Not authenticated'}, {status: 401});
+		}
+
+		// SECURITY: Require bootstrap secret to prevent unauthorized privilege escalation
+		const body = await req.json().catch(() => ({}));
+		const providedSecret = body.secret || req.headers.get('x-bootstrap-secret');
+		const bootstrapSecret = process.env.ADMIN_BOOTSTRAP_SECRET;
+
+		if (!bootstrapSecret) {
+			return NextResponse.json(
+				{error: 'Admin bootstrap not configured. Set ADMIN_BOOTSTRAP_SECRET env var.'},
+				{status: 500}
+			);
+		}
+
+		if (providedSecret !== bootstrapSecret) {
+			console.log('🚨 UNAUTHORIZED force admin attempt by:', userId);
+			return NextResponse.json(
+				{error: 'Invalid bootstrap secret'},
+				{status: 403}
+			);
 		}
 
 		console.log('🚨 FORCE ADMIN for:', userId);

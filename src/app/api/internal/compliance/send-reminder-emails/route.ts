@@ -8,7 +8,25 @@ import {eq, inArray} from 'drizzle-orm';
 
 // Internal action to send compliance reminder emails
 export async function POST(req: NextRequest) {
-	// TODO: Implement a secure way to authenticate internal calls (e.g., API key)
+	// Verify internal API key
+	const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace('Bearer ', '');
+	const expectedKey = process.env.INTERNAL_API_KEY;
+
+	if (!expectedKey) {
+		return NextResponse.json(
+			{error: 'Internal API not configured'},
+			{status: 500}
+		);
+	}
+
+	if (apiKey !== expectedKey) {
+		console.log('🚨 Unauthorized internal API call to send-reminder-emails');
+		return NextResponse.json(
+			{error: 'Unauthorized'},
+			{status: 401}
+		);
+	}
+
 	console.log('Triggered internal compliance reminder email sending.');
 
 	try {

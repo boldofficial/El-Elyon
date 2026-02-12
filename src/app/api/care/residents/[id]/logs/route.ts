@@ -3,6 +3,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireCareAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {createResidentLogWithActivities} from '@/db/mutations/care-activities';
 import {db} from '@/db/index';
 import {residentLogs} from '@/db/schema';
@@ -35,9 +36,8 @@ export async function GET(
 		});
 
 		return NextResponse.json(logs);
-	} catch (error: any) {
-		console.error('Error fetching resident logs:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'GetResidentLogs');
 	}
 }
 
@@ -78,8 +78,7 @@ export async function POST(
 		});
 
 		return NextResponse.json(result, {status: 201});
-	} catch (error: any) {
-		console.error('Error creating resident log:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'CreateResidentLog');
 	}
 }

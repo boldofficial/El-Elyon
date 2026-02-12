@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {getInviteLink} from '@/db/queries/employees';
 
 export async function GET(
@@ -40,14 +41,7 @@ export async function GET(
 			location: '', // Placeholder
 		});
 		return NextResponse.json(inviteDetails);
-	} catch (error: any) {
-		await logAudit({
-			clerkUserId: userId,
-			event: 'GET_EMPLOYEE_INVITE_LINK_FAILED',
-			details: error.message,
-			deviceId: 'system', // Placeholder
-			location: '', // Placeholder
-		});
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'GetEmployeeInviteLink');
 	}
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireCareAccess } from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import { auth } from '@clerk/nextjs/server';
 
 export async function GET(req: NextRequest) {
@@ -25,8 +26,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       downloadUrl: `https://placeholder.com/download-isp-file/${ispFileId}`,
     });
-  } catch (error: any) {
-    console.error('Error generating ISP file download URL:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return internalServerError(error, 'GenerateISPDownloadURL');
   }
 }

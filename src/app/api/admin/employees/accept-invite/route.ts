@@ -1,6 +1,7 @@
 import {NextRequest, NextResponse} from 'next/server';
 import {acceptInvite} from '@/db/mutations/employees';
 import {logAudit} from '@/lib/db-helpers'; // Corrected import path for logAudit
+import {internalServerError} from '@/lib/api-errors';
 import {auth, clerkClient} from '@clerk/nextjs/server'; // Import auth and clerkClient
 import {getInviteDetails} from '@/db/queries/employees'; // Import to verify token
 
@@ -54,18 +55,7 @@ export async function POST(req: NextRequest) {
 		});
 
 		return NextResponse.json(result);
-	} catch (error: any) {
-		console.error('Error accepting invite:', error);
-		await logAudit({
-			clerkUserId: (await auth()).userId,
-			event: 'accept_invite_failed',
-			details: `Token: ${token}, Error: ${error.message}`,
-			deviceId: 'system',
-			location: 'server',
-		});
-		return NextResponse.json(
-			{error: error.message || 'Failed to accept invite'},
-			{status: 500}
-		);
+	} catch (error) {
+		return internalServerError(error, 'AcceptEmployeeInvite');
 	}
 }

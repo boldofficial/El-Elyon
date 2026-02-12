@@ -4,6 +4,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireCareAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {listAllGuardians, getResidentById} from '@/db/queries/people';
 import {insertGuardian} from '@/db/mutations/guardians';
 
@@ -32,15 +33,8 @@ export async function GET(request: Request) {
         );
 
         return NextResponse.json(guardiansWithResidents);
-    } catch (error: any) {
-        await logAudit({
-            clerkUserId: userId,
-            event: 'GET_GUARDIANS_FAILED',
-            details: error.message,
-            deviceId: 'system', // Placeholder
-            location: '', // Placeholder
-        });
-        return NextResponse.json({error: error.message}, {status: 500});
+    } catch (error) {
+        return internalServerError(error, 'GetGuardians');
     }
 }
 
@@ -78,14 +72,7 @@ export async function POST(request: Request) {
             location: '', // Placeholder
         });
         return NextResponse.json({id: newGuardian.id}, {status: 201});
-    } catch (error: any) {
-        await logAudit({
-            clerkUserId: userId,
-            event: 'CREATE_GUARDIAN_FAILED',
-            details: error.message,
-            deviceId: 'system', // Placeholder
-            location: '', // Placeholder
-        });
-        return NextResponse.json({error: error.message}, {status: 500});
+    } catch (error) {
+        return internalServerError(error, 'CreateGuardian');
     }
 }

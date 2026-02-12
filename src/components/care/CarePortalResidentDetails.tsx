@@ -7,6 +7,7 @@ import CareLogWithActivities from './CareLogWithActivities';
 import ResidentActivityHistory from './ResidentActivityHistory';
 import IncidentReportForm from './IncidentReportForm';
 import IncidentReportsList from './IncidentReportsList';
+import ResidentDocuments from './ResidentDocuments';
 
 interface Resident {
 	id: string;
@@ -44,7 +45,7 @@ interface CarePortalResidentDetailsProps {
 	shiftId?: string;
 }
 
-type TabType = 'log' | 'incidents' | 'history';
+type TabType = 'log' | 'incidents' | 'history' | 'documents' | 'isp' | 'fire-evac';
 
 export default function CarePortalResidentDetails({
 	resident: initialResident, // Renamed to initialResident
@@ -61,10 +62,11 @@ export default function CarePortalResidentDetails({
 	useEffect(() => {
 		async function fetchFullResidentDetails() {
 			try {
-				// Use the admin API to get full details, or create a specific care-facing API
-				const res = await fetch(`/api/admin/residents/${initialResident.id}/profile`);
+				// Care role should use the care-facing resident details endpoint
+				const res = await fetch(`/api/care/residents?residentId=${initialResident.id}`);
 				if (!res.ok) throw new Error('Failed to fetch full resident details');
 				const data = await res.json();
+				if (!data) return;
 				setResident(data);
 			} catch (error) {
 				console.error('Error fetching full resident details:', error);
@@ -77,7 +79,10 @@ export default function CarePortalResidentDetails({
 	const tabs = [
 		{id: 'log' as TabType, label: 'Activity Log', icon: '📋'},
 		{id: 'incidents' as TabType, label: 'Incident Reports', icon: '⚠️'},
-		{id: 'history' as TabType, label: 'History', icon: '📜'},
+		{id: 'history' as TabType, label: 'Log History', icon: '📜'},
+		{id: 'documents' as TabType, label: 'Documents', icon: '📁'},
+		{id: 'isp' as TabType, label: 'ISP', icon: '📖'},
+		{id: 'fire-evac' as TabType, label: 'Fire Evac', icon: '🧯'},
 	];
 
 	return (
@@ -242,6 +247,18 @@ export default function CarePortalResidentDetails({
 
 					{activeTab === 'history' && (
 						<ResidentActivityHistory residentId={resident.id} />
+					)}
+
+					{activeTab === 'documents' && (
+						<ResidentDocuments residentId={resident.id} />
+					)}
+
+					{activeTab === 'isp' && (
+						<ResidentDocuments residentId={resident.id} filterSource="isp" />
+					)}
+
+					{activeTab === 'fire-evac' && (
+						<ResidentDocuments residentId={resident.id} filterSource="fire_evac" />
 					)}
 				</div>
 			</div>

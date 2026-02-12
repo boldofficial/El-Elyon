@@ -34,3 +34,36 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## PWA (Progressive Web App)
+
+This app is installable as a PWA on desktop and mobile browsers. The manifest is generated at build time via the native Next.js `MetadataRoute.Manifest` API in `src/app/manifest.ts` — **no webpack plugins or service workers are used**.
+
+### Icons
+
+Replace the placeholder icons in `public/icons/` with your production assets:
+
+| File | Size | Purpose |
+| --- | --- | --- |
+| `icon-192x192.png` | 192×192 | Standard PWA icon |
+| `icon-512x512.png` | 512×512 | Splash screen / high-res |
+| `maskable-512x512.png` | 512×512 | Adaptive icon (safe zone) |
+| `apple-touch-icon.png` | 180×180 | iOS home screen |
+
+To regenerate the maskable icon from a source PNG:
+
+```bash
+node scripts/generate-maskable-icon.js
+```
+
+### Testing Installability
+
+1. Run `npm run build && npm start` (dev mode doesn't serve the manifest correctly).
+2. Open Chrome → DevTools → **Application** tab → **Manifest** panel.
+3. Verify the manifest loads with correct name, icons, and `display: standalone`.
+4. The browser install prompt (⊕ in the address bar) should appear.
+
+### What's Not Included (Yet)
+
+- **Service Worker** — No offline caching or background sync. Add `next-pwa` or a custom SW when offline support is needed.
+- **Push Notifications** — Requires a service worker + push subscription backend.

@@ -24,16 +24,16 @@ module.exports = {
 			},
 			colors: {
 				primary: {
-					DEFAULT: '#4F46E5',
-					hover: '#4338CA',
+					DEFAULT: '#0ea5e9',
+					hover: '#0284c7',
 				},
 				secondary: {
 					DEFAULT: '#6B7280',
 					hover: '#4B5563',
 				},
 				accent: {
-					DEFAULT: '#8B5CF6',
-					hover: '#7C3AED',
+					DEFAULT: '#38bdf8',
+					hover: '#0ea5e9',
 				},
 			},
 			spacing: {

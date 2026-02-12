@@ -1,5 +1,6 @@
 import React from 'react';
 import {SignOutButton} from '../auth/SignOutButton';
+import {useState, useEffect} from 'react';
 
 const NAV_SECTIONS = [
 	{
@@ -23,9 +24,19 @@ const NAV_SECTIONS = [
 		icon: '📍',
 	},
 	{
+		key: 'memos',
+		label: 'Memos',
+		icon: '✉️',
+	},
+	{
+		key: 'vacation-requests',
+		label: 'Vacation Requests',
+		icon: '🏖️',
+	},
+	{
 		key: 'documents',
-		label: 'Documents',
-		icon: '📁',
+		label: 'Fire Drill & Smoke Detector',
+		icon: '🧯',
 	},
 	{
 		key: 'care-logs',
@@ -63,6 +74,26 @@ export default function Sidebar({
 	selected: string;
 	setSelected: (key: string) => void;
 }) {
+	const [pendingVacationCount, setPendingVacationCount] = useState(0);
+
+	useEffect(() => {
+		fetchPendingCount();
+		const interval = setInterval(fetchPendingCount, 60000); // Poll every minute
+		return () => clearInterval(interval);
+	}, []);
+
+	const fetchPendingCount = async () => {
+		try {
+			const res = await fetch('/api/vacation-requests/pending-count');
+			if (res.ok) {
+				const data = await res.json();
+				setPendingVacationCount(data.count);
+			}
+		} catch (error) {
+			console.error('Error fetching pending vacation count:', error);
+		}
+	};
+
 	return (
 		<aside className="w-64 min-h-screen flex flex-col" style={{backgroundColor: '#1e3a5f'}}>
 			{/* Header with Logo/Title */}
@@ -97,6 +128,7 @@ export default function Sidebar({
 				<ul className="flex flex-col px-2 space-y-1">
 					{NAV_SECTIONS.map((section) => {
 						const isActive = selected === section.key;
+						const showBadge = section.key === 'vacation-requests' && pendingVacationCount > 0;
 						return (
 							<li key={section.key}>
 								<button
@@ -110,7 +142,12 @@ export default function Sidebar({
 									<span className="text-lg" aria-hidden="true">
 										{section.icon}
 									</span>
-									<span className="font-medium">{section.label}</span>
+									<span className="font-medium flex-1">{section.label}</span>
+									{showBadge && (
+										<span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+											{pendingVacationCount}
+										</span>
+									)}
 								</button>
 							</li>
 						);

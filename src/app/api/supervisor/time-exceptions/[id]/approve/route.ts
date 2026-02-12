@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireSupervisorAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 
 export async function POST(
 	request: Request,
@@ -36,14 +37,7 @@ export async function POST(
 			{message: 'Time exception approved successfully'},
 			{status: 200}
 		);
-	} catch (error: any) {
-		await logAudit({
-			clerkUserId: userId,
-			event: 'APPROVE_TIME_EXCEPTION_FAILED',
-			details: error.message,
-			deviceId: 'system', // Placeholder
-			location: '', // Placeholder
-		});
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'ApproveTimeException');
 	}
 }

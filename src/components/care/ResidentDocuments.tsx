@@ -3,7 +3,13 @@
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
 
-export default function ResidentDocuments({ residentId }: { residentId: string }) {
+export default function ResidentDocuments({ 
+  residentId,
+  filterSource
+}: { 
+  residentId: string;
+  filterSource?: 'generic' | 'isp' | 'fire_evac';
+}) {
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -21,7 +27,13 @@ export default function ResidentDocuments({ residentId }: { residentId: string }
       const res = await fetch(`/api/care/resident-documents?residentId=${residentId}`);
       if (!res.ok) throw new Error("Failed to fetch documents");
       const data = await res.json();
-      setDocuments(data);
+      
+      // Filter by source if specified
+      const filteredData = filterSource 
+        ? data.filter((doc: any) => doc.source === filterSource)
+        : data.filter((doc: any) => doc.source === 'generic' || !doc.source); // Default to generic docs only
+      
+      setDocuments(filteredData);
     } catch (error) {
       console.error("Error fetching documents:", error);
       toast.error("Failed to load documents");
@@ -33,7 +45,7 @@ export default function ResidentDocuments({ residentId }: { residentId: string }
   useEffect(() => {
     fetchDocuments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [residentId]);
+  }, [residentId, filterSource]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -133,12 +145,18 @@ export default function ResidentDocuments({ residentId }: { residentId: string }
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Other Documents</h3>
+          <h3 className="text-lg font-semibold">
+            {filterSource === 'isp' ? 'ISP Documents' : filterSource === 'fire_evac' ? 'Fire Evacuation Plans' : 'Other Documents'}
+          </h3>
           <p className="text-sm text-gray-600">
-            Manage general documents for this resident.
+            {filterSource === 'isp' 
+              ? 'View Individual Support Plans for this resident.'
+              : filterSource === 'fire_evac'
+              ? 'View Fire Evacuation Plans for this resident.'
+              : 'Manage general documents for this resident.'}
           </p>
         </div>
-        {!showUploadForm && (
+        {!showUploadForm && !filterSource && (
           <button
             onClick={() => setShowUploadForm(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -228,12 +246,12 @@ export default function ResidentDocuments({ residentId }: { residentId: string }
                 <div key={doc.id} className="flex items-center justify-between p-4 bg-white border rounded shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-start gap-3">
                         <div className="text-2xl">
-                            {doc.contentType.includes('pdf') ? '📄' : doc.contentType.includes('image') ? '🖼️' : '📁'}
+                            {doc.contentType?.includes('pdf') ? '📄' : doc.contentType?.includes('image') ? '🖼️' : '📁'}
                         </div>
                         <div>
                             <h4 className="font-semibold text-gray-900">{doc.title}</h4>
                             <p className="text-xs text-gray-500">
-                                {doc.type.toUpperCase()} • {new Date(doc.uploadedAt).toLocaleDateString()} by {doc.uploadedBy}
+                                {doc.type?.toUpperCase() || 'DOCUMENT'} • {new Date(doc.uploadedAt).toLocaleDateString()} by {doc.uploadedBy}
                             </p>
                             {doc.description && <p className="text-sm text-gray-600 mt-1">{doc.description}</p>}
                         </div>

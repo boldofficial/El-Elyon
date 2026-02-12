@@ -3,6 +3,7 @@
 // ===================================
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
+import {internalServerError} from '@/lib/api-errors';
 import {db} from '@/db/index';
 import {config} from '@/db/schema';
 import {upsertConfig} from '@/db/mutations/config';
@@ -18,9 +19,8 @@ export async function GET() {
 
 		const settings = await db.query.config.findFirst();
 		return NextResponse.json(settings || {});
-	} catch (error: any) {
-		console.error('Error getting app settings:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'GetAppSettings');
 	}
 }
 
@@ -60,14 +60,7 @@ export async function PATCH(request: Request) {
             location: '', // Placeholder
         });
         return NextResponse.json(updatedSettings);
-    } catch (error: any) {
-        await logAudit({
-            clerkUserId: userId,
-            event: 'UPDATE_APP_SETTINGS_FAILED',
-            details: error.message,
-            deviceId: 'system', // Placeholder
-            location: '', // Placeholder
-        });
-        return NextResponse.json({error: error.message}, {status: 500});
+    } catch (error) {
+        return internalServerError(error, 'UpdateAppSettings');
     }
 }

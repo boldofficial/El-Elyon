@@ -743,6 +743,53 @@ export const residentDocuments = pgTable(
 	})
 );
 
+// Smoke Detector Checks (monthly)
+export const smokeDetectorChecks = pgTable(
+	'smoke_detector_checks',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		location: varchar('location', {length: 255}).notNull(),
+		date: timestamp('date').notNull(),
+		smokeStatus: varchar('smoke_status', {length: 50}).notNull(),
+		coStatus: varchar('co_status', {length: 50}).notNull(),
+		staffInitials: varchar('staff_initials', {length: 50}).notNull(),
+		notes: text('notes'),
+		createdBy: varchar('created_by', {length: 255}).notNull(),
+		updatedBy: varchar('updated_by', {length: 255}),
+		createdAt: timestamp('created_at').defaultNow(),
+		updatedAt: timestamp('updated_at'),
+	},
+	(table) => ({
+		locationIdx: index('smoke_detector_checks_location_idx').on(table.location),
+		dateIdx: index('smoke_detector_checks_date_idx').on(table.date),
+	})
+);
+
+// Fire Drills (semiannual)
+export const fireDrills = pgTable(
+	'fire_drills',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		location: varchar('location', {length: 255}).notNull(),
+		year: integer('year').notNull(),
+		sequence: integer('sequence').notNull(), // 1 or 2 for 1st/2nd
+		residentName: varchar('resident_name', {length: 255}).notNull(),
+		date: timestamp('date').notNull(),
+		time: varchar('time', {length: 50}).notNull(),
+		staffName: varchar('staff_name', {length: 255}).notNull(),
+		comment: text('comment'),
+		createdBy: varchar('created_by', {length: 255}).notNull(),
+		updatedBy: varchar('updated_by', {length: 255}),
+		createdAt: timestamp('created_at').defaultNow(),
+		updatedAt: timestamp('updated_at'),
+	},
+	(table) => ({
+		locationIdx: index('fire_drills_location_idx').on(table.location),
+		yearIdx: index('fire_drills_year_idx').on(table.year),
+		sequenceIdx: index('fire_drills_sequence_idx').on(table.sequence),
+	})
+);
+
 // Incident Reports Table
 export const incidentReports = pgTable(
 	'incident_reports',
@@ -946,3 +993,67 @@ export const incidentReportsRelations = relations(incidentReports, ({one}) => ({
 		references: [residents.id],
 	}),
 }));
+
+// Memos Table
+export const memos = pgTable(
+	'memos',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		title: varchar('title', {length: 255}).notNull(),
+		content: text('content').notNull(),
+		senderClerkUserId: varchar('sender_clerk_user_id', {length: 255}).notNull(),
+		senderName: varchar('sender_name', {length: 255}).notNull(),
+		recipientType: varchar('recipient_type', {length: 50}).notNull(), // 'location', 'all-staff', 'all-supervisors', 'all-employees', 'selected-locations', 'selected-users'
+		targetLocations: jsonb('target_locations').$type<string[]>().default([]),
+		targetUsers: jsonb('target_users').$type<string[]>().default([]), // clerk user IDs
+		priority: varchar('priority', {length: 20}).default('normal'), // 'normal', 'high', 'urgent'
+		expiresAt: timestamp('expires_at'),
+		createdAt: timestamp('created_at').defaultNow(),
+		updatedAt: timestamp('updated_at'),
+	},
+	(table) => ({
+		senderIdx: index('memos_sender_idx').on(table.senderClerkUserId),
+		createdAtIdx: index('memos_created_at_idx').on(table.createdAt),
+		recipientTypeIdx: index('memos_recipient_type_idx').on(table.recipientType),
+	})
+);
+
+// Memos Read Tracking Table
+export const memosRead = pgTable(
+	'memos_read',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		memoId: uuid('memo_id').notNull().references(() => memos.id, {onDelete: 'cascade'}),
+		clerkUserId: varchar('clerk_user_id', {length: 255}).notNull(),
+		readAt: timestamp('read_at').defaultNow(),
+	},
+	(table) => ({
+		memoIdIdx: index('memos_read_memo_id_idx').on(table.memoId),
+		userIdIdx: index('memos_read_user_id_idx').on(table.clerkUserId),
+	})
+);
+
+// Vacation Requests Table
+export const vacationRequests = pgTable(
+	'vacation_requests',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		employeeClerkUserId: varchar('employee_clerk_user_id', {length: 255}).notNull(),
+		employeeName: varchar('employee_name', {length: 255}).notNull(),
+		startDate: timestamp('start_date').notNull(),
+		endDate: timestamp('end_date').notNull(),
+		reason: text('reason'),
+		status: varchar('status', {length: 20}).default('pending').notNull(), // 'pending', 'approved', 'denied'
+		adminComments: text('admin_comments'),
+		adminClerkUserId: varchar('admin_clerk_user_id', {length: 255}),
+		adminName: varchar('admin_name', {length: 255}),
+		respondedAt: timestamp('responded_at'),
+		createdAt: timestamp('created_at').defaultNow(),
+		updatedAt: timestamp('updated_at').defaultNow(),
+	},
+	(table) => ({
+		employeeIdx: index('vacation_requests_employee_idx').on(table.employeeClerkUserId),
+		statusIdx: index('vacation_requests_status_idx').on(table.status),
+		startDateIdx: index('vacation_requests_start_date_idx').on(table.startDate),
+	})
+);

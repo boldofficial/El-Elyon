@@ -3,6 +3,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, requireCareAccess, logAudit} from '@/lib/db-helpers'; // Path adjusted for uploads directory
+import {internalServerError} from '@/lib/api-errors';
 
 export async function GET(request: Request) {
     const {userId} = await auth();
@@ -49,14 +50,7 @@ export async function GET(request: Request) {
             location: '', // Placeholder
         });
         return NextResponse.json({uploadUrl: simulatedUploadUrl});
-    } catch (error: any) {
-        await logAudit({
-            clerkUserId: userId,
-            event: 'GENERATE_FIRE_EVAC_UPLOAD_URL_FAILED',
-            details: error.message,
-            deviceId: 'system', // Placeholder
-            location: '', // Placeholder
-        });
-        return NextResponse.json({error: error.message}, {status: 500});
+    } catch (error) {
+        return internalServerError(error, 'GenerateFireEvacUploadURL');
     }
 }

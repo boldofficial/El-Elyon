@@ -2,12 +2,19 @@
 // Get kiosk by device ID API
 // ===================================
 import {NextRequest, NextResponse} from 'next/server';
+import {auth} from '@clerk/nextjs/server';
 import {db} from '@/db/index';
 import {kiosks} from '@/db/schema';
 import {eq} from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
 	try {
+		// Require authentication to prevent information disclosure
+		const {userId} = await auth();
+		if (!userId) {
+			return NextResponse.json({error: 'Unauthorized'}, {status: 401});
+		}
+
 		const deviceId = req.nextUrl.searchParams.get('deviceId');
 
 		if (!deviceId) {

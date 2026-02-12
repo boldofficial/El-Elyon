@@ -1,17 +1,9 @@
 import React, { useState } from "react";
-import KioskManagement from "../kiosk/KioskManagement";
 import SystemSettings from "./SystemSettings";
 import SecuritySettings from "./SecuritySettings";
 import ComplianceSettings from "../compliance/ComplianceSettings";
 
 const SETTINGS_SECTIONS = [
-  {
-    key: "kiosks",
-    title: "Kiosk Management",
-    description: "Manage kiosk devices and pairing",
-    icon: "📱",
-    color: "bg-blue-50 border-blue-200 text-blue-700"
-  },
   {
     key: "system",
     title: "System Settings",
@@ -37,23 +29,6 @@ const SETTINGS_SECTIONS = [
 
 export default function SettingsWorkspace() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
-
-  if (activeSection === "kiosks") {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => setActiveSection(null)}
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-          >
-            ← Back to Settings
-          </button>
-          <h3 className="text-2xl font-bold text-gray-900">Kiosk Management</h3>
-        </div>
-        <KioskManagement />
-      </div>
-    );
-  }
 
   if (activeSection === "system") {
     return (

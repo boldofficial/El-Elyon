@@ -6,18 +6,21 @@ import React, {useState, useEffect} from 'react';
 import {SignOutButton} from '../auth/SignOutButton';
 import CareShiftWorkspace from './CareShiftWorkspace';
 import CareResidentsWorkspace from './CareResidentsWorkspace';
-import CareLogsWorkspace from './CareLogsWorkspace';
 import CareProfileWorkspace from './CareProfileWorkspace';
 import SupervisorComplianceWorkspace from '../supervisor/SupervisorComplianceWorkspace';
 import SupervisorTeamWorkspace from '../supervisor/SupervisorTeamWorkspace';
+import SupervisorShiftHistory from '../supervisor/SupervisorShiftHistory';
 import CarePortalResidentDetails from './CarePortalResidentDetails';
-import CareDocumentsWorkspace from './CareDocumentsWorkspace';
+import LifeSafetyDocuments from '../supervisor/LifeSafetyDocuments';
+import MemosWorkspace from '../shared/MemosWorkspace';
+import VacationRequests from '../shared/VacationRequests';
 
 export default function CarePortal() {
 	const [activeView, setActiveView] = useState('shift');
 	const [sessionInfo, setSessionInfo] = useState<any>(null);
 	const [currentShift, setCurrentShift] = useState<any>(null);
 	const [selectedResident, setSelectedResident] = useState<any>(null);
+	const [unreadMemoCount, setUnreadMemoCount] = useState(0);
 
 	// Refetch shift data - called after clock-in/out
 	const refetchShift = async () => {
@@ -30,6 +33,18 @@ export default function CarePortal() {
 		}
 	};
 
+	const fetchUnreadCount = async () => {
+		try {
+			const res = await fetch('/api/memos/unread-count');
+			if (res.ok) {
+				const data = await res.json();
+				setUnreadMemoCount(data.unreadCount);
+			}
+		} catch (error) {
+			console.error('Error fetching unread memo count:', error);
+		}
+	};
+
 	useEffect(() => {
 		async function fetchData() {
 			try {
@@ -38,12 +53,19 @@ export default function CarePortal() {
 				setSessionInfo(session);
 
 				await refetchShift();
+				await fetchUnreadCount();
 			} catch (error) {
 				console.error('Error fetching care portal data:', error);
 			}
 		}
 
 		fetchData();
+	}, []);
+
+	// Poll for unread memos every 30 seconds
+	useEffect(() => {
+		const interval = setInterval(fetchUnreadCount, 30000);
+		return () => clearInterval(interval);
 	}, []);
 
 	const isSupervisor = sessionInfo?.role === 'supervisor';
@@ -57,19 +79,26 @@ export default function CarePortal() {
 			icon: '🏠',
 			description: 'Location-scoped list',
 		},
-        {
-            id: 'logs', 
-            label: 'Logs', 
-            icon: '📝', 
-            description: 'Create & view logs', 
-            hasNotification: true
-        },
-        {
-            id: 'documents',
-            label: 'Documents',
-            icon: '📁',
-            description: 'All resident docs',
-        },
+		{
+			id: 'memos',
+			label: 'Memos',
+			icon: '✉️',
+			description: 'Team communication',
+			hasNotification: unreadMemoCount > 0,
+			badge: unreadMemoCount > 0 ? unreadMemoCount : undefined,
+		},
+		{
+			id: 'vacation',
+			label: 'Vacation Requests',
+			icon: '🏖️',
+			description: 'Request time off',
+		},
+		{
+			id: 'life-safety',
+			label: 'Fire Drill & Smoke Detector',
+			icon: '🧯',
+			description: 'Monthly checks & drills',
+		},
 		{
 			id: 'profile',
 			label: 'My Profile',
@@ -80,6 +109,12 @@ export default function CarePortal() {
 
 	const supervisorItems = [
 		{id: 'team', label: 'Team', icon: '👥', description: 'Time exceptions'},
+		{
+			id: 'shift-history',
+			label: 'Shift History',
+			icon: '🗂️',
+			description: 'Shifts by day',
+		},
 		{
 			id: 'compliance',
 			label: 'Compliance',
@@ -139,15 +174,23 @@ export default function CarePortal() {
 				return (
 					<CareResidentsWorkspace onResidentSelect={handleResidentSelect} />
 				);
-			case 'logs':
-				return <CareLogsWorkspace />;
-			case 'documents':
-				return <CareDocumentsWorkspace />;
+			case 'memos':
+				return <MemosWorkspace />;
+			case 'vacation':
+				return <VacationRequests isAdmin={false} />;
+			case 'life-safety':
+				return <LifeSafetyDocuments />;
 			case 'profile':
 				return <CareProfileWorkspace />;
 			case 'team':
 				return isSupervisor ? (
 					<SupervisorTeamWorkspace />
+				) : (
+					<div>Access denied</div>
+				);
+			case 'shift-history':
+				return isSupervisor ? (
+					<SupervisorShiftHistory />
 				) : (
 					<div>Access denied</div>
 				);
@@ -203,7 +246,12 @@ export default function CarePortal() {
 							<div className="flex-1 min-w-0">
 								<div className="font-medium flex items-center">
 									{item.label}
-									{item.hasNotification && (
+									{item.badge && (
+										<span className="ml-2 px-2 py-0.5 text-xs bg-red-500 text-white rounded-full">
+											{item.badge}
+										</span>
+									)}
+									{item.hasNotification && !item.badge && (
 										<span className="ml-2 w-2.5 h-2.5 bg-red-500 rounded-full"></span>
 									)}
 								</div>

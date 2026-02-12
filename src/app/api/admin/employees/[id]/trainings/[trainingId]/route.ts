@@ -2,6 +2,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {
 	updateEmployeeTraining,
 	deleteEmployeeTraining,
@@ -63,9 +64,8 @@ export async function PATCH(
 		});
 
 		return NextResponse.json(updated);
-	} catch (error: any) {
-		console.error('Error updating training:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'UpdateTraining');
 	}
 }
 
@@ -94,8 +94,7 @@ export async function DELETE(
 		});
 
 		return NextResponse.json({success: true});
-	} catch (error: any) {
-		console.error('Error deleting training:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'DeleteTraining');
 	}
 }

@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {sendEmployeeInviteEmail} from '@/lib/emails/employee';
 
 export async function POST(request: Request) {
@@ -29,14 +30,7 @@ export async function POST(request: Request) {
             location: '', // Placeholder
         });
         return NextResponse.json({message: 'Employee invite email sent successfully'}, {status: 200});
-    } catch (error: any) {
-        await logAudit({
-            clerkUserId: userId,
-            event: 'SEND_EMPLOYEE_INVITE_EMAIL_FAILED',
-            details: error.message,
-            deviceId: 'system', // Placeholder
-            location: '', // Placeholder
-        });
-        return NextResponse.json({error: error.message}, {status: 500});
+    } catch (error) {
+        return internalServerError(error, 'SendEmployeeInviteEmail');
     }
 }

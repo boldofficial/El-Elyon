@@ -18,9 +18,12 @@
 		"@clerk/backend": "^2.17.2",
 		"@clerk/nextjs": "^6.35.0",
 		"@neondatabase/serverless": "^1.0.2",
+		"@sentry/nextjs": "^10.38.0",
 		"@types/bcryptjs": "^2.4.6",
 		"@types/nodemailer": "^7.0.2",
 		"@types/uuid": "^10.0.0",
+		"@upstash/ratelimit": "^2.0.8",
+		"@upstash/redis": "^1.36.2",
 		"@vercel/analytics": "^1.6.1",
 		"clsx": "^2.1.1",
 		"date-fns": "^4.1.0",
@@ -28,6 +31,7 @@
 		"lucide-react": "^0.563.0",
 		"next": "16.0.10",
 		"nodemailer": "^6.10.1",
+		"pg": "^8.18.0",
 		"react": "19.2.0",
 		"react-dom": "19.2.0",
 		"resend": "^6.1.1",
@@ -35,7 +39,8 @@
 		"svix": "^1.24.0",
 		"tailwind-merge": "^3.1.0",
 		"uuid": "^13.0.0",
-		"vercel": "^48.9.0"
+		"vercel": "^48.9.0",
+		"zod": "^4.3.6"
 	},
 	"devDependencies": {
 		"@eslint/js": "^9.21.0",
@@ -57,6 +62,7 @@
 		"npm-run-all": "^4.1.5",
 		"postcss": "~8",
 		"prettier": "^3.5.3",
+		"sharp": "^0.34.5",
 		"tailwindcss": "^3",
 		"typescript": "^5",
 		"typescript-eslint": "^8.24.1",

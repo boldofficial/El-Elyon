@@ -2,6 +2,7 @@ import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {db} from '@/db/index';
 import {residentLogs} from '@/db/schema';
+import {requireCareAccess} from '@/lib/db-helpers';
 
 export async function POST(req: Request) {
 	try {
@@ -11,7 +12,13 @@ export async function POST(req: Request) {
 			return NextResponse.json({error: 'Not authenticated'}, {status: 401});
 		}
 
-		const {residentId, template, content} = await req.json();
+		await requireCareAccess(userId);
+
+		const {residentId, template, content, location, shiftId} = await req.json();
+
+		if (!residentId) {
+			return NextResponse.json({error: 'residentId is required'}, {status: 400});
+		}
 
 		const [log] = await db
 			.insert(residentLogs)
@@ -19,6 +26,8 @@ export async function POST(req: Request) {
 				residentId,
 				template,
 				content,
+				location,
+				shiftId,
 				authorId: userId,
 				createdBy: userId,
 				createdAt: new Date(),

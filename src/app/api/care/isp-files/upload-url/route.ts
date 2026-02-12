@@ -2,6 +2,7 @@
 import {NextRequest, NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminOrSupervisorAccess} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {generateUploadUrl, generateFileKey} from '@/lib/aws-s3';
 
 export async function POST(req: NextRequest) {
@@ -29,8 +30,7 @@ export async function POST(req: NextRequest) {
 			uploadUrl,
 			fileKey,
 		});
-	} catch (error: any) {
-		console.error('Error generating upload URL:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'GenerateISPUploadURL');
 	}
 }

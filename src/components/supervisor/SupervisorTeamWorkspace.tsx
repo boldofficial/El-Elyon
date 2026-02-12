@@ -1,6 +1,6 @@
 'use client';
 
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useMemo} from 'react';
 
 export default function SupervisorTeamWorkspace() {
 	const [userRole, setUserRole] = useState<any>(null);
@@ -9,6 +9,9 @@ export default function SupervisorTeamWorkspace() {
 	const [managedLocations, setManagedLocations] = useState<string[]>([]);
 	const [shiftSummary, setShiftSummary] = useState<any[]>([]);
 	const [logStats, setLogStats] = useState<any>(null);
+	const [pastShifts, setPastShifts] = useState<any[]>([]);
+	const [isLoadingPastShifts, setIsLoadingPastShifts] = useState(false);
+	const [selectedStaff, setSelectedStaff] = useState<string>('all');
 
 	const [selectedLocation, setSelectedLocation] = useState<string>('all');
 	const [dateRange, setDateRange] = useState({
@@ -19,18 +22,15 @@ export default function SupervisorTeamWorkspace() {
 	useEffect(() => {
 		async function fetchData() {
 			try {
-				const [roleRes, membersRes, locationsRes, teamStatsRes] =
-					await Promise.all([
-						fetch('/api/users/role'),
-						fetch('/api/supervisor/team-members'),
-						fetch('/api/supervisor/managed-locations'),
-						fetch('/api/supervisor/team-stats'),
-					]);
+				const [roleRes, membersRes, locationsRes] = await Promise.all([
+					fetch('/api/users/role'),
+					fetch('/api/supervisor/team-members'),
+					fetch('/api/supervisor/managed-locations'),
+				]);
 
 				setUserRole(await roleRes.json());
 				setTeamMembers(await membersRes.json());
 				setManagedLocations(await locationsRes.json());
-				setTeamStats(await teamStatsRes.json());
 			} catch (error) {
 				console.error('Error fetching team data:', error);
 			}
@@ -50,21 +50,54 @@ export default function SupervisorTeamWorkspace() {
 					);
 				if (dateRange.to)
 					params.append('dateTo', new Date(dateRange.to).getTime().toString());
+				if (selectedLocation !== 'all')
+					params.append('location', selectedLocation);
 
-				const [shiftRes, logRes] = await Promise.all([
+				const [shiftRes, logRes, teamStatsRes] = await Promise.all([
 					fetch(`/api/supervisor/team-shift-summary?${params}`),
 					fetch(`/api/supervisor/team-log-stats?${params}`),
+					fetch(`/api/supervisor/team-stats?${params}`),
 				]);
 
 				setShiftSummary(await shiftRes.json());
 				setLogStats(await logRes.json());
+				setTeamStats(await teamStatsRes.json());
 			} catch (error) {
 				console.error('Error fetching stats:', error);
 			}
 		}
 
 		fetchStats();
-	}, [dateRange]);
+	}, [dateRange, selectedLocation]);
+
+	useEffect(() => {
+		async function fetchPastShifts() {
+			try {
+				setIsLoadingPastShifts(true);
+				const params = new URLSearchParams();
+				if (dateRange.from)
+					params.append(
+						'dateFrom',
+						new Date(dateRange.from).getTime().toString()
+					);
+				if (dateRange.to)
+					params.append('dateTo', new Date(dateRange.to).getTime().toString());
+				if (selectedLocation !== 'all') params.append('location', selectedLocation);
+				if (selectedStaff !== 'all') params.append('staffId', selectedStaff);
+				params.append('limit', '50');
+
+				const res = await fetch(`/api/supervisor/team-shifts?${params}`);
+				const data = await res.json();
+				setPastShifts(data);
+			} catch (error) {
+				console.error('Error fetching past shifts:', error);
+			} finally {
+				setIsLoadingPastShifts(false);
+			}
+		}
+
+		fetchPastShifts();
+	}, [dateRange, selectedLocation, selectedStaff]);
 
 	const filteredTeamMembers =
 		selectedLocation === 'all'
@@ -72,6 +105,22 @@ export default function SupervisorTeamWorkspace() {
 			: teamMembers.filter((member: any) =>
 					member.locations.includes(selectedLocation)
 				);
+
+	const recentShiftByStaff = useMemo(() => {
+		const map: Record<string, any> = {};
+		for (const summary of shiftSummary) {
+			if (!map[summary.staffId]) {
+				map[summary.staffId] = summary;
+			}
+		}
+		return map;
+	}, [shiftSummary]);
+
+	const formatDurationHours = (ms: number) =>
+		Math.max(0, Math.round(ms / (1000 * 60 * 60)));
+
+	const formatDateTime = (value?: string) =>
+		value ? new Date(value).toLocaleString() : '—';
 
 	const isAdmin = userRole?.role === 'admin';
 
@@ -302,6 +351,26 @@ export default function SupervisorTeamWorkspace() {
 							className="w-full border border-gray-300 rounded-md px-3 py-2"
 						/>
 					</div>
+
+					<div>
+						<label
+							htmlFor="staff-select"
+							className="block text-sm font-medium text-gray-700 mb-2">
+							Team Member
+						</label>
+						<select
+							id="staff-select"
+							value={selectedStaff}
+							onChange={(e) => setSelectedStaff(e.target.value)}
+							className="w-full border border-gray-300 rounded-md px-3 py-2">
+							<option value="all">All Team Members</option>
+							{teamMembers.map((member) => (
+								<option key={member.id} value={member.id}>
+									{member.name}
+								</option>
+							))}
+						</select>
+					</div>
 				</div>
 			</div>
 
@@ -325,9 +394,7 @@ export default function SupervisorTeamWorkspace() {
 				) : (
 					<div className="divide-y divide-gray-200">
 						{filteredTeamMembers.map((member: any) => {
-							const memberShift = shiftSummary?.find(
-								(s: any) => s.staffId === member.id
-							);
+							const memberShift = recentShiftByStaff[member.id];
 							const memberLogCount = logStats?.logsByAuthor?.[member.name] || 0;
 
 							return (
@@ -370,26 +437,41 @@ export default function SupervisorTeamWorkspace() {
 													<span className="font-medium">Locations:</span>
 													<span>{member.locations.join(', ')}</span>
 												</div>
-												{memberShift?.isCurrentlyWorking && (
-													<div className="flex items-center space-x-2">
-														<span className="font-medium">
-															Current Location:
-														</span>
-														<span className="text-green-600">
-															{memberShift.location}
+												<div className="space-y-2">
+													{memberShift ? (
+														<div className="text-sm text-gray-700">
+															<div className="flex items-center space-x-2">
+																<span className="font-medium">Last shift:</span>
+																<span>
+																	{formatDateTime(memberShift.clockInTime)} →{' '}
+																	{memberShift.clockOutTime
+																		? formatDateTime(memberShift.clockOutTime)
+																		: 'Still working'}
+																</span>
+															</div>
+															<div className="flex items-center space-x-2">
+																<span className="font-medium">Location:</span>
+																<span className={memberShift.isCurrentlyWorking ? 'text-green-600' : ''}>
+																	{memberShift.location}
+																</span>
+															</div>
+															<div className="flex items-center space-x-4 mt-2">
+																<span className="text-xs bg-gray-100 px-2 py-1 rounded">
+																	{formatDurationHours(memberShift.duration)}h logged
+																</span>
+																<span className="text-xs bg-gray-100 px-2 py-1 rounded">
+																	{memberShift.logCount || 0} shift logs
+																</span>
+															</div>
+														</div>
+													) : (
+														<p className="text-sm text-gray-500">No shifts recorded yet.</p>
+													)}
+													<div className="flex items-center space-x-4 mt-2">
+														<span className="text-xs bg-gray-100 px-2 py-1 rounded">
+															{memberLogCount} logs in period
 														</span>
 													</div>
-												)}
-												<div className="flex items-center space-x-4 mt-2">
-													<span className="text-xs bg-gray-100 px-2 py-1 rounded">
-														{Math.round(
-															(memberShift?.duration || 0) / (1000 * 60 * 60)
-														)}
-														h this period
-													</span>
-													<span className="text-xs bg-gray-100 px-2 py-1 rounded">
-														{memberLogCount} logs
-													</span>
 												</div>
 											</div>
 										</div>
@@ -463,6 +545,50 @@ export default function SupervisorTeamWorkspace() {
 											)
 										)}
 									</div>
+								</div>
+
+								<div className="bg-white rounded-lg shadow-sm border overflow-hidden">
+									<div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+										<h3 className="text-lg font-semibold">Past Shifts</h3>
+										<span className="text-sm text-gray-500">Showing up to 50 shifts based on filters</span>
+									</div>
+									{isLoadingPastShifts ? (
+										<div className="p-6 text-center text-gray-500">Loading shifts…</div>
+									) : pastShifts.length === 0 ? (
+										<div className="p-8 text-center text-gray-500">No shifts match the current filters.</div>
+									) : (
+										<div className="overflow-x-auto">
+											<table className="min-w-full divide-y divide-gray-200">
+												<thead className="bg-gray-50">
+													<tr>
+														<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
+														<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+														<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock In</th>
+														<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clock Out</th>
+														<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
+														<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Logs</th>
+														<th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activities</th>
+													</tr>
+												</thead>
+												<tbody className="bg-white divide-y divide-gray-200">
+													{pastShifts.map((shift) => (
+														<tr key={shift.shiftId}>
+															<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+																<div className="font-medium">{shift.staffName}</div>
+																<div className="text-gray-500 text-xs">{shift.staffEmail}</div>
+															</td>
+															<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.location}</td>
+															<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDateTime(shift.clockInTime)}</td>
+															<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.clockOutTime ? formatDateTime(shift.clockOutTime) : 'Still working'}</td>
+															<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDurationHours(shift.durationMs)}h</td>
+															<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.logCount}</td>
+															<td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.activityCount}</td>
+														</tr>
+													))}
+												</tbody>
+											</table>
+										</div>
+									)}
 								</div>
 
 								<div>

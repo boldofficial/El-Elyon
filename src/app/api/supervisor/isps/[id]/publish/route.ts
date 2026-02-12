@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireSupervisorAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {db} from '@/db/index';
 import {isp, residents} from '@/db/schema';
 import {updateIsp} from '@/db/mutations/isp';
@@ -75,15 +76,7 @@ export async function POST(
 			{message: 'ISP published successfully'},
 			{status: 200}
 		);
-	} catch (error: any) {
-		console.error('Error publishing ISP:', error);
-		await logAudit({
-			clerkUserId: userId,
-			event: 'PUBLISH_ISP_FAILED',
-			details: error.message,
-			deviceId: 'system', // Placeholder
-			location: '', // Placeholder
-		});
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'PublishISP');
 	}
 }

@@ -3,8 +3,8 @@
 import {auth} from '@clerk/nextjs/server';
 import {NextRequest, NextResponse} from 'next/server';
 import {db} from '@/db/index';
-import {residentLogs, residents} from '@/db/schema';
-import {eq, desc, SQL} from 'drizzle-orm';
+import {residentLogs, residentLogActivities, residents} from '@/db/schema';
+import {eq, desc, asc, SQL} from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
 	try {
@@ -30,12 +30,15 @@ export async function GET(req: NextRequest) {
 		}
 
 		const logs = await db.query.residentLogs.findMany({
-			where: conditions.length > 0 ? (residentLogs, {and}) => and(...conditions) : undefined,
+			where:
+				conditions.length > 0 ? (residentLogs, {and}) => and(...conditions) : undefined,
 			limit,
 			orderBy: [desc(residentLogs.createdAt)],
 			with: {
 				resident: true,
-				activities: true,
+				activities: {
+					orderBy: (activities, {asc}) => [asc(activities.timestamp)],
+				},
 			},
 		});
 

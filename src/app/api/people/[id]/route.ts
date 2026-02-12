@@ -2,6 +2,7 @@
 
 import {NextRequest, NextResponse} from 'next/server';
 import {requireAdminAccess} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {deleteResident} from '@/db/mutations/people'; // Assuming this mutation exists or will be created
 import {auth} from '@clerk/nextjs/server';
 
@@ -26,9 +27,8 @@ export async function DELETE(
 
 		await deleteResident(residentId);
 		return NextResponse.json({message: 'Resident deleted successfully'});
-	} catch (error: any) {
-		console.error('Error deleting resident:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'DeleteResident');
 	}
 }
 

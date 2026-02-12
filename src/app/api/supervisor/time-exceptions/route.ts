@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireSupervisorAccess} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 
 export async function GET() {
     const {userId} = await auth();
@@ -16,8 +17,7 @@ export async function GET() {
         const pendingTimeExceptions: any[] = [];
 
         return NextResponse.json(pendingTimeExceptions);
-    } catch (error: any) {
-        console.error('Error getting pending time exceptions:', error);
-        return NextResponse.json({error: error.message}, {status: 500});
+    } catch (error) {
+        return internalServerError(error, 'GetTimeExceptions');
     }
 }

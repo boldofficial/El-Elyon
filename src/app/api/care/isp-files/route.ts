@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireCareAccess, requireAdminAccess, requireAdminOrSupervisorAccess } from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {
   listISPFiles,
   createISPFile,
@@ -23,9 +24,8 @@ export async function GET(req: NextRequest) {
     // Allow listing all files if residentId is not provided (handled by listISPFiles authorization)
     const ispFiles = await listISPFiles(userId, residentId || undefined);
     return NextResponse.json(ispFiles);
-  } catch (error: any) {
-    console.error('Error listing ISP files:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return internalServerError(error, 'ListISPFiles');
   }
 }
 
@@ -80,9 +80,8 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json(newISPFile);
-  } catch (error: any) {
-    console.error('Error creating ISP file:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return internalServerError(error, 'CreateISPFile');
   }
 }
 
@@ -107,9 +106,8 @@ export async function PUT(req: NextRequest) {
 
     const activatedISP = await activateISPFile(ispFileId, activatedBy);
     return NextResponse.json(activatedISP);
-  } catch (error: any) {
-    console.error('Error activating ISP file:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return internalServerError(error, 'ActivateISPFile');
   }
 }
 
@@ -129,9 +127,8 @@ export async function DELETE(req: NextRequest) {
 
     await deleteISPFile(ispFileId);
     return NextResponse.json({ message: 'ISP file deleted successfully' });
-  } catch (error: any) {
-    console.error('Error deleting ISP file:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return internalServerError(error, 'DeleteISPFile');
   }
 }
 
@@ -156,8 +153,7 @@ export async function PATCH(req: NextRequest) {
       preparedBy,
     });
     return NextResponse.json(updatedISP);
-  } catch (error: any) {
-    console.error('Error updating ISP file:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  } catch (error) {
+    return internalServerError(error, 'UpdateISPFile');
   }
 }

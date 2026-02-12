@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireSupervisorAccess} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {db} from '@/db/index';
 import {
 	residents,
@@ -89,8 +90,7 @@ export async function GET() {
 				return a.residentNeutralId.localeCompare(b.residentNeutralId);
 			})
 		);
-	} catch (error: any) {
-		console.error('Error getting ISP acknowledgments:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'GetISPAcknowledgments');
 	}
 }

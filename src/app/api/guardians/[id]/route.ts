@@ -9,6 +9,7 @@ import {
 	requireAdminAccess,
 	logAudit,
 } from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {updateGuardian, deleteGuardian} from '@/db/mutations/guardians';
 
 export async function PATCH(
@@ -54,15 +55,8 @@ export async function PATCH(
 			{message: 'Guardian updated successfully'},
 			{status: 200}
 		);
-	} catch (error: any) {
-		await logAudit({
-			clerkUserId: userId,
-			event: 'UPDATE_GUARDIAN_FAILED',
-			details: error.message,
-			deviceId: 'system', // Placeholder
-			location: '', // Placeholder
-		});
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'UpdateGuardian');
 	}
 }
 
@@ -99,14 +93,7 @@ export async function DELETE(
 			{message: 'Guardian deleted successfully'},
 			{status: 200}
 		);
-	} catch (error: any) {
-		await logAudit({
-			clerkUserId: userId,
-			event: 'DELETE_GUARDIAN_FAILED',
-			details: error.message,
-			deviceId: 'system', // Placeholder
-			location: '', // Placeholder
-		});
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'DeleteGuardian');
 	}
 }

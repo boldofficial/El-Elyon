@@ -4,6 +4,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireCareAccess} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {db} from '@/db/index';
 import {residents} from '@/db/schema';
 

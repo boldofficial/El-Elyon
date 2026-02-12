@@ -10,8 +10,25 @@ import {internalCreateAlert} from '@/db/mutations/compliance';
 // This route is intended to be called by an internal scheduler (e.g., cron job)
 // and does not require direct user authentication.
 export async function POST(req: NextRequest) {
-	// TODO: Implement a secure way to authenticate internal calls (e.g., API key)
-	// For now, it's open, but in production, this needs to be secured.
+	// Verify internal API key
+	const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace('Bearer ', '');
+	const expectedKey = process.env.INTERNAL_API_KEY;
+
+	if (!expectedKey) {
+		return NextResponse.json(
+			{error: 'Internal API not configured'},
+			{status: 500}
+		);
+	}
+
+	if (apiKey !== expectedKey) {
+		console.log('🚨 Unauthorized internal API call to generate-alerts');
+		return NextResponse.json(
+			{error: 'Unauthorized'},
+			{status: 401}
+		);
+	}
+
 	console.log('Triggered internal compliance alert generation.');
 
 	try {

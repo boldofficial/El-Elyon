@@ -1,6 +1,7 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireSupervisorAccess, logAudit} from '@/lib/db-helpers';
+import {internalServerError} from '@/lib/api-errors';
 import {db} from '@/db/index';
 import {residents, isp} from '@/db/schema';
 import {listIspsByResidentId} from '@/db/queries/isp';
@@ -50,9 +51,8 @@ export async function GET() {
 		return NextResponse.json(
 			isps.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
 		);
-	} catch (error: any) {
-		console.error('Error getting location ISPs:', error);
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'GetLocationISPs');
 	}
 }
 
@@ -126,15 +126,7 @@ export async function POST(request: Request) {
 		});
 
 		return NextResponse.json({ispId: newIsp.id}, {status: 201});
-	} catch (error: any) {
-		console.error('Error creating ISP:', error);
-		await logAudit({
-			clerkUserId: userId,
-			event: 'CREATE_ISP_FAILED',
-			details: error.message,
-			deviceId: 'system', // Placeholder
-			location: '', // Placeholder
-		});
-		return NextResponse.json({error: error.message}, {status: 500});
+	} catch (error) {
+		return internalServerError(error, 'CreateISP');
 	}
 }

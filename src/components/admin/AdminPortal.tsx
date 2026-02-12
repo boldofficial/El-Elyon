@@ -17,8 +17,10 @@ import DeviceManagementWorkspace from './DeviceManagementWorkspace';
 import AdminDeviceBadge from './AdminDeviceBadge';
 import EmployeeHRManagement from './EmployeeHRManagement';
 import ResidentProfileManagement from './ResidentProfileManagement';
-import DocumentsWorkspace from './DocumentsWorkspace';
+import LifeSafetyDocuments from '../supervisor/LifeSafetyDocuments';
 import CareLogsWorkspace from './CareLogsWorkspace';
+import MemosWorkspace from '../shared/MemosWorkspace';
+import VacationRequests from '../shared/VacationRequests';
 
 
 export default function AdminPortal() {
@@ -100,6 +102,10 @@ export default function AdminPortal() {
 				return <ComplianceWorkspace />;
 			case 'locations':
 				return <LocationsWorkspace />; // Use LocationsWorkspace
+			case 'memos':
+				return <MemosWorkspace />;
+			case 'vacation-requests':
+				return <VacationRequests isAdmin={true} />;
 			case 'devices':
 				return <DeviceManagementWorkspace />;
 			case 'guardian-checklists':
@@ -110,7 +116,7 @@ export default function AdminPortal() {
 				return <SettingsWorkspace />;
 
 			case 'documents':
-				return <DocumentsWorkspace />;
+				return <LifeSafetyDocuments />;
 			case 'care-logs':
 				return <CareLogsWorkspace />;
 			default:
