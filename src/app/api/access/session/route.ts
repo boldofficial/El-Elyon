@@ -49,8 +49,11 @@ export async function GET() {
 			defaultRoute = '/care';
 		}
 
-		// Determine locations
-		let assignedLocations = role.locations || employee.locations || [];
+		// Determine locations by merging role and employee locations
+		let assignedLocations = Array.from(new Set([
+			...(role.locations || []),
+			...(employee.locations || [])
+		]));
 		
 		// If admin, give access to all locations
 		if (role.role === 'admin') {

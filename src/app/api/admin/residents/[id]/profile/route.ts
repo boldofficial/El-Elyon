@@ -73,6 +73,7 @@ export async function PATCH(
 			vocationalAgency: body.vocationalAgency,
 			vocationalAgencyAddress: body.vocationalAgencyAddress,
 			guardianIds: body.guardianIds,
+			emergencyContact: body.emergencyContact,
 			medicalInfo: body.medicalInfo,
 			careNotes: body.careNotes,
 			location: body.location,

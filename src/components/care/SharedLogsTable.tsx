@@ -6,6 +6,8 @@ interface SharedLogsTableProps {
     logs: any[];
 }
 
+const EDIT_WINDOW_MS = 60 * 60 * 1000;
+
 export const formatLogContent = (content: string, template: string | undefined, allTemplates: any[] = []) => {
     // Handle empty or invalid content
     if (!content || content.trim() === '') {
@@ -79,12 +81,58 @@ export const formatLogContent = (content: string, template: string | undefined, 
     }
 };
 
-// ... formatLogContent function remains identical (lines 8-80) ...
+function getEditableLogContent(content: string | null | undefined) {
+    if (!content) return '';
+
+    try {
+        const parsed = JSON.parse(content);
+        if (
+            parsed &&
+            typeof parsed === 'object' &&
+            typeof parsed.content === 'string'
+        ) {
+            return parsed.content;
+        }
+    } catch {
+        // Plain-text logs are expected here.
+    }
+
+    return content;
+}
+
+function isWithinEditWindow(createdAt: string | Date | null | undefined) {
+    if (!createdAt) return false;
+    const created = new Date(createdAt).getTime();
+    if (Number.isNaN(created)) return false;
+    return Date.now() - created <= EDIT_WINDOW_MS;
+}
 
 export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
     const [expandedIds, setExpandedIds] = React.useState<Set<string>>(new Set());
     const [activitiesById, setActivitiesById] = React.useState<Record<string, any[]>>({});
     const [loadingActivities, setLoadingActivities] = React.useState<Record<string, boolean>>({});
+    const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
+    const [logUpdates, setLogUpdates] = React.useState<Record<string, any>>({});
+    const [editingId, setEditingId] = React.useState<string | null>(null);
+    const [editContent, setEditContent] = React.useState('');
+    const [editActivities, setEditActivities] = React.useState<any[]>([]);
+    const [savingEdit, setSavingEdit] = React.useState(false);
+    const [editError, setEditError] = React.useState<string | null>(null);
+
+    React.useEffect(() => {
+        async function fetchCurrentUser() {
+            try {
+                const res = await fetch('/api/users/current');
+                if (!res.ok) return;
+                const user = await res.json();
+                setCurrentUserId(user?.clerkUserId || null);
+            } catch {
+                setCurrentUserId(null);
+            }
+        }
+
+        fetchCurrentUser();
+    }, []);
 
     const fetchActivitiesIfMissing = async (log: any) => {
         if ((log.activities && log.activities.length > 0) || activitiesById[log.id]) return;
@@ -112,6 +160,89 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
         setExpandedIds(newExpanded);
     };
 
+    const startEditing = async (log: any) => {
+        setEditError(null);
+        setEditingId(log.id);
+        setEditContent(getEditableLogContent(log.content));
+        setLoadingActivities((prev) => ({...prev, [log.id]: true}));
+
+        try {
+            const res = await fetch(`/api/care/resident-logs/${log.id}/activities`);
+            const activities = res.ok ? await res.json() : log.activities || [];
+            setActivitiesById((prev) => ({...prev, [log.id]: activities}));
+            setEditActivities(activities);
+        } catch {
+            setEditActivities(log.activities || []);
+        } finally {
+            setLoadingActivities((prev) => ({...prev, [log.id]: false}));
+        }
+    };
+
+    const cancelEditing = () => {
+        setEditingId(null);
+        setEditContent('');
+        setEditActivities([]);
+        setEditError(null);
+    };
+
+    const updateEditActivity = (
+        activityId: string,
+        changes: {completed?: boolean; notes?: string}
+    ) => {
+        setEditActivities((prev) =>
+            prev.map((activity) =>
+                activity.id === activityId ? {...activity, ...changes} : activity
+            )
+        );
+    };
+
+    const saveEdit = async (log: any) => {
+        setEditError(null);
+
+        if (!editContent.trim()) {
+            setEditError('General notes are required.');
+            return;
+        }
+
+        if (!editActivities.some((activity) => activity.completed)) {
+            setEditError('At least one activity must be checked.');
+            return;
+        }
+
+        setSavingEdit(true);
+        try {
+            const res = await fetch(`/api/care/resident-logs/${log.id}`, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    content: editContent,
+                    activities: editActivities,
+                }),
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+                throw new Error(data?.error || 'Failed to edit log');
+            }
+
+            setLogUpdates((prev) => ({
+                ...prev,
+                [log.id]: {
+                    content: data.content,
+                    activities: data.activities || editActivities,
+                },
+            }));
+            setActivitiesById((prev) => ({
+                ...prev,
+                [log.id]: data.activities || editActivities,
+            }));
+            cancelEditing();
+        } catch (error) {
+            setEditError(error instanceof Error ? error.message : 'Failed to edit log');
+        } finally {
+            setSavingEdit(false);
+        }
+    };
+
     return (
         <div className="space-y-3">
              {logs.length === 0 ? (
@@ -121,37 +252,43 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
                 </div>
             ) : (
                 logs.map((log) => {
-                    const isExpanded = expandedIds.has(log.id);
+                    const displayLog = {...log, ...(logUpdates[log.id] || {})};
+                    const isExpanded = expandedIds.has(displayLog.id);
+                    const isEditing = editingId === displayLog.id;
+                    const canEdit =
+                        currentUserId === displayLog.authorId &&
+                        isWithinEditWindow(displayLog.createdAt);
+                    const visibleActivities = activitiesById[displayLog.id] || displayLog.activities || [];
                     return (
                         <div 
-                            key={log.id} 
+                            key={displayLog.id} 
                             className={`bg-white rounded-lg shadow-sm border transition-all duration-200 ${isExpanded ? 'ring-1 ring-blue-500 border-blue-500' : 'hover:border-gray-300'}`}
                         >
                             <button
-                                onClick={() => toggleExpand(log)}
+                                onClick={() => toggleExpand(displayLog)}
                                 className="w-full text-left px-4 py-3 sm:px-6 flex items-center justify-between gap-4 focus:outline-none"
                             >
                                 <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
                                     {/* Date */}
                                     <div className="md:col-span-3 text-sm text-gray-500">
-                                        {new Date(log.createdAt).toLocaleString()}
+                                        {new Date(displayLog.createdAt).toLocaleString()}
                                     </div>
                                     
                                     {/* Resident */}
                                     <div className="md:col-span-3">
                                         <div className="text-sm font-medium text-gray-900 truncate">
-                                            {log.residentName || 'Unknown Resident'}
+                                            {displayLog.residentName || 'Unknown Resident'}
                                         </div>
                                     </div>
 
                                     {/* Template */}
                                     <div className="md:col-span-3">
                                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                            log.template === 'daily_activities' 
+                                            displayLog.template === 'daily_activities' 
                                             ? 'bg-purple-100 text-purple-800'
                                             : 'bg-blue-100 text-blue-800'
                                         }`}>
-                                            {log.template
+                                            {displayLog.template
                                                 ?.replace(/_/g, ' ')
                                                 .replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Log'}
                                         </span>
@@ -159,7 +296,7 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
 
                                     {/* Author (Desktop only usually, but responsive grid) */}
                                     <div className="hidden md:block md:col-span-3 text-sm text-gray-500 truncate">
-                                        {log.authorName || 'Unknown'}
+                                        {displayLog.authorName || 'Unknown'}
                                     </div>
                                 </div>
 
@@ -184,18 +321,65 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
                                                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                                                     Content
                                                 </h4>
-                                                <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
-                                                    {formatLogContent(log.content, log.template, [])}
-                                                </div>
+                                                {isEditing ? (
+                                                    <textarea
+                                                        value={editContent}
+                                                        onChange={(event) => setEditContent(event.target.value)}
+                                                        rows={5}
+                                                        className="w-full text-sm text-gray-800 bg-white p-3 rounded border"
+                                                    />
+                                                ) : (
+                                                    <div className="text-sm text-gray-800 whitespace-pre-wrap bg-white p-3 rounded border">
+                                                        {formatLogContent(displayLog.content, displayLog.template, [])}
+                                                    </div>
+                                                )}
                                             </div>
 
                                             <div>
                                                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                                                     Activities
                                                 </h4>
-                                                {(activitiesById[log.id] || log.activities || []).length > 0 ? (
+                                                {isEditing ? (
                                                     <ul className="space-y-2">
-                                                        {(activitiesById[log.id] || log.activities || [])
+                                                        {editActivities.map((activity: any) => (
+                                                            <li
+                                                                key={activity.id}
+                                                                className="bg-white p-3 rounded border text-sm"
+                                                            >
+                                                                <label className="flex items-start gap-3">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={!!activity.completed}
+                                                                        onChange={(event) =>
+                                                                            updateEditActivity(activity.id, {
+                                                                                completed: event.target.checked,
+                                                                            })
+                                                                        }
+                                                                        className="mt-1 h-4 w-4 rounded border-gray-300"
+                                                                    />
+                                                                    <div className="flex-1">
+                                                                        <div className="font-medium text-gray-900">
+                                                                            {activity.activityType}
+                                                                        </div>
+                                                                        <textarea
+                                                                            value={activity.notes || ''}
+                                                                            onChange={(event) =>
+                                                                                updateEditActivity(activity.id, {
+                                                                                    notes: event.target.value,
+                                                                                })
+                                                                            }
+                                                                            rows={2}
+                                                                            placeholder="Activity notes"
+                                                                            className="mt-2 w-full border rounded px-3 py-2 text-sm"
+                                                                        />
+                                                                    </div>
+                                                                </label>
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                ) : visibleActivities.length > 0 ? (
+                                                    <ul className="space-y-2">
+                                                        {visibleActivities
                                                             // Only show activities that were completed or have notes; omit untouched ones
                                                             .filter((activity: any) => activity.completed || (activity.notes && activity.notes.trim() !== ''))
                                                             .map((activity: any) => (
@@ -227,7 +411,7 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
                                                     </ul>
                                                 ) : (
                                                     <div className="text-sm text-gray-500 bg-white p-3 rounded border">
-                                                        {loadingActivities[log.id]
+                                                        {loadingActivities[displayLog.id]
                                                             ? 'Loading activities...'
                                                             : 'No activities recorded'}
                                                     </div>
@@ -237,23 +421,66 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
 
                                         <div className="space-y-4">
                                             <div>
-                                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                                                    Details
-                                                </h4>
+                                                <div className="flex items-center justify-between gap-3 mb-1">
+                                                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                                        Details
+                                                    </h4>
+                                                    {canEdit && !isEditing && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => startEditing(displayLog)}
+                                                            className="px-3 py-1 text-xs font-medium rounded border border-blue-600 text-blue-700 hover:bg-blue-50">
+                                                            Edit
+                                                        </button>
+                                                    )}
+                                                </div>
                                                 <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm">
                                                     <div className="flex justify-between">
                                                         <dt className="text-gray-500">Author:</dt>
-                                                        <dd className="font-medium text-gray-900">{log.authorName || 'Unknown'}</dd>
+                                                        <dd className="font-medium text-gray-900">{displayLog.authorName || 'Unknown'}</dd>
                                                     </div>
                                                     <div className="flex justify-between">
                                                         <dt className="text-gray-500">Location:</dt>
-                                                        <dd className="font-medium text-gray-900">{log.residentLocation || '-'}</dd>
+                                                        <dd className="font-medium text-gray-900">{displayLog.residentLocation || '-'}</dd>
                                                     </div>
                                                     <div className="flex justify-between">
                                                         <dt className="text-gray-500">Log ID:</dt>
-                                                        <dd className="font-mono text-xs text-gray-400">{log.id.substring(0, 8)}...</dd>
+                                                        <dd className="font-mono text-xs text-gray-400">{displayLog.id.substring(0, 8)}...</dd>
                                                     </div>
                                                 </dl>
+                                                {canEdit && !isEditing && (
+                                                    <p className="mt-3 text-xs text-gray-500">
+                                                        Editable for 1 hour after submission.
+                                                    </p>
+                                                )}
+                                                {!canEdit && currentUserId === displayLog.authorId && (
+                                                    <p className="mt-3 text-xs text-gray-500">
+                                                        The 1-hour edit window has closed.
+                                                    </p>
+                                                )}
+                                                {isEditing && (
+                                                    <div className="mt-4 space-y-3">
+                                                        {editError && (
+                                                            <p className="text-sm text-red-600">{editError}</p>
+                                                        )}
+                                                        <div className="flex justify-end gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={cancelEditing}
+                                                                disabled={savingEdit}
+                                                                className="px-3 py-2 text-sm rounded border hover:bg-gray-50 disabled:opacity-50">
+                                                                Cancel
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => saveEdit(displayLog)}
+                                                                disabled={savingEdit}
+                                                                className="px-3 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                                                                {savingEdit ? 'Saving...' : 'Save Edit'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

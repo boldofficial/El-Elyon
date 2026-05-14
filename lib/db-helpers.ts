@@ -6,9 +6,23 @@ import {eq} from 'drizzle-orm';
 
 // Helper: Get user role doc (Drizzle version)
 export async function getUserRoleDoc(clerkUserId: string) {
-	return await db.query.roles.findFirst({
+	const roleDoc = await db.query.roles.findFirst({
 		where: eq(roles.clerkUserId, clerkUserId),
 	});
+	
+	if (roleDoc) {
+		const { employees } = await import('../db/schema');
+		const employeeDoc = await db.query.employees.findFirst({
+			where: eq(employees.clerkUserId, clerkUserId),
+		});
+		
+		roleDoc.locations = Array.from(new Set([
+			...(roleDoc.locations || []),
+			...(employeeDoc?.locations || [])
+		]));
+	}
+	
+	return roleDoc;
 }
 
 // Helper: Audit (for mutations only)

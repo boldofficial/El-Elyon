@@ -5,15 +5,6 @@
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
 
-interface ResidentLogActivity {
-	id: string;
-	logId: string;
-	activityType: string;
-	completed: boolean;
-	notes: string | null;
-	timestamp: string;
-}
-
 interface ActivityState {
 	id?: string; // For existing activities
 	activityType: string;
@@ -69,6 +60,7 @@ export default function CareLogWithActivities({
 	const [submitting, setSubmitting] = useState(false);
 	const [currentLog, setCurrentLog] = useState<ResidentLog | null>(null);
 	const [loading, setLoading] = useState(true);
+	const [residentConfirmed, setResidentConfirmed] = useState(false);
 
 	const safeErrorMessage = async (res: Response) => {
 		try {
@@ -89,94 +81,18 @@ export default function CareLogWithActivities({
 	};
 
 	useEffect(() => {
-		async function fetchLogAndActivities() {
-			setLoading(true);
-			try {
-				// Fetch latest log for this resident, or create a default one
-				// For simplicity, we'll try to fetch, if none, we'll assume a new one
-				// In a real app, you might have a "today's log" concept
-				const logsRes = await fetch(`/api/care/resident-logs?residentId=${residentId}`);
-				if (!logsRes.ok) throw new Error('Failed to fetch resident logs');
-				const logs: ResidentLog[] = await logsRes.json();
-
-				let latestLog: ResidentLog | undefined;
-				if (logs.length > 0) {
-					// Find the latest log that matches the 'daily_activities' template
-                    // This prevents picking up 'daily_notes' (JSON) logs or other types
-					latestLog = logs.find(l => l.template === 'daily_activities');
-				}
-
-				if (latestLog) {
-					setCurrentLog(latestLog);
-					setGeneralNotes(latestLog.content || '');
-
-					const activitiesRes = await fetch(
-						`/api/care/resident-logs/${latestLog.id}/activities`
-					);
-					if (!activitiesRes.ok)
-						throw new Error('Failed to fetch log activities');
-					const fetchedActivities: ResidentLogActivity[] =
-						await activitiesRes.json();
-
-					// Merge fetched activities with common activities
-					const initialActivities: ActivityState[] = COMMON_ACTIVITIES.map(
-						(name) => {
-							const existing = fetchedActivities.find(
-								(a) => a.activityType === name
-							);
-							return {
-								id: existing?.id,
-								activityType: name,
-								completed: existing?.completed || false,
-								notes: existing?.notes || '',
-							};
-						}
-					);
-					// Add any custom activities that are not in COMMON_ACTIVITIES
-					fetchedActivities.forEach((fa) => {
-						if (!COMMON_ACTIVITIES.includes(fa.activityType)) {
-							initialActivities.push({
-								id: fa.id,
-								activityType: fa.activityType,
-								completed: fa.completed,
-								notes: fa.notes || '',
-							});
-						}
-					});
-					setActivities(initialActivities);
-				} else {
-					// Initialize with common activities if no log found
-					setActivities(
-						COMMON_ACTIVITIES.map((name) => ({
-							activityType: name,
-							completed: false,
-							notes: '',
-							isNew: true, // Mark as new for initial post
-						}))
-					);
-					setGeneralNotes('');
-					setCurrentLog(null);
-				}
-			} catch (error) {
-				console.error('Error fetching log and activities:', error);
-				toast.error('Failed to load resident activities');
-				// Fallback to initial common activities on error
-				setActivities(
-					COMMON_ACTIVITIES.map((name) => ({
-						activityType: name,
-						completed: false,
-						notes: '',
-						isNew: true,
-					}))
-				);
-				setGeneralNotes('');
-				setCurrentLog(null);
-			} finally {
-				setLoading(false);
-			}
-		}
-
-		fetchLogAndActivities();
+		setResidentConfirmed(false);
+		setActivities(
+			COMMON_ACTIVITIES.map((name) => ({
+				activityType: name,
+				completed: false,
+				notes: '',
+				isNew: true,
+			}))
+		);
+		setGeneralNotes('');
+		setCurrentLog(null);
+		setLoading(false);
 	}, [residentId]);
 
 
@@ -231,6 +147,22 @@ export default function CareLogWithActivities({
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
+
+		if (!activities.some((activity) => activity.completed)) {
+			toast.error('Select at least one completed activity');
+			return;
+		}
+
+		if (!generalNotes.trim()) {
+			toast.error('General notes are required');
+			return;
+		}
+
+		if (!residentConfirmed) {
+			toast.error(`Confirm this log is for ${residentName}`);
+			return;
+		}
+
 		setSubmitting(true);
 
 		try {
@@ -341,6 +273,17 @@ export default function CareLogWithActivities({
 			}
 
 			toast.success('Activity log saved successfully');
+			setActivities(
+				COMMON_ACTIVITIES.map((name) => ({
+					activityType: name,
+					completed: false,
+					notes: '',
+					isNew: true,
+				}))
+			);
+			setGeneralNotes('');
+			setCurrentLog(null);
+			setResidentConfirmed(false);
 			// Refresh activities to ensure all IDs are updated and state is consistent
 			if (onSuccess) onSuccess();
 		} catch (error) {
@@ -364,6 +307,20 @@ export default function CareLogWithActivities({
 			<h2 className="text-xl font-bold mb-4">
 				Daily Activity Log - {residentName}
 			</h2>
+			<div className="mb-6 rounded border border-blue-200 bg-blue-50 px-4 py-3">
+				<p className="text-sm font-medium text-blue-950">
+					You are documenting care for {residentName}.
+				</p>
+				<label className="mt-3 flex items-start gap-3 text-sm text-blue-950">
+					<input
+						type="checkbox"
+						checked={residentConfirmed}
+						onChange={(e) => setResidentConfirmed(e.target.checked)}
+						className="mt-0.5 h-4 w-4 rounded border-blue-300"
+					/>
+					<span>I confirm this activity log is for {residentName}.</span>
+				</label>
+			</div>
 
 			<form onSubmit={handleSubmit} className="space-y-6">
 				{/* Common Activities */}
@@ -458,6 +415,7 @@ export default function CareLogWithActivities({
 							);
 							setGeneralNotes('');
 							setCurrentLog(null); // Clear current log as well
+							setResidentConfirmed(false);
 						}}
 						className="px-6 py-2 border rounded hover:bg-gray-50">
 						Clear

@@ -1,4 +1,4 @@
-import {auth} from '@clerk/nextjs/server';
+import {auth, clerkClient} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {db} from '@/db/index';
 import {residentLogs} from '@/db/schema';
@@ -20,6 +20,13 @@ export async function POST(req: Request) {
 			return NextResponse.json({error: 'residentId is required'}, {status: 400});
 		}
 
+		const client = await clerkClient();
+		const clerkUser = await client.users.getUser(userId);
+		const authorName =
+			clerkUser.firstName || clerkUser.lastName
+				? [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ')
+				: clerkUser.username || clerkUser.emailAddresses[0]?.emailAddress || 'Unknown User';
+
 		const [log] = await db
 			.insert(residentLogs)
 			.values({
@@ -29,6 +36,7 @@ export async function POST(req: Request) {
 				location,
 				shiftId,
 				authorId: userId,
+				authorName,
 				createdBy: userId,
 				createdAt: new Date(),
 				version: 1,

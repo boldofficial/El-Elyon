@@ -27,6 +27,61 @@ interface Resident {
 	vocationalAgencyAddress?: string;
 	location?: string;
 	guardianIds?: string[];
+	emergencyContact?: string;
+}
+
+interface RelationshipContact {
+	name: string;
+	relationship: string;
+	phone: string;
+	email: string;
+	address: string;
+}
+
+const emptyRelationshipContact = (): RelationshipContact => ({
+	name: '',
+	relationship: '',
+	phone: '',
+	email: '',
+	address: '',
+});
+
+function parseRelationshipContacts(value?: string): RelationshipContact[] {
+	if (!value?.trim()) return [emptyRelationshipContact()];
+
+	try {
+		const parsed = JSON.parse(value);
+		const contacts = Array.isArray(parsed) ? parsed : parsed?.contacts;
+		if (Array.isArray(contacts) && contacts.length > 0) {
+			return contacts.map((contact: any) => ({
+				name: contact?.name || '',
+				relationship: contact?.relationship || '',
+				phone: contact?.phone || '',
+				email: contact?.email || '',
+				address: contact?.address || '',
+			}));
+		}
+	} catch (_error) {
+		// Existing records may be plain text from the old field.
+	}
+
+	return [{...emptyRelationshipContact(), name: value}];
+}
+
+function serializeRelationshipContacts(contacts: RelationshipContact[]) {
+	const cleaned = contacts
+		.map((contact) => ({
+			name: contact.name.trim(),
+			relationship: contact.relationship.trim(),
+			phone: contact.phone.trim(),
+			email: contact.email.trim(),
+			address: contact.address.trim(),
+		}))
+		.filter((contact) =>
+			Object.values(contact).some((value) => value.length > 0)
+		);
+
+	return cleaned.length > 0 ? JSON.stringify(cleaned) : '';
 }
 
 export default function ResidentProfileManagement({
@@ -38,6 +93,9 @@ export default function ResidentProfileManagement({
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
 	const [activeTab, setActiveTab] = useState<'profile' | 'logs'>('profile');
+	const [relationshipContacts, setRelationshipContacts] = useState<
+		RelationshipContact[]
+	>([emptyRelationshipContact()]);
 
 	useEffect(() => {
 		async function fetchResident() {
@@ -47,6 +105,9 @@ export default function ResidentProfileManagement({
 
 				const data = await res.json();
 				setResident(data);
+				setRelationshipContacts(
+					parseRelationshipContacts(data.importantRelationships)
+				);
 			} catch (error) {
 				console.error('Error fetching resident:', error);
 				toast.error('Failed to load resident data');
@@ -68,18 +129,24 @@ export default function ResidentProfileManagement({
 	const handleSave = async () => {
 		if (!resident) return;
 
+		const importantRelationships =
+			serializeRelationshipContacts(relationshipContacts);
+
 		setSaving(true);
 		try {
 			const res = await fetch(`/api/admin/residents/${residentId}/profile`, {
 				method: 'PATCH',
 				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify(resident),
+				body: JSON.stringify({...resident, importantRelationships}),
 			});
 
 			if (!res.ok) throw new Error('Failed to update');
 
 			const updated = await res.json();
 			setResident(updated);
+			setRelationshipContacts(
+				parseRelationshipContacts(updated.importantRelationships)
+			);
 			toast.success('Resident profile updated successfully');
 		} catch (error) {
 			console.error('Error updating resident:', error);
@@ -87,6 +154,29 @@ export default function ResidentProfileManagement({
 		} finally {
 			setSaving(false);
 		}
+	};
+
+	const updateRelationshipContact = (
+		index: number,
+		field: keyof RelationshipContact,
+		value: string
+	) => {
+		setRelationshipContacts((prev) =>
+			prev.map((contact, contactIndex) =>
+				contactIndex === index ? {...contact, [field]: value} : contact
+			)
+		);
+	};
+
+	const addRelationshipContact = () => {
+		setRelationshipContacts((prev) => [...prev, emptyRelationshipContact()]);
+	};
+
+	const removeRelationshipContact = (index: number) => {
+		setRelationshipContacts((prev) => {
+			const next = prev.filter((_, contactIndex) => contactIndex !== index);
+			return next.length > 0 ? next : [emptyRelationshipContact()];
+		});
 	};
 
 	if (loading) {
@@ -352,13 +442,133 @@ export default function ResidentProfileManagement({
 			{/* Important Relationships */}
 			<div className="bg-white rounded-lg shadow p-6">
 				<h2 className="text-xl font-bold mb-4">Important Relationships</h2>
+				<div className="space-y-4">
+					{relationshipContacts.map((contact, index) => (
+						<div key={index} className="border rounded-lg p-4 space-y-4">
+							<div className="flex items-center justify-between gap-3">
+								<h3 className="font-medium text-gray-900">
+									Contact {index + 1}
+								</h3>
+								{relationshipContacts.length > 1 && (
+									<button
+										type="button"
+										onClick={() => removeRelationshipContact(index)}
+										className="text-sm text-red-600 hover:text-red-800">
+										Remove
+									</button>
+								)}
+							</div>
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div>
+									<label className="block text-sm font-medium mb-1">Name</label>
+									<input
+										type="text"
+										value={contact.name}
+										onChange={(event) =>
+											updateRelationshipContact(
+												index,
+												'name',
+												event.target.value
+											)
+										}
+										className="w-full border rounded px-3 py-2"
+										placeholder="Contact name"
+									/>
+								</div>
+								<div>
+									<label className="block text-sm font-medium mb-1">
+										Relationship
+									</label>
+									<input
+										type="text"
+										value={contact.relationship}
+										onChange={(event) =>
+											updateRelationshipContact(
+												index,
+												'relationship',
+												event.target.value
+											)
+										}
+										className="w-full border rounded px-3 py-2"
+										placeholder="Guardian, sibling, friend..."
+									/>
+								</div>
+								<div>
+									<label className="block text-sm font-medium mb-1">
+										Phone Number
+									</label>
+									<input
+										type="tel"
+										value={contact.phone}
+										onChange={(event) =>
+											updateRelationshipContact(
+												index,
+												'phone',
+												event.target.value
+											)
+										}
+										className="w-full border rounded px-3 py-2"
+										placeholder="Phone number"
+									/>
+								</div>
+								<div>
+									<label className="block text-sm font-medium mb-1">
+										Email Address
+									</label>
+									<input
+										type="email"
+										value={contact.email}
+										onChange={(event) =>
+											updateRelationshipContact(
+												index,
+												'email',
+												event.target.value
+											)
+										}
+										className="w-full border rounded px-3 py-2"
+										placeholder="Email address"
+									/>
+								</div>
+								<div className="md:col-span-2">
+									<label className="block text-sm font-medium mb-1">
+										Address
+									</label>
+									<textarea
+										value={contact.address}
+										onChange={(event) =>
+											updateRelationshipContact(
+												index,
+												'address',
+												event.target.value
+											)
+										}
+										rows={2}
+										className="w-full border rounded px-3 py-2"
+										placeholder="Mailing address"
+									/>
+								</div>
+							</div>
+						</div>
+					))}
+					<button
+						type="button"
+						onClick={addRelationshipContact}
+						className="px-4 py-2 text-blue-600 hover:bg-blue-50 rounded border border-blue-600">
+						+ Add Relationship Contact
+					</button>
+				</div>
+			</div>
+
+			{/* Emergency Contact */}
+			<div className="bg-white rounded-lg shadow p-6">
+				<h2 className="text-xl font-bold mb-4">Emergency Contact</h2>
 				<textarea
-					name="importantRelationships"
-					value={resident.importantRelationships || ''}
+					name="emergencyContact"
+					value={resident.emergencyContact || ''}
 					onChange={handleChange}
-					rows={4}
+					rows={3}
 					className="w-full border rounded px-3 py-2"
-					placeholder="Document important relationships, contacts, and support network..."
+					placeholder="Emergency contact name, phone number, relationship, and any notes..."
 				/>
 			</div>
 

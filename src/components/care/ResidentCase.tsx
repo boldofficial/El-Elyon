@@ -185,15 +185,49 @@ function OverviewTab({ resident }: { resident: any }) {
             value={resident.careNotes} 
             placeholder="No notes." 
           />
+          <TextAreaField
+            label="Emergency Contact"
+            value={resident.emergencyContact}
+            placeholder="No emergency contact recorded."
+          />
           <TextAreaField 
             label="Important Relationships" 
-            value={resident.importantRelationships} 
+            value={formatImportantRelationships(resident.importantRelationships)}
             placeholder="None recorded." 
           />
         </div>
       </div>
     </div>
   );
+}
+
+function formatImportantRelationships(value?: string) {
+  if (!value?.trim()) return '';
+
+  try {
+    const parsed = JSON.parse(value);
+    const contacts = Array.isArray(parsed) ? parsed : parsed?.contacts;
+    if (Array.isArray(contacts)) {
+      return contacts
+        .map((contact: any) =>
+          [
+            contact.name,
+            contact.relationship,
+            contact.phone,
+            contact.email,
+            contact.address,
+          ]
+            .filter(Boolean)
+            .join(' | ')
+        )
+        .filter(Boolean)
+        .join('\n');
+    }
+  } catch (_error) {
+    // Existing records may be plain text from the old field.
+  }
+
+  return value;
 }
 
 function InfoField({ label, value }: { label: string; value?: string | null }) {
@@ -208,7 +242,7 @@ function TextAreaField({ label, value, placeholder }: { label: string; value?: s
   return (
     <div>
       <div className="font-medium text-gray-600 mb-1">{label}:</div>
-      <p className="text-gray-800 bg-gray-50 p-2 rounded">
+      <p className="text-gray-800 bg-gray-50 p-2 rounded whitespace-pre-wrap">
         {value || placeholder}
       </p>
     </div>

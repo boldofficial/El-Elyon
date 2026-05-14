@@ -42,13 +42,17 @@ export async function getFullUserData(clerkUserId: string) {
 		return null;
 	}
 
+	const assignedLocations = Array.from(
+		new Set([...(role.locations || []), ...(employee.locations || [])])
+	);
+
 	return {
 		id: user.id,
 		clerkUserId: user.clerkUserId,
 		email: user.email,
 		name: user.name,
 		role: role.role,
-		locations: role.locations || employee.locations || [],
+		locations: assignedLocations,
 		employmentStatus: employee.employmentStatus,
 		assignedDeviceId: employee.assignedDeviceId,
 		employeeId: employee.id,

@@ -3,7 +3,7 @@
 import {auth} from '@clerk/nextjs/server';
 import {NextRequest, NextResponse} from 'next/server';
 import {db} from '@/db/index';
-import {residentLogs, residentLogActivities, residents} from '@/db/schema';
+import {residentLogs, residentLogActivities, residents, employees} from '@/db/schema';
 import {eq, desc, asc, SQL} from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
@@ -42,11 +42,20 @@ export async function GET(req: NextRequest) {
 			},
 		});
 
-		const formattedLogs = logs.map((log: any) => ({
-			...log,
-			residentName: log.resident?.name,
-			residentLocation: log.resident?.location,
-		}));
+		const employeeList = await db.query.employees.findMany();
+
+		const formattedLogs = logs.map((log: any) => {
+			const author = employeeList.find(
+				(employee) => employee.clerkUserId === log.authorId
+			);
+
+			return {
+				...log,
+				residentName: log.resident?.name,
+				residentLocation: log.resident?.location,
+				authorName: log.authorName || author?.name || author?.workEmail,
+			};
+		});
 
 		return NextResponse.json(formattedLogs);
 	} catch (error) {

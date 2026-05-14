@@ -101,13 +101,18 @@ export async function editResidentLog(args: {
       )
     ) + 1;
 
+  const content =
+    Object.keys(fields).length === 1 && typeof fields.content === 'string'
+      ? fields.content
+      : JSON.stringify(fields);
+
   const [updatedLog] = await db.insert(residentLogs).values({
     residentId: residentId,
     authorId: authorId,
     authorName: authorName,
     version: nextVersion,
     template: template,
-    content: JSON.stringify(fields),
+    content,
     location: resident.location,
     createdAt: new Date(),
     // Assuming logId is the ID of the log being "edited" to create a new version

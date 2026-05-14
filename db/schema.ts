@@ -47,6 +47,7 @@ export const residents = pgTable(
 
 		// Existing fields
 		guardianIds: jsonb('guardian_ids').$type<string[]>(),
+		emergencyContact: text('emergency_contact'),
 		medicalInfo: text('medical_info'),
 		careNotes: text('care_notes'),
 		profileImageId: varchar('profile_image_id', {length: 500}),

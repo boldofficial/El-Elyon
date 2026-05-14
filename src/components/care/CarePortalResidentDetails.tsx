@@ -16,6 +16,7 @@ interface Resident {
 	dob?: string;
 	location: string;
 	phone?: string;
+	emergencyContact?: string;
 	placementDate?: Date;
 	sex?: string;
 	weight?: string;
@@ -46,6 +47,35 @@ interface CarePortalResidentDetailsProps {
 }
 
 type TabType = 'log' | 'incidents' | 'history' | 'documents' | 'isp' | 'fire-evac';
+
+function formatImportantRelationships(value?: string) {
+	if (!value?.trim()) return '';
+
+	try {
+		const parsed = JSON.parse(value);
+		const contacts = Array.isArray(parsed) ? parsed : parsed?.contacts;
+		if (Array.isArray(contacts)) {
+			return contacts
+				.map((contact: any) =>
+					[
+						contact.name,
+						contact.relationship,
+						contact.phone,
+						contact.email,
+						contact.address,
+					]
+						.filter(Boolean)
+						.join(' | ')
+				)
+				.filter(Boolean)
+				.join('\n');
+		}
+	} catch (_error) {
+		// Existing records may be plain text from the old field.
+	}
+
+	return value;
+}
 
 export default function CarePortalResidentDetails({
 	resident: initialResident, // Renamed to initialResident
@@ -147,7 +177,9 @@ export default function CarePortalResidentDetails({
 					</p>
 				</div>
 
-				{(resident.diagnosis || resident.importantRelationships) && (
+				{(resident.diagnosis ||
+					resident.emergencyContact ||
+					resident.importantRelationships) && (
 					<div className="col-span-full border-t pt-4 mt-4">
 						{resident.diagnosis && (
 							<p className="mt-2">
@@ -155,10 +187,20 @@ export default function CarePortalResidentDetails({
 								{resident.diagnosis}
 							</p>
 						)}
+						{resident.emergencyContact && (
+							<p className="mt-2">
+								<span className="font-medium">Emergency Contact:</span>{' '}
+								<span className="whitespace-pre-wrap">
+									{resident.emergencyContact}
+								</span>
+							</p>
+						)}
 						{resident.importantRelationships && (
 							<p className="mt-2">
 								<span className="font-medium">Important Relationships:</span>{' '}
-								{resident.importantRelationships}
+								<span className="whitespace-pre-wrap">
+									{formatImportantRelationships(resident.importantRelationships)}
+								</span>
 							</p>
 						)}
 					</div>
