@@ -14,9 +14,19 @@ async function checkUserExists() {
 	return await res.json();
 }
 
-async function syncUser() {
-	const res = await fetch('/api/auth/sync', {method: 'POST'});
-	if (!res.ok) throw new Error('Sync failed');
+async function syncUser(user: any) {
+	const res = await fetch('/api/auth/sync', {
+		method: 'POST',
+		headers: {'Content-Type': 'application/json'},
+		body: JSON.stringify({
+			email: user?.primaryEmailAddress?.emailAddress,
+			name: user?.fullName || user?.username || 'User',
+		}),
+	});
+	if (!res.ok) {
+		const errorText = await res.text();
+		throw new Error(`Sync failed: ${errorText}`);
+	}
 	return await res.json();
 }
 
@@ -87,7 +97,7 @@ export default function CarePage() {
 					setSyncInProgress(true);
 
 					try {
-						const syncResult = await syncUser();
+						const syncResult = await syncUser(user);
 						if (syncResult.isFirstAdmin) {
 							toast.success('Welcome! You are the first admin.');
 						} else {

@@ -35,7 +35,7 @@ function mergeLocations(...locationSets: Array<unknown>): string[] {
 	return Array.from(merged);
 }
 
-export async function POST() {
+export async function POST(request: Request) {
 	try {
 		const {userId} = await auth();
 
@@ -45,16 +45,33 @@ export async function POST() {
 
 		console.log('Auto-syncing user:', userId);
 
+		let fallbackUserData: {
+			email?: string;
+			name?: string;
+		} = {};
+
+		try {
+			fallbackUserData = await request.json();
+		} catch {
+			fallbackUserData = {};
+		}
+
 		const clerkUserData = await getClerkUser(userId);
 
-		if (!clerkUserData) {
+		if (!clerkUserData && !fallbackUserData.email) {
 			return NextResponse.json(
-				{error: 'Failed to fetch user from Clerk'},
+				{error: 'Failed to fetch user from Clerk and no fallback email was provided'},
 				{status: 500}
 			);
 		}
 
-		const {email, name, metadata} = clerkUserData;
+		const email = clerkUserData?.email || fallbackUserData.email;
+		const name =
+			clerkUserData?.name ||
+			fallbackUserData.name ||
+			fallbackUserData.email?.split('@')[0] ||
+			'User';
+		const metadata = clerkUserData?.metadata || {};
 
 		if (!email) {
 			return NextResponse.json(
@@ -81,7 +98,6 @@ export async function POST() {
 			: normalizeRole(currentRole?.role) ||
 				normalizeRole(previousRole?.role) ||
 				normalizeRole(existingEmployee?.role) ||
-				normalizeRole(metadata?.role) ||
 				'staff';
 
 		const finalLocations = mergeLocations(
