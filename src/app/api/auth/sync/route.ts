@@ -1,12 +1,39 @@
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
+import {eq} from 'drizzle-orm';
+import {db} from '@/db/index';
+import {employees, roles, users} from '@/db/schema';
 import {getClerkUser} from '@/lib/clerk';
-import {getEmployeeByClerkId} from '@/db/queries/employees';
-import {createEmployee, updateEmployee} from '@/db/mutations/employees';
-import {getRoleByClerkId, checkForAdmins} from '@/db/queries/roles';
-import {getUserByClerkId} from '@/db/queries/users';
-import {createUser, updateUser} from '@/db/mutations/users';
-import {updateRole, createRole} from '@/db/mutations/roles';
+import {getEmployeeByClerkId, getEmployeeByEmail} from '@/db/queries/employees';
+import {checkForAdmins, getRoleByClerkId} from '@/db/queries/roles';
+import {getUserByClerkId, getUserByEmail} from '@/db/queries/users';
+
+const validRoles = ['admin', 'supervisor', 'staff'] as const;
+type UserRole = (typeof validRoles)[number];
+
+function normalizeRole(role: unknown): UserRole | undefined {
+	if (typeof role !== 'string') return undefined;
+	const normalized = role.toLowerCase();
+	return validRoles.includes(normalized as UserRole)
+		? (normalized as UserRole)
+		: undefined;
+}
+
+function mergeLocations(...locationSets: Array<unknown>): string[] {
+	const merged = new Set<string>();
+
+	for (const locationSet of locationSets) {
+		if (!Array.isArray(locationSet)) continue;
+
+		for (const location of locationSet) {
+			if (typeof location === 'string' && location.trim()) {
+				merged.add(location);
+			}
+		}
+	}
+
+	return Array.from(merged);
+}
 
 export async function POST() {
 	try {
@@ -16,9 +43,8 @@ export async function POST() {
 			return NextResponse.json({error: 'Not authenticated'}, {status: 401});
 		}
 
-		console.log('🔄 Auto-syncing user:', userId);
+		console.log('Auto-syncing user:', userId);
 
-		// Fetch user data from Clerk
 		const clerkUserData = await getClerkUser(userId);
 
 		if (!clerkUserData) {
@@ -29,29 +55,71 @@ export async function POST() {
 		}
 
 		const {email, name, metadata} = clerkUserData;
-		const role = metadata?.role || 'staff';
-		const locations = metadata?.locations || [];
-		const metadataDeviceId = metadata?.assignedDeviceId;
 
-		// Check if first user
+		if (!email) {
+			return NextResponse.json(
+				{error: 'Clerk user does not have an email address'},
+				{status: 400}
+			);
+		}
+
+		let existingEmployee = await getEmployeeByClerkId(userId);
+		if (!existingEmployee) {
+			existingEmployee = await getEmployeeByEmail(email);
+		}
+
+		const currentRole = await getRoleByClerkId(userId);
+		const previousRole =
+			existingEmployee?.clerkUserId && existingEmployee.clerkUserId !== userId
+				? await getRoleByClerkId(existingEmployee.clerkUserId)
+				: null;
+
 		const admins = await checkForAdmins();
 		const isFirstUser = admins.length === 0;
-		const finalRole = isFirstUser ? 'admin' : role;
+		const finalRole = isFirstUser
+			? 'admin'
+			: normalizeRole(currentRole?.role) ||
+				normalizeRole(previousRole?.role) ||
+				normalizeRole(existingEmployee?.role) ||
+				normalizeRole(metadata?.role) ||
+				'staff';
 
-		// FIX: Admins get undefined assignedDeviceId (no device restriction)
-		const assignedDeviceId =
-			finalRole === 'admin' ? undefined : metadataDeviceId;
-
-		console.log(
-			`${isFirstUser ? '🎖️  First user - creating admin' : '👤 Restoring user with role: ' + finalRole}`
+		const finalLocations = mergeLocations(
+			metadata?.locations,
+			currentRole?.locations,
+			previousRole?.locations,
+			existingEmployee?.locations
 		);
 
-		// Create or update user
-		const existingUser = await getUserByClerkId(userId);
+		const metadataDeviceId = metadata?.assignedDeviceId;
+		const assignedDeviceId =
+			finalRole === 'admin'
+				? null
+				: typeof metadataDeviceId === 'string' && metadataDeviceId.trim()
+					? metadataDeviceId
+					: existingEmployee?.assignedDeviceId || null;
+
+		console.log(
+			isFirstUser
+				? 'First user - creating admin'
+				: `Restoring user with role: ${finalRole}`
+		);
+
+		const existingUser =
+			(await getUserByClerkId(userId)) || (await getUserByEmail(email));
+
 		if (existingUser) {
-			await updateUser(userId, {email, name, updatedAt: new Date()});
+			await db
+				.update(users)
+				.set({
+					clerkUserId: userId,
+					email,
+					name,
+					updatedAt: new Date(),
+				})
+				.where(eq(users.id, existingUser.id));
 		} else {
-			await createUser({
+			await db.insert(users).values({
 				clerkUserId: userId,
 				email,
 				name,
@@ -59,59 +127,78 @@ export async function POST() {
 			});
 		}
 
-		// Create or update employee
-		const existingEmployee = await getEmployeeByClerkId(userId);
 		if (existingEmployee) {
-			await updateEmployee(
-				{
-					employeeId: existingEmployee.id,
+			await db
+				.update(employees)
+				.set({
+					clerkUserId: userId,
 					name,
 					email,
-					role: finalRole as 'admin' | 'supervisor' | 'staff',
-					locations,
+					workEmail: email,
+					role: finalRole,
+					locations: finalLocations,
 					assignedDeviceId,
-				},
-				userId
-			);
+					hasAcceptedInvite: true,
+					employmentStatus: existingEmployee.employmentStatus || 'active',
+					onboardedBy: existingEmployee.onboardedBy || userId,
+					onboardedAt: existingEmployee.onboardedAt || new Date(),
+					updatedAt: new Date(),
+				})
+				.where(eq(employees.id, existingEmployee.id));
 		} else {
-			await createEmployee(
-				{
-					name,
-					email,
-					role: finalRole as 'admin' | 'supervisor' | 'staff',
-					locations,
-					assignedDeviceId,
-				},
-				userId
-			);
+			await db.insert(employees).values({
+				name,
+				email,
+				workEmail: email,
+				role: finalRole,
+				locations: finalLocations,
+				assignedDeviceId,
+				clerkUserId: userId,
+				createdAt: new Date(),
+				createdBy: userId,
+				employmentStatus: 'active',
+				hasAcceptedInvite: true,
+				onboardedBy: userId,
+				onboardedAt: new Date(),
+			});
 		}
 
-		// Create or update role
-		const existingRole = await getRoleByClerkId(userId);
-		if (existingRole) {
-			await updateRole(userId, {
-				role: finalRole,
-				locations,
-			});
+		if (currentRole) {
+			await db
+				.update(roles)
+				.set({role: finalRole, locations: finalLocations})
+				.where(eq(roles.id, currentRole.id));
+		} else if (previousRole) {
+			await db
+				.update(roles)
+				.set({
+					clerkUserId: userId,
+					role: finalRole,
+					locations: finalLocations,
+				})
+				.where(eq(roles.id, previousRole.id));
 		} else {
-			await createRole({
+			await db.insert(roles).values({
 				clerkUserId: userId,
 				role: finalRole,
-				locations,
+				locations: finalLocations,
 				assignedAt: new Date(),
 			});
 		}
 
-		console.log('✅ User sync complete');
+		console.log('User sync complete');
 
 		return NextResponse.json({
 			success: true,
 			isFirstAdmin: isFirstUser,
 			role: finalRole,
-			locations,
+			locations: finalLocations,
 		});
 	} catch (error) {
 		console.error('Error syncing user:', error);
-		return NextResponse.json({error: 'Internal server error'}, {status: 500});
+		return NextResponse.json(
+			{error: 'Internal server error', details: String(error)},
+			{status: 500}
+		);
 	}
 }
