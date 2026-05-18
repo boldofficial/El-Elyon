@@ -410,7 +410,11 @@ export async function updateEmployee(
 	if (!employee) throw new Error('Employee not found');
 
 	// ✅ CRITICAL FIX: Allow self-updates during sync (user updating their own record)
-	const isSelfUpdate = employee.clerkUserId === clerkUserId;
+	const isSelfUpdate = 
+		employee.clerkUserId === clerkUserId || 
+		employee.email === args.email || 
+		employee.workEmail === args.email;
+		
 	if (!isSelfUpdate) {
 		await requireAdminAccess(clerkUserId);
 	} else {
