@@ -2,12 +2,18 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
+import DocumentViewerModal from '../shared/DocumentViewerModal';
 
 export default function DocumentsWorkspace() {
   const [activeTab, setActiveTab] = useState<'general' | 'isp'>('general');
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeDocument, setActiveDocument] = useState<{
+    fileStorageId: string;
+    fileName: string;
+    contentType?: string;
+  } | null>(null);
 
   const fetchDocuments = async () => {
     setLoading(true);
@@ -127,8 +133,18 @@ export default function DocumentsWorkspace() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <button 
+                                    onClick={() => setActiveDocument({
+                                        fileStorageId: doc.fileStorageId,
+                                        fileName: activeTab === 'general' ? doc.title : doc.versionLabel,
+                                        contentType: doc.contentType
+                                    })}
+                                    className="text-blue-600 hover:text-blue-900 mr-4"
+                                >
+                                    View
+                                </button>
+                                <button 
                                     onClick={() => handleDownload(doc.fileStorageId)}
-                                    className="text-blue-600 hover:text-blue-900"
+                                    className="text-gray-600 hover:text-gray-900"
                                 >
                                     Download
                                 </button>
@@ -139,6 +155,12 @@ export default function DocumentsWorkspace() {
             </table>
         )}
       </div>
+
+      <DocumentViewerModal 
+        isOpen={!!activeDocument}
+        onClose={() => setActiveDocument(null)}
+        document={activeDocument}
+      />
     </div>
   );
 }

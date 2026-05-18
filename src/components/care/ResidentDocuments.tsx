@@ -2,6 +2,7 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
+import DocumentViewerModal from '../shared/DocumentViewerModal';
 
 export default function ResidentDocuments({ 
   residentId,
@@ -20,6 +21,11 @@ export default function ResidentDocuments({
     description: "",
     file: null as File | null,
   });
+  const [activeDocument, setActiveDocument] = useState<{
+    fileStorageId: string;
+    fileName: string;
+    contentType?: string;
+  } | null>(null);
 
   const fetchDocuments = async () => {
     setLoading(true);
@@ -258,6 +264,16 @@ export default function ResidentDocuments({
                     </div>
                     <div className="flex items-center gap-2">
                          <button
+                            onClick={() => setActiveDocument({
+                                fileStorageId: doc.fileStorageId,
+                                fileName: doc.fileName || doc.title,
+                                contentType: doc.contentType
+                            })}
+                            className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white font-medium"
+                         >
+                            View
+                         </button>
+                         <button
                             onClick={() => handleDownload(doc.fileStorageId)}
                             className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded text-blue-700"
                          >
@@ -274,6 +290,12 @@ export default function ResidentDocuments({
             ))}
         </div>
       )}
+
+      <DocumentViewerModal 
+        isOpen={!!activeDocument}
+        onClose={() => setActiveDocument(null)}
+        document={activeDocument}
+      />
     </div>
   );
 }

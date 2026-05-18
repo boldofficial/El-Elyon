@@ -95,9 +95,7 @@ export async function GET(request: Request) {
 	try {
 		const {searchParams} = new URL(request.url);
 		const fileId = searchParams.get('fileId'); // This is the S3 Key
-		// fileType might be passed but is part of the key now, so strictly not needed for lookup if fileId is the full key.
-		// However, legacy usage or if fileId was just filename would need it.
-		// Our new POST returns full key as fileId.
+		const wantsJson = searchParams.get('json') === 'true';
 
 		if (!fileId) {
 			return NextResponse.json({error: 'Missing fileId'}, {status: 400});
@@ -105,6 +103,10 @@ export async function GET(request: Request) {
 
 		// Generate presigned URL
 		const url = await generateDownloadUrl(fileId);
+
+		if (wantsJson) {
+			return NextResponse.json({ url });
+		}
 
 		// Redirect the user to the presigned URL
 		return NextResponse.redirect(url);
