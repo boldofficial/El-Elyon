@@ -1,8 +1,9 @@
 import {auth, clerkClient} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {db} from '@/db/index';
-import {residentLogs} from '@/db/schema';
+import {residentLogs, residents, shifts} from '@/db/schema';
 import {requireCareAccess} from '@/lib/db-helpers';
+import {and, desc, eq, isNull} from 'drizzle-orm';
 
 export async function POST(req: Request) {
 	try {
@@ -14,10 +15,33 @@ export async function POST(req: Request) {
 
 		await requireCareAccess(userId);
 
-		const {residentId, template, content, location, shiftId} = await req.json();
+		const {residentId, template, content} = await req.json();
 
 		if (!residentId) {
 			return NextResponse.json({error: 'residentId is required'}, {status: 400});
+		}
+
+		const currentShift = await db.query.shifts.findFirst({
+			where: and(eq(shifts.clerkUserId, userId), isNull(shifts.clockOutTime)),
+			orderBy: [desc(shifts.clockInTime)],
+		});
+
+		if (!currentShift) {
+			return NextResponse.json(
+				{error: 'You must be clocked in to create care logs'},
+				{status: 409}
+			);
+		}
+
+		const resident = await db.query.residents.findFirst({
+			where: eq(residents.id, residentId),
+		});
+
+		if (!resident || resident.location !== currentShift.location) {
+			return NextResponse.json(
+				{error: 'Resident is not available for your active shift location'},
+				{status: 403}
+			);
 		}
 
 		const client = await clerkClient();
@@ -33,8 +57,8 @@ export async function POST(req: Request) {
 				residentId,
 				template,
 				content,
-				location,
-				shiftId,
+				location: currentShift.location,
+				shiftId: currentShift.id,
 				authorId: userId,
 				authorName,
 				createdBy: userId,

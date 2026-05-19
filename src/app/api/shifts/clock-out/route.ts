@@ -23,7 +23,10 @@ export async function POST(req: NextRequest) {
 		return NextResponse.json(result, {status: 200});
 	} catch (error: any) {
 		console.error('Error clocking out:', error);
-		return new NextResponse(error.message, {status: 500});
+		return NextResponse.json(
+			{error: error?.message || 'Failed to clock out'},
+			{status: 500}
+		);
 	}
 }
 

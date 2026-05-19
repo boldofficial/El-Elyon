@@ -200,19 +200,36 @@ export async function clockIn(clerkUserId: string, location: string, selfieStora
 			eq(shifts.clerkUserId, clerkUserId),
 			isNull(shifts.clockOutTime)
 		),
+		orderBy: (shifts, {desc}) => [desc(shifts.clockInTime)],
 	});
 
 	if (existingShift) {
-		throw new Error('Already clocked in. Please clock out first.');
+		if (existingShift.location === location) {
+			throw new Error(`Already clocked in at ${existingShift.location}.`);
+		}
+
+		throw new Error(
+			`Already clocked in at ${existingShift.location}. Clock out before switching locations.`
+		);
 	}
 
-	const [newShift] = await db.insert(shifts).values({
-		clerkUserId,
-		location: location,
-		clockInTime: new Date(),
-		deviceId: 'web-browser', // Assuming 'web-browser' for now, can be passed from client
-		clockInSelfie: selfieStorageId,
-	}).returning();
+	let newShift;
+
+	try {
+		[newShift] = await db.insert(shifts).values({
+			clerkUserId,
+			location: location,
+			clockInTime: new Date(),
+			deviceId: 'web-browser', // Assuming 'web-browser' for now, can be passed from client
+			clockInSelfie: selfieStorageId,
+		}).returning();
+	} catch (error: any) {
+		if (error?.code === '23505' || error?.cause?.code === '23505') {
+			throw new Error('Already clocked in. Please clock out first.');
+		}
+
+		throw error;
+	}
 
 	if (!newShift) {
 		throw new Error('Failed to clock in');

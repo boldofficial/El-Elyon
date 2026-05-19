@@ -19,6 +19,8 @@ export async function POST(req: NextRequest) {
 		return NextResponse.json({shiftId}, {status: 200});
 	} catch (error: any) {
 		console.error('Error clocking in:', error);
-		return new NextResponse(error.message, {status: 500});
+		const message = error?.message || 'Failed to clock in';
+		const status = message.includes('Already clocked in') ? 409 : 500;
+		return NextResponse.json({error: message}, {status});
 	}
 }

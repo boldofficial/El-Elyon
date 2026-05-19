@@ -14,6 +14,7 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 	const [isSelfieEnforced, setIsSelfieEnforced] = useState(false);
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [showSelfieCapture, setShowSelfieCapture] = useState(false);
+	const [selectedLocation, setSelectedLocation] = useState('');
 	const [selfieAction, setSelfieAction] = useState<
 		'clockIn' | 'clockOut' | null
 	>(null);
@@ -26,6 +27,9 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 				const sessionRes = await fetch('/api/access/session');
 				const session = await sessionRes.json();
 				setSessionInfo(session);
+				if (session?.locations?.length) {
+					setSelectedLocation((current) => current || session.locations[0]);
+				}
 
 				const shiftRes = await fetch('/api/shifts/current');
 				const shift = await shiftRes.json();
@@ -56,6 +60,11 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 			return;
 		}
 
+		if (!selectedLocation) {
+			toast.error('Select a location before clocking in.');
+			return;
+		}
+
 		// Check if selfie is required
 		if (isSelfieEnforced) {
 			setSelfieAction('clockIn');
@@ -70,11 +79,14 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 				method: 'POST',
 				headers: {'Content-Type': 'application/json'},
 				body: JSON.stringify({
-					location: sessionInfo.locations[0],
+					location: selectedLocation,
 				}),
 			});
 
-			if (!res.ok) throw new Error('Failed to clock in');
+			if (!res.ok) {
+				const data = await res.json().catch(() => null);
+				throw new Error(data?.error || 'Failed to clock in');
+			}
 
 			toast.success('Clocked in successfully');
 
@@ -108,7 +120,10 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 				method: 'POST',
 			});
 
-			if (!res.ok) throw new Error('Failed to clock out');
+			if (!res.ok) {
+				const data = await res.json().catch(() => null);
+				throw new Error(data?.error || 'Failed to clock out');
+			}
 
 			toast.success('Clocked out successfully');
 			setCurrentShift(null);
@@ -128,15 +143,22 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 		try {
 			let res;
 			if (selfieAction === 'clockIn') {
+				if (!selectedLocation) {
+					throw new Error('Select a location before clocking in.');
+				}
+
 				res = await fetch('/api/shifts/clock-in', {
 					method: 'POST',
 					headers: {'Content-Type': 'application/json'},
 					body: JSON.stringify({
-						location: sessionInfo!.locations[0],
+						location: selectedLocation,
 						selfieStorageId: storageId,
 					}),
 				});
-				if (!res.ok) throw new Error('Failed to clock in with selfie');
+				if (!res.ok) {
+					const data = await res.json().catch(() => null);
+					throw new Error(data?.error || 'Failed to clock in with selfie');
+				}
 				toast.success('Clocked in with selfie');
 			} else if (selfieAction === 'clockOut') {
 				res = await fetch('/api/shifts/clock-out', {
@@ -146,7 +168,10 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 						selfieStorageId: storageId,
 					}),
 				});
-				if (!res.ok) throw new Error('Failed to clock out with selfie');
+				if (!res.ok) {
+					const data = await res.json().catch(() => null);
+					throw new Error(data?.error || 'Failed to clock out with selfie');
+				}
 				toast.success('Clocked out with selfie');
 				setCurrentShift(null); // Reset current shift after clock out
 			} else {
@@ -238,12 +263,34 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 
 							{sessionInfo?.locations?.length ? (
 								<div className="space-y-2">
-									<p className="text-sm text-gray-600">
-										Assigned Location: {sessionInfo.locations.join(', ')}
-									</p>
+									{sessionInfo.locations.length > 1 ? (
+										<div className="max-w-xs mx-auto text-left">
+											<label
+												htmlFor="clock-in-location"
+												className="block text-sm font-medium text-gray-700 mb-2">
+												Clock-in location
+											</label>
+											<select
+												id="clock-in-location"
+												value={selectedLocation}
+												onChange={(event) => setSelectedLocation(event.target.value)}
+												disabled={isProcessing}
+												className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:opacity-50">
+												{sessionInfo.locations.map((location: string) => (
+													<option key={location} value={location}>
+														{location}
+													</option>
+												))}
+											</select>
+										</div>
+									) : (
+										<p className="text-sm text-gray-600">
+											Assigned Location: {sessionInfo.locations[0]}
+										</p>
+									)}
 									<button
 										onClick={handleClockIn}
-										disabled={isProcessing}
+										disabled={isProcessing || !selectedLocation}
 										className="w-full max-w-xs mx-auto bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">
 										{isProcessing ? 'Clocking In...' : 'Clock In'}
 									</button>

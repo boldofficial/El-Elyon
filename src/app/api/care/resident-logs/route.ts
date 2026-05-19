@@ -3,8 +3,8 @@
 import {auth} from '@clerk/nextjs/server';
 import {NextRequest, NextResponse} from 'next/server';
 import {db} from '@/db/index';
-import {residentLogs, residentLogActivities, residents, employees} from '@/db/schema';
-import {eq, desc, asc, SQL} from 'drizzle-orm';
+import {residentLogs, residentLogActivities, residents, employees, shifts} from '@/db/schema';
+import {eq, desc, asc, SQL, and, isNull} from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
 	try {
@@ -19,15 +19,22 @@ export async function GET(req: NextRequest) {
 		const location = searchParams.get('location');
 		const limit = parseInt(searchParams.get('limit') || '50');
 
+		const currentShift = await db.query.shifts.findFirst({
+			where: and(eq(shifts.clerkUserId, userId), isNull(shifts.clockOutTime)),
+			orderBy: [desc(shifts.clockInTime)],
+		});
+
+		if (!currentShift) {
+			return NextResponse.json([]);
+		}
+
 		const conditions: SQL[] = [];
 
 		if (residentId) {
 			conditions.push(eq(residentLogs.residentId, residentId));
 		}
 
-		if (location) {
-			conditions.push(eq(residentLogs.location, location));
-		}
+		conditions.push(eq(residentLogs.location, currentShift.location));
 
 		const logs = await db.query.residentLogs.findMany({
 			where:

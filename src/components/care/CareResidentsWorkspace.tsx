@@ -17,6 +17,7 @@ export default function CareResidentsWorkspace({
 	const [selectedResident, setSelectedResident] = useState<string | null>(null);
 	const [residentLogs, setResidentLogs] = useState<any[]>([]);
 	const [ispStatus, setIspStatus] = useState<any>(null);
+	const [activeLocation, setActiveLocation] = useState('');
 
 	useEffect(() => {
 		async function fetchData() {
@@ -24,6 +25,10 @@ export default function CareResidentsWorkspace({
 				const sessionRes = await fetch('/api/access/session');
 				const session = await sessionRes.json();
 				setSessionInfo(session);
+
+				const shiftRes = await fetch('/api/shifts/current');
+				const shift = await shiftRes.json();
+				setActiveLocation(shift?.location || '');
 
 				const residentsRes = await fetch('/api/care/residents');
 				const residentsData = await residentsRes.json();
@@ -186,8 +191,8 @@ export default function CareResidentsWorkspace({
 			<div className="text-center">
 				<h2 className="text-2xl font-bold text-gray-900 mb-2">Residents</h2>
 				<p className="text-gray-600">
-					Location-scoped resident list •{' '}
-					{sessionInfo?.locations?.join(', ') || 'No locations assigned'}
+					Active shift location •{' '}
+					{activeLocation || sessionInfo?.locations?.join(', ') || 'No location selected'}
 				</p>
 			</div>
 
@@ -198,9 +203,9 @@ export default function CareResidentsWorkspace({
 						No Residents Found
 					</h3>
 					<p className="text-gray-600">
-						{sessionInfo?.locations?.length
-							? 'No residents in your assigned locations'
-							: 'You are not assigned to any locations'}
+						{activeLocation
+							? 'No residents in your active shift location'
+							: 'Clock in to a location to view residents'}
 					</p>
 				</div>
 			) : (
