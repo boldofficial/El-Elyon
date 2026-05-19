@@ -26,7 +26,7 @@ export default function ResidentsWorkspace({
 		setErrorData(null);
 		try {
 			const [residentsRes, userRoleRes] = await Promise.all([
-				fetch('/api/care/residents'),
+				fetch('/api/residents'),
 				fetch('/api/users/role'),
 			]);
 
