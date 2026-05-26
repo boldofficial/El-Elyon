@@ -22,6 +22,13 @@ export async function GET(request: Request) {
 		const {searchParams} = new URL(request.url);
 		const residentId = searchParams.get('residentId');
 
+		if (userData.role === 'admin' && residentId) {
+			const resident = await db.query.residents.findFirst({
+				where: eq(residents.id, residentId),
+			});
+			return NextResponse.json(resident || null);
+		}
+
 		const currentShift = await db.query.shifts.findFirst({
 			where: and(eq(shifts.clerkUserId, userId), isNull(shifts.clockOutTime)),
 			orderBy: [desc(shifts.clockInTime)],
