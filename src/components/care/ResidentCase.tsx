@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import FireEvacManagement from "../admin/FireEvacManagement";
-import ResidentDocuments from "./ResidentDocumentsWorkspace"; // Import the existing component
+import ResidentDocuments from "./ResidentDocuments";
 import { toast } from 'sonner';
 import ResidentActivityHistory from "./ResidentActivityHistory";
 import IncidentReportsList from "./IncidentReportsList";
