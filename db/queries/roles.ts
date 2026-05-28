@@ -7,7 +7,7 @@ export async function getRoleByClerkId(clerkUserId: string) {
 		.select()
 		.from(roles)
 		.where(eq(roles.clerkUserId, clerkUserId));
-	return role;
+	return role ? {...role, role: role.role?.toLowerCase()} : role;
 }
 
 export async function checkForAdmins() {

@@ -51,7 +51,7 @@ export async function getFullUserData(clerkUserId: string) {
 		clerkUserId: user.clerkUserId,
 		email: user.email,
 		name: user.name,
-		role: role.role,
+		role: role.role?.toLowerCase(),
 		locations: assignedLocations,
 		employmentStatus: employee.employmentStatus,
 		assignedDeviceId: employee.assignedDeviceId,

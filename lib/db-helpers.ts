@@ -20,6 +20,7 @@ export async function getUserRoleDoc(clerkUserId: string) {
 			...(roleDoc.locations || []),
 			...(employeeDoc?.locations || [])
 		]));
+		roleDoc.role = roleDoc.role?.toLowerCase() || roleDoc.role;
 	}
 	
 	return roleDoc;

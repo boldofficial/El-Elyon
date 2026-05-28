@@ -5,6 +5,7 @@ import {NextRequest, NextResponse} from 'next/server';
 import {db} from '@/db/index';
 import {residentLogs, residentLogActivities, residents, employees, shifts} from '@/db/schema';
 import {eq, desc, asc, SQL, and, isNull} from 'drizzle-orm';
+import {requireCareAccess} from '@/lib/db-helpers';
 
 export async function GET(req: NextRequest) {
 	try {
@@ -19,22 +20,25 @@ export async function GET(req: NextRequest) {
 		const location = searchParams.get('location');
 		const limit = parseInt(searchParams.get('limit') || '50');
 
-		const currentShift = await db.query.shifts.findFirst({
-			where: and(eq(shifts.clerkUserId, userId), isNull(shifts.clockOutTime)),
-			orderBy: [desc(shifts.clockInTime)],
-		});
-
-		if (!currentShift) {
-			return NextResponse.json([]);
-		}
-
 		const conditions: SQL[] = [];
 
 		if (residentId) {
 			conditions.push(eq(residentLogs.residentId, residentId));
 		}
 
-		conditions.push(eq(residentLogs.location, currentShift.location));
+		const userRole = await requireCareAccess(userId);
+		if (userRole.role !== 'admin') {
+			const currentShift = await db.query.shifts.findFirst({
+				where: and(eq(shifts.clerkUserId, userId), isNull(shifts.clockOutTime)),
+				orderBy: [desc(shifts.clockInTime)],
+			});
+
+			if (!currentShift) {
+				return NextResponse.json([]);
+			}
+
+			conditions.push(eq(residentLogs.location, currentShift.location));
+		}
 
 		const logs = await db.query.residentLogs.findMany({
 			where:
