@@ -9,6 +9,8 @@ import ResidentActivityHistory from '../care/ResidentActivityHistory';
 interface Resident {
 	id: string;
 	name: string;
+	status?: 'active' | 'inactive';
+	inactiveReason?: 'deceased' | 'placement_terminated' | 'discharged' | null;
 	dateOfBirth?: string;
 	phone?: string;
 	placementDate?: Date;
@@ -120,10 +122,20 @@ export default function ResidentProfileManagement({
 	}, [residentId]);
 
 	const handleChange = (
-		e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+		e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
 	) => {
 		const {name, value} = e.target;
-		setResident((prev) => (prev ? {...prev, [name]: value} : null));
+		setResident((prev) => {
+			if (!prev) return null;
+			if (name === 'status') {
+				return {
+					...prev,
+					status: value as Resident['status'],
+					inactiveReason: value === 'inactive' ? prev.inactiveReason : null,
+				};
+			}
+			return {...prev, [name]: value};
+		});
 	};
 
 	const handleSave = async () => {
@@ -265,6 +277,40 @@ export default function ResidentProfileManagement({
 						/>
 					</div>
 					<div>
+						<label className="block text-sm font-medium mb-1">Status</label>
+						<select
+							id="status"
+							title="Status"
+							name="status"
+							value={resident.status || 'active'}
+							onChange={handleChange}
+							className="w-full border rounded px-3 py-2">
+							<option value="active">Active</option>
+							<option value="inactive">Inactive</option>
+						</select>
+					</div>
+					{(resident.status || 'active') === 'inactive' && (
+						<div>
+							<label className="block text-sm font-medium mb-1">
+								Inactive Reason
+							</label>
+							<select
+								id="inactiveReason"
+								title="Inactive Reason"
+								name="inactiveReason"
+								value={resident.inactiveReason || ''}
+								onChange={handleChange}
+								className="w-full border rounded px-3 py-2">
+								<option value="">Select...</option>
+								<option value="deceased">Deceased</option>
+								<option value="placement_terminated">
+									Placement Terminated
+								</option>
+								<option value="discharged">Discharged</option>
+							</select>
+						</div>
+					)}
+					<div>
 						<label className="block text-sm font-medium mb-1">
 							Placement Date
 						</label>
@@ -287,7 +333,7 @@ export default function ResidentProfileManagement({
               title="Sex"
 							name="sex"
 							value={resident.sex || ''}
-							onChange={handleChange as any}
+							onChange={handleChange}
 							className="w-full border rounded px-3 py-2">
 							<option value="">Select...</option>
 							<option value="Male">Male</option>

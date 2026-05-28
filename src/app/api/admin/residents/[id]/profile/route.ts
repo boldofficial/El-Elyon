@@ -50,11 +50,21 @@ export async function PATCH(
 
 		const {id: residentId} = await params;
 		const body = await request.json();
+		const status = body.status === 'inactive' ? 'inactive' : 'active';
+		const inactiveReason =
+			status === 'inactive' &&
+			['deceased', 'placement_terminated', 'discharged'].includes(
+				body.inactiveReason
+			)
+				? body.inactiveReason
+				: null;
 
 		const updated = await updateResident(residentId, {
 			name: body.name,
 			dateOfBirth: body.dateOfBirth,
 			dob: body.dob, // Include dob if it's separate from dateOfBirth
+			status,
+			inactiveReason,
 			phone: body.phone,
 			placementDate: body.placementDate
 				? new Date(body.placementDate)

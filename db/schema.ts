@@ -23,6 +23,8 @@ export const residents = pgTable(
 		dateOfBirth: varchar('date_of_birth', {length: 50}),
 		dob: varchar('dob', {length: 50}),
 		location: varchar('location', {length: 255}).notNull(),
+		status: varchar('status', {length: 20}).notNull().default('active'),
+		inactiveReason: varchar('inactive_reason', {length: 50}),
 
 		// NEW FIELDS
 		phone: varchar('phone', {length: 50}),
