@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
 		const count = await getUnreadMemoCount(userId);
 
-		return NextResponse.json({count});
+		return NextResponse.json({count, unreadCount: count});
 	} catch (error) {
 		return internalServerError(error, 'GetUnreadMemoCount');
 	}

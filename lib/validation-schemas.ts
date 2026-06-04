@@ -18,7 +18,10 @@ export const memoSchema = z.object({
 	targetLocations: z.array(z.string()).optional().default([]),
 	targetUsers: z.array(z.string()).optional().default([]),
 	priority: z.enum(['normal', 'high', 'urgent']).default('normal'),
-	expiresAt: z.string().datetime().optional(),
+	expiresAt: z
+		.string()
+		.refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid expiry date')
+		.optional(),
 });
 
 // ============================================================================

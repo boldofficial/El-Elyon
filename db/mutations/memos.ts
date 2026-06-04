@@ -1,9 +1,18 @@
 // db/mutations/memos.ts
 import {db} from '../index';
-import {memos, memosRead} from '../schema';
+import {memos, memosRead, shifts} from '../schema';
 import {requireCareAccess} from '@/lib/db-helpers';
-import {eq} from 'drizzle-orm';
+import {and, desc, eq, isNull} from 'drizzle-orm';
 import {getFullUserData} from '../queries/users';
+
+async function getActiveShiftLocation(clerkUserId: string) {
+	const currentShift = await db.query.shifts.findFirst({
+		where: and(eq(shifts.clerkUserId, clerkUserId), isNull(shifts.clockOutTime)),
+		orderBy: [desc(shifts.clockInTime)],
+	});
+
+	return currentShift?.location ? [currentShift.location] : [];
+}
 
 // Create a new memo
 export async function createMemo(args: {
@@ -30,6 +39,9 @@ export async function createMemo(args: {
 	// Validate user access
 	const userRole = await requireCareAccess(clerkUserId);
 	const role = userRole.role?.toLowerCase();
+	const senderLocations = userRole.locations?.length
+		? userRole.locations
+		: await getActiveShiftLocation(clerkUserId);
 
 	// Get user name for sender
 	const user = await getFullUserData(clerkUserId);
@@ -41,7 +53,7 @@ export async function createMemo(args: {
 		if (recipientType !== 'location') {
 			throw new Error('Staff can only send memos to their own location');
 		}
-		if (!userRole.locations || userRole.locations.length === 0) {
+		if (senderLocations.length === 0) {
 			throw new Error('Staff must have a location assigned');
 		}
 	} else if (role === 'supervisor') {
@@ -51,7 +63,7 @@ export async function createMemo(args: {
 		}
 		if (recipientType === 'selected-locations') {
 			// Verify supervisor manages all target locations
-			const managedLocations = userRole.locations || [];
+			const managedLocations = senderLocations;
 			const invalidLocations = targetLocations.filter(
 				(loc) => !managedLocations.includes(loc)
 			);
@@ -68,7 +80,7 @@ export async function createMemo(args: {
 	
 	if (recipientType === 'location') {
 		// Send to sender's locations
-		finalTargetLocations = userRole.locations || [];
+		finalTargetLocations = senderLocations;
 	} else if (recipientType === 'selected-locations') {
 		finalTargetLocations = targetLocations;
 	} else if (recipientType === 'selected-users') {
