@@ -2,6 +2,7 @@ import type {Metadata, Viewport} from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import {ClerkProvider} from '@clerk/nextjs';
 import {Geist, Geist_Mono} from 'next/font/google';
+import {PwaRefreshButton} from '@/components/shared/PwaRefreshButton';
 import './globals.css';
 
 const geistSans = Geist({
@@ -123,6 +124,7 @@ export default function RootLayout({
 				<body
 					className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
 					{children}
+					<PwaRefreshButton />
 					<Analytics />
 				</body>
 			</html>

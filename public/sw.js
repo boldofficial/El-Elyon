@@ -56,4 +56,16 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+
+  if (event.data && event.data.type === 'CLEAR_APP_CACHE') {
+    event.waitUntil(
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames
+            .filter((name) => name.startsWith('el-elyon-'))
+            .map((name) => caches.delete(name))
+        );
+      })
+    );
+  }
 });
