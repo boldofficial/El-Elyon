@@ -281,6 +281,14 @@ export async function listActiveAlerts(clerkUserId: string) {
 	const role = await getUserRoleDoc(clerkUserId);
 	if (!role) return [];
 	const locations = role.locations ?? [];
+	const isAdmin = role.role === 'admin';
+
+	if (isAdmin) {
+		return await db.query.complianceAlerts.findMany({
+			where: eq(complianceAlerts.active, true),
+			orderBy: [desc(complianceAlerts.createdAt)],
+		});
+	}
 
 	if (locations.length === 0) {
 		return [];

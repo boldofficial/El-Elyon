@@ -27,7 +27,11 @@ export async function GET(req: NextRequest) {
 		}
 
 		const userRole = await requireCareAccess(userId);
-		if (userRole.role !== 'admin') {
+		if (userRole.role === 'admin') {
+			if (location) {
+				conditions.push(eq(residentLogs.location, location));
+			}
+		} else {
 			const currentShift = await db.query.shifts.findFirst({
 				where: and(eq(shifts.clerkUserId, userId), isNull(shifts.clockOutTime)),
 				orderBy: [desc(shifts.clockInTime)],

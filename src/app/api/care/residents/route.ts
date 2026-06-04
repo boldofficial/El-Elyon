@@ -21,12 +21,22 @@ export async function GET(request: Request) {
 
 		const {searchParams} = new URL(request.url);
 		const residentId = searchParams.get('residentId');
+		const location = searchParams.get('location');
 
-		if (userData.role === 'admin' && residentId) {
-			const resident = await db.query.residents.findFirst({
-				where: eq(residents.id, residentId),
+		if (userData.role === 'admin') {
+			if (residentId) {
+				const resident = await db.query.residents.findFirst({
+					where: location
+						? and(eq(residents.id, residentId), eq(residents.location, location))
+						: eq(residents.id, residentId),
+				});
+				return NextResponse.json(resident || null);
+			}
+
+			const residentList = await db.query.residents.findMany({
+				where: location ? eq(residents.location, location) : undefined,
 			});
-			return NextResponse.json(resident || null);
+			return NextResponse.json(residentList);
 		}
 
 		const currentShift = await db.query.shifts.findFirst({
@@ -36,24 +46,6 @@ export async function GET(request: Request) {
 
 		if (!currentShift) {
 			return NextResponse.json(residentId ? null : []);
-		}
-
-		// Care Portal data is scoped to the location of the active shift.
-		if (userData.role === 'admin') {
-			if (residentId) {
-				const resident = await db.query.residents.findFirst({
-					where: (residents, {and, eq}) =>
-						and(
-							eq(residents.id, residentId),
-							eq(residents.location, currentShift.location)
-						),
-				});
-				return NextResponse.json(resident || null);
-			}
-			const locationResidents = await db.query.residents.findMany({
-				where: eq(residents.location, currentShift.location),
-			});
-			return NextResponse.json(locationResidents);
 		}
 
 		// Non-admins only see residents in their assigned locations

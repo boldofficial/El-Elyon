@@ -13,7 +13,7 @@ export async function POST(req: Request) {
 			return NextResponse.json({error: 'Not authenticated'}, {status: 401});
 		}
 
-		await requireCareAccess(userId);
+		const userRole = await requireCareAccess(userId);
 
 		const {residentId, template, content} = await req.json();
 
@@ -21,26 +21,45 @@ export async function POST(req: Request) {
 			return NextResponse.json({error: 'residentId is required'}, {status: 400});
 		}
 
-		const currentShift = await db.query.shifts.findFirst({
-			where: and(eq(shifts.clerkUserId, userId), isNull(shifts.clockOutTime)),
-			orderBy: [desc(shifts.clockInTime)],
-		});
-
-		if (!currentShift) {
-			return NextResponse.json(
-				{error: 'You must be clocked in to create care logs'},
-				{status: 409}
-			);
-		}
-
 		const resident = await db.query.residents.findFirst({
 			where: eq(residents.id, residentId),
 		});
 
-		if (!resident || resident.location !== currentShift.location) {
+		if (!resident) {
+			return NextResponse.json({error: 'Resident not found'}, {status: 404});
+		}
+
+		let logLocation = resident.location;
+		let shiftId: string | undefined;
+
+		if (userRole.role !== 'admin') {
+			const currentShift = await db.query.shifts.findFirst({
+				where: and(eq(shifts.clerkUserId, userId), isNull(shifts.clockOutTime)),
+				orderBy: [desc(shifts.clockInTime)],
+			});
+
+			if (!currentShift) {
+				return NextResponse.json(
+					{error: 'You must be clocked in to create care logs'},
+					{status: 409}
+				);
+			}
+
+			if (resident.location !== currentShift.location) {
+				return NextResponse.json(
+					{error: 'Resident is not available for your active shift location'},
+					{status: 403}
+				);
+			}
+
+			logLocation = currentShift.location;
+			shiftId = currentShift.id;
+		}
+
+		if (!logLocation) {
 			return NextResponse.json(
-				{error: 'Resident is not available for your active shift location'},
-				{status: 403}
+				{error: 'Resident location is required to create care logs'},
+				{status: 400}
 			);
 		}
 
@@ -57,8 +76,8 @@ export async function POST(req: Request) {
 				residentId,
 				template,
 				content,
-				location: currentShift.location,
-				shiftId: currentShift.id,
+				location: logLocation,
+				shiftId,
 				authorId: userId,
 				authorName,
 				createdBy: userId,
