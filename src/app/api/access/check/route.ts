@@ -50,8 +50,9 @@ export async function GET(req: NextRequest) {
 		let reason = '';
 		let redirectTo = '';
 
-		// Check if route is public
-		if (publicRoutes.some((r) => route.startsWith(r))) {
+		// Check if route is public. "/" must be an exact match; otherwise every
+		// route would be public because all paths start with "/".
+		if (publicRoutes.includes(route)) {
 			granted = true;
 			reason = 'public_route';
 		}

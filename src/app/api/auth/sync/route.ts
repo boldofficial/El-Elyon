@@ -58,20 +58,20 @@ export async function POST(request: Request) {
 
 		const clerkUserData = await getClerkUser(userId);
 
-		if (!clerkUserData && !fallbackUserData.email) {
+		if (!clerkUserData) {
 			return NextResponse.json(
-				{error: 'Failed to fetch user from Clerk and no fallback email was provided'},
+				{error: 'Failed to verify user identity with Clerk'},
 				{status: 500}
 			);
 		}
 
-		const email = clerkUserData?.email || fallbackUserData.email;
+		const email = clerkUserData.email;
 		const name =
-			clerkUserData?.name ||
+			clerkUserData.name ||
 			fallbackUserData.name ||
 			fallbackUserData.email?.split('@')[0] ||
 			'User';
-		const metadata = clerkUserData?.metadata || {};
+		const metadata = clerkUserData.metadata || {};
 
 		if (!email) {
 			return NextResponse.json(
