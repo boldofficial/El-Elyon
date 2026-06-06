@@ -2,13 +2,13 @@
 // Create a new location
 // ====================================
 import {NextResponse} from 'next/server';
-import {requireRole} from '@/lib/auth';
+import {requireRoleOrPrivilege} from '@/lib/auth';
 import {db} from '@/db/index';
 import {locations} from '@/db/schema';
 
 export async function POST(req: Request) {
 	try {
-		const user = await requireRole(['admin']);
+		const user = await requireRoleOrPrivilege(['admin'], ['manage_locations']);
 		const {name, address, capacity} = await req.json();
 
 		const [location] = await db

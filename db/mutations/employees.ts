@@ -29,7 +29,7 @@ import {
 	sendWelcomeEmailWithCredentials,
 } from '@/lib/emails/employee';
 import {auth} from '@clerk/nextjs/server';
-import {getUserRoleDoc, requireAdminAccess, logAudit} from '@/lib/db-helpers'; // Import from db-helpers
+import {getUserRoleDoc, requireAdminAccess, requireAdminOrPrivilege, logAudit} from '@/lib/db-helpers'; // Import from db-helpers
 import {checkForAdmins} from '../queries/roles';
 
 // Mutation: Accept invite by token (public for invite acceptance)
@@ -165,7 +165,7 @@ export async function createEmployee(
 
 	// Only require admin access if NOT creating first admin AND NOT self-sync
 	if (!isFirstAdmin && !isSelfSync) {
-		await requireAdminAccess(adminClerkUserId);
+		await requireAdminOrPrivilege(adminClerkUserId, 'manage_employees');
 	} else if (isFirstAdmin) {
 		console.log('🎖️  Creating first admin - skipping admin check');
 	} else if (isSelfSync) {
@@ -416,7 +416,7 @@ export async function updateEmployee(
 		employee.workEmail === args.email;
 		
 	if (!isSelfUpdate) {
-		await requireAdminAccess(clerkUserId);
+		await requireAdminOrPrivilege(clerkUserId, 'manage_employees');
 	} else {
 		console.log('✅ Self-update allowed for user:', clerkUserId);
 	}
@@ -477,7 +477,7 @@ export async function generateInviteLink(
 	employeeId: string,
 	adminClerkUserId: string
 ) {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_employees');
 
 	const employee = await db.query.employees.findFirst({
 		where: eq(employees.id, employeeId),
@@ -538,7 +538,7 @@ export async function generateInviteLink(
 
 // Mutation: Delete employee with cascade (admin only)
 export async function deleteEmployee(employeeId: string, clerkUserId: string) {
-	await requireAdminAccess(clerkUserId);
+	await requireAdminOrPrivilege(clerkUserId, 'manage_employees');
 
 	const employee = await db.query.employees.findFirst({
 		where: eq(employees.id, employeeId),

@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege} from '@/lib/db-helpers';
 import {scanAllOrphanedData} from '@/db/queries/cleanup';
 
 /**
@@ -15,7 +15,7 @@ export async function GET() {
 			return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 		}
 
-		await requireAdminAccess(userId);
+		await requireAdminOrPrivilege(userId, 'manage_data_cleanup');
 
 		const results = await scanAllOrphanedData();
 

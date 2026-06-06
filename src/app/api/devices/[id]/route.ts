@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege, logAudit} from '@/lib/db-helpers';
 import {getDeviceById} from '@/db/queries/devices';
 import {updateDeviceById, deleteDeviceById} from '@/db/mutations/devices';
 
@@ -15,7 +15,7 @@ export async function PATCH(
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		await requireAdminOrPrivilege(userId, 'manage_devices');
 
 		const {id: deviceId} = await params;
 		if (!deviceId) {
@@ -70,7 +70,7 @@ export async function DELETE(
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		await requireAdminOrPrivilege(userId, 'manage_devices');
 
 		const {id: deviceId} = await params;
 		if (!deviceId) {

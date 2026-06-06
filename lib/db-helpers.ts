@@ -3,6 +3,8 @@
 import {db} from '../db/index';
 import {roles, auditLogs} from '../db/schema'; // Import auditLogs schema
 import {eq} from 'drizzle-orm';
+import {type AdminPrivilege} from '@/lib/admin-privileges';
+import {hasAdminPrivilege} from '@/db/queries/admin-privileges';
 
 // Helper: Get user role doc (Drizzle version)
 export async function getUserRoleDoc(clerkUserId: string) {
@@ -100,6 +102,52 @@ export async function requireAdminAccess(clerkUserId: string) {
 		throw new Error('Admin access required');
 	}
 	return userRole;
+}
+
+export async function requireAdminOrPrivilege(
+	clerkUserId: string,
+	privilege: AdminPrivilege
+) {
+	const userRole = await getUserRoleDoc(clerkUserId);
+	const role = userRole?.role?.toLowerCase() || '';
+
+	if (role === 'admin' || (await hasAdminPrivilege(clerkUserId, privilege))) {
+		return userRole;
+	}
+
+	await logAudit({
+		clerkUserId,
+		event: 'access_denied',
+		details: `admin_or_privilege_required_${privilege}_actual_${role}`,
+		deviceId: 'system',
+		location: '',
+	});
+	throw new Error('Admin privilege required');
+}
+
+export async function requireAdminOrAnyPrivilege(
+	clerkUserId: string,
+	privileges: AdminPrivilege[]
+) {
+	const userRole = await getUserRoleDoc(clerkUserId);
+	const role = userRole?.role?.toLowerCase() || '';
+
+	if (role === 'admin') return userRole;
+
+	for (const privilege of privileges) {
+		if (await hasAdminPrivilege(clerkUserId, privilege)) {
+			return userRole;
+		}
+	}
+
+	await logAudit({
+		clerkUserId,
+		event: 'access_denied',
+		details: `admin_or_any_privilege_required_${privileges.join('|')}_actual_${role}`,
+		deviceId: 'system',
+		location: '',
+	});
+	throw new Error('Admin privilege required');
 }
 
 export async function requireAdminOrSupervisorAccess(clerkUserId: string) {

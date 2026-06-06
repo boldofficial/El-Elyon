@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege, logAudit} from '@/lib/db-helpers';
 import {internalServerError} from '@/lib/api-errors';
 import {getInviteLink} from '@/db/queries/employees';
 
@@ -14,7 +14,7 @@ export async function GET(
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		await requireAdminOrPrivilege(userId, 'manage_employees');
 
 		const {id: employeeId} = await params;
 		if (!employeeId) {

@@ -3,7 +3,7 @@
 // =============================================
 import {NextRequest, NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege, logAudit} from '@/lib/db-helpers';
 import {listDevices, getDeviceByDeviceId} from '@/db/queries/devices';
 import {registerDevice} from '@/db/mutations/devices';
 
@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		await requireAdminOrPrivilege(userId, 'manage_devices');
 
 		const location = req.nextUrl.searchParams.get('location') || undefined;
 		const devicesList = await listDevices(userId, location);
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		await requireAdminOrPrivilege(userId, 'manage_devices');
 
 		const body = await request.json();
 		const {deviceId, deviceName, location, deviceType, metadata, notes} = body;

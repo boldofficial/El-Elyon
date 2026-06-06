@@ -49,6 +49,11 @@ const NAV_SECTIONS = [
 		icon: '💻',
 	},
 	{
+		key: 'admin-privileges',
+		label: 'Admin Privileges',
+		icon: '🔑',
+	},
+	{
 		key: 'guardian-checklists',
 		label: 'Guardian Checklists',
 		icon: '📋',

@@ -1,14 +1,13 @@
 import {NextResponse} from 'next/server';
 import {db} from '@/db/index';
 import {employees, roles, users} from '@/db/schema';
-import {requireRole} from '@/lib/auth';
+import {requireRoleOrPrivilege} from '@/lib/auth';
 import {internalServerError} from '@/lib/api-errors';
 import {eq} from 'drizzle-orm';
 
 export async function GET() {
 	try {
-		// Only admins can fetch all employees
-		await requireRole(['admin']);
+		await requireRoleOrPrivilege(['admin'], ['manage_employees']);
 
 		// Fetch all employees with their roles and user info
 		const allEmployees = await db

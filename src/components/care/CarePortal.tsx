@@ -14,6 +14,86 @@ import CarePortalResidentDetails from './CarePortalResidentDetails';
 import LifeSafetyDocuments from '../supervisor/LifeSafetyDocuments';
 import MemosWorkspace from '../shared/MemosWorkspace';
 import VacationRequests from '../shared/VacationRequests';
+import PeopleWorkspace from '../admin/PeopleWorkspace';
+import LocationsWorkspace from '../admin/LocationsWorkspace';
+import DeviceManagementWorkspace from '../admin/DeviceManagementWorkspace';
+import ComplianceWorkspace from '../compliance/ComplianceWorkspace';
+import GuardianChecklistWorkspace from '../guardian/GuardianChecklistWorkspace';
+import {DataCleanupWorkspace} from '../admin/DataCleanupWorkspace';
+import SettingsWorkspace from '../admin/SettingsWorkspace';
+import AdminCareLogsWorkspace from '../admin/CareLogsWorkspace';
+
+type AdminPrivilege =
+	| 'manage_employees'
+	| 'manage_residents'
+	| 'manage_locations'
+	| 'manage_devices'
+	| 'manage_compliance'
+	| 'manage_memos'
+	| 'manage_vacation_requests'
+	| 'manage_documents'
+	| 'view_care_logs'
+	| 'manage_guardian_checklists'
+	| 'manage_data_cleanup'
+	| 'manage_settings';
+
+const PRIVILEGE_TO_VIEW: Record<AdminPrivilege, string> = {
+	manage_employees: 'manage-people',
+	manage_residents: 'manage-people',
+	manage_locations: 'manage-locations',
+	manage_devices: 'manage-devices',
+	manage_compliance: 'manage-compliance',
+	manage_memos: 'memos',
+	manage_vacation_requests: 'vacation',
+	manage_documents: 'life-safety',
+	view_care_logs: 'manage-care-logs',
+	manage_guardian_checklists: 'manage-guardian-checklists',
+	manage_data_cleanup: 'manage-data-cleanup',
+	manage_settings: 'manage-settings',
+};
+
+const MANAGEMENT_VIEW_LABELS: Record<string, {label: string; icon: string; description: string}> = {
+	'manage-people': {
+		label: 'People Management',
+		icon: '👥',
+		description: 'Residents, guardians, employees',
+	},
+	'manage-locations': {
+		label: 'Locations',
+		icon: '📍',
+		description: 'Manage homes',
+	},
+	'manage-devices': {
+		label: 'Devices',
+		icon: '💻',
+		description: 'Register and update devices',
+	},
+	'manage-compliance': {
+		label: 'Compliance',
+		icon: '✅',
+		description: 'Compliance overview',
+	},
+	'manage-care-logs': {
+		label: 'Logs & Incidents',
+		icon: '📋',
+		description: 'Review care records',
+	},
+	'manage-guardian-checklists': {
+		label: 'Guardian Checklists',
+		icon: '📋',
+		description: 'Templates and links',
+	},
+	'manage-data-cleanup': {
+		label: 'Data Cleanup',
+		icon: '🧹',
+		description: 'Maintenance tools',
+	},
+	'manage-settings': {
+		label: 'Settings',
+		icon: '🔐',
+		description: 'System settings',
+	},
+};
 
 export default function CarePortal() {
 	const [activeView, setActiveView] = useState('shift');
@@ -21,6 +101,14 @@ export default function CarePortal() {
 	const [currentShift, setCurrentShift] = useState<any>(null);
 	const [selectedResident, setSelectedResident] = useState<any>(null);
 	const [unreadMemoCount, setUnreadMemoCount] = useState(0);
+	const adminPrivileges = (sessionInfo?.adminPrivileges || []) as AdminPrivilege[];
+	const delegatedManagementViews = Array.from(
+		new Set(
+			adminPrivileges
+				.map((privilege) => PRIVILEGE_TO_VIEW[privilege])
+				.filter((viewId) => Boolean(MANAGEMENT_VIEW_LABELS[viewId]))
+		)
+	);
 
 	// Refetch shift data - called after clock-in/out
 	const refetchShift = async () => {
@@ -70,7 +158,6 @@ export default function CarePortal() {
 
 	const isSupervisor = sessionInfo?.role === 'supervisor';
 	const isClockedIn = !!currentShift;
-
 	const navigationItems = [
 		{id: 'shift', label: 'Shift', icon: '⏰', description: 'Clock in/out'},
 		{
@@ -122,6 +209,11 @@ export default function CarePortal() {
 			description: 'ISPs author/publish',
 		},
 	];
+
+	const delegatedItems = delegatedManagementViews.map((viewId) => ({
+		id: viewId,
+		...MANAGEMENT_VIEW_LABELS[viewId],
+	}));
 
 	const handleNavigation = async (viewId: string) => {
 		setActiveView(viewId);
@@ -182,6 +274,33 @@ export default function CarePortal() {
 				return <LifeSafetyDocuments />;
 			case 'profile':
 				return <CareProfileWorkspace />;
+			case 'manage-people':
+				return (
+					<PeopleWorkspace
+						allowedTabs={[
+							...(adminPrivileges.includes('manage_residents')
+								? (['residents', 'guardians'] as const)
+								: []),
+							...(adminPrivileges.includes('manage_employees')
+								? (['employees'] as const)
+								: []),
+						]}
+					/>
+				);
+			case 'manage-locations':
+				return <LocationsWorkspace />;
+			case 'manage-devices':
+				return <DeviceManagementWorkspace />;
+			case 'manage-compliance':
+				return <ComplianceWorkspace />;
+			case 'manage-care-logs':
+				return <AdminCareLogsWorkspace />;
+			case 'manage-guardian-checklists':
+				return <GuardianChecklistWorkspace />;
+			case 'manage-data-cleanup':
+				return <DataCleanupWorkspace />;
+			case 'manage-settings':
+				return <SettingsWorkspace />;
 			case 'team':
 				return isSupervisor ? (
 					<SupervisorTeamWorkspace />
@@ -269,6 +388,34 @@ export default function CarePortal() {
 								Supervisor Tools
 							</div>
 							{supervisorItems.map((item) => (
+								<button
+									key={item.id}
+									onClick={() => handleNavigation(item.id)}
+									className={`w-full flex items-center px-3 py-3 text-left rounded-lg transition-all ${
+										activeView === item.id
+											? 'text-white'
+											: 'text-blue-200 hover:bg-white/10'
+									} ${!isClockedIn ? 'opacity-50 cursor-not-allowed' : ''}`}
+									style={activeView === item.id ? {backgroundColor: '#3b82f6'} : {}}
+									disabled={!isClockedIn}>
+									<span className="text-lg mr-3">{item.icon}</span>
+									<div className="flex-1 min-w-0">
+										<div className="font-medium">{item.label}</div>
+										<div className={`text-xs truncate ${activeView === item.id ? 'text-blue-100' : 'text-blue-300'}`}>
+											{item.description}
+										</div>
+									</div>
+								</button>
+							))}
+						</div>
+					)}
+
+					{delegatedItems.length > 0 && (
+						<div className="pt-4 mt-4 border-t border-white/10">
+							<div className="text-xs font-semibold text-blue-300 uppercase tracking-wider mb-3 px-3">
+								Management Tools
+							</div>
+							{delegatedItems.map((item) => (
 								<button
 									key={item.id}
 									onClick={() => handleNavigation(item.id)}

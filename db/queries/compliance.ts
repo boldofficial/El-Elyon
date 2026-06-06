@@ -10,7 +10,7 @@ import {
 	guardianChecklistTemplates,
 } from '../schema';
 import {eq, and, desc, gte, lte, sql, inArray} from 'drizzle-orm';
-import {requireAdminAccess, requireCareAccess, getUserRoleDoc} from '@/lib/db-helpers';
+import {requireCareAccess, getUserRoleDoc} from '@/lib/db-helpers';
 
 // Internal: List all residents (no auth)
 export async function internalListResidents() {

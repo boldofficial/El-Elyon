@@ -1,15 +1,11 @@
 import {db} from '../index';
 import {employees, roles, locations} from '../schema';
 import {eq, or} from 'drizzle-orm';
-import {getUserRoleDoc} from '@/lib/db-helpers'; // Only getUserRoleDoc is needed here, requireAdminQuery is local
+import {getUserRoleDoc, requireAdminOrPrivilege} from '@/lib/db-helpers'; // Only getUserRoleDoc is needed here, requireAdminQuery is local
 
 // Helper: Check admin access (for queries - no audit)
 async function requireAdminQuery(clerkUserId: string) {
-	const userRole = await getUserRoleDoc(clerkUserId);
-	if (!userRole || userRole.role !== 'admin') {
-		throw new Error('Admin access required');
-	}
-	return userRole;
+	return await requireAdminOrPrivilege(clerkUserId, 'manage_employees');
 }
 
 // Query: Check if any admin user exists in the system

@@ -11,7 +11,7 @@ import {
 	roles,
 } from '../schema';
 import {eq, inArray} from 'drizzle-orm';
-import {requireAdminAccess} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege} from '@/lib/db-helpers';
 import {logAudit} from './audit';
 import {sendComplianceAlertEmail} from '@/lib/emails/compliance';
 import {sendGuardianChecklistEmail} from '@/lib/emails/guardian';
@@ -55,7 +55,7 @@ export async function sendComplianceReminders(
 		throw new Error('Not authenticated');
 	}
 
-	await requireAdminAccess(clerkUserId);
+	await requireAdminOrPrivilege(clerkUserId, 'manage_compliance');
 
 	// Get the admin sending the reminder
 	const sendingAdmin = await db.query.employees.findFirst({
@@ -145,7 +145,7 @@ export async function exportComplianceList(
 	if (!clerkUserId) {
 		throw new Error('Not authenticated');
 	}
-	await requireAdminAccess(clerkUserId);
+	await requireAdminOrPrivilege(clerkUserId, 'manage_compliance');
 
 	// Get compliance items
 	const allItems = await getComplianceOverview(clerkUserId);
@@ -189,7 +189,7 @@ export async function resendGuardianLink(clerkUserId: string, linkId: string) {
 	if (!clerkUserId) {
 		throw new Error('Not authenticated');
 	}
-	await requireAdminAccess(clerkUserId);
+	await requireAdminOrPrivilege(clerkUserId, 'manage_compliance');
 
 	const link = await db.query.guardianChecklistLinks.findFirst({
 		where: eq(guardianChecklistLinks.id, linkId),
@@ -253,7 +253,7 @@ export async function setAlertSchedule(
 	hour: number,
 	minute: number
 ) {
-	await requireAdminAccess(clerkUserId);
+	await requireAdminOrPrivilege(clerkUserId, 'manage_compliance');
 
 	const configRecord = await db.query.config.findFirst();
 
@@ -289,7 +289,7 @@ export async function setAlertSchedule(
 // ========================================
 
 export async function dismissAlert(clerkUserId: string, alertId: string) {
-	await requireAdminAccess(clerkUserId);
+	await requireAdminOrPrivilege(clerkUserId, 'manage_compliance');
 
 	const alert = await db.query.complianceAlerts.findFirst({
 		where: eq(complianceAlerts.id, alertId),

@@ -3,7 +3,7 @@
 // ==========================================
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege, logAudit} from '@/lib/db-helpers';
 import {updateLocation, deleteLocation} from '@/db/mutations/locations';
 import {db} from '@/db/index';
 import {locations} from '@/db/schema';
@@ -17,7 +17,7 @@ export async function GET(request: Request, {params}: {params: Promise<{id: stri
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		await requireAdminOrPrivilege(userId, 'manage_locations');
 
 		const {id: locationId} = await params;
 		const location = await db.query.locations.findFirst({
@@ -46,7 +46,7 @@ export async function PATCH(
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		await requireAdminOrPrivilege(userId, 'manage_locations');
 
 		const {id: locationId} = await params;
 		const body = await request.json();
@@ -85,7 +85,7 @@ export async function DELETE(
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		await requireAdminOrPrivilege(userId, 'manage_locations');
 
 		const {id: locationId} = await params;
 		await deleteLocation(locationId);

@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege, logAudit} from '@/lib/db-helpers';
 import {internalServerError} from '@/lib/api-errors';
 import {sendEmployeeInviteEmail} from '@/lib/emails/employee';
 
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     }
 
     try {
-        await requireAdminAccess(userId);
+        await requireAdminOrPrivilege(userId, 'manage_employees');
 
         const body = await request.json();
         const {email, name, inviteUrl, role, locations} = body;

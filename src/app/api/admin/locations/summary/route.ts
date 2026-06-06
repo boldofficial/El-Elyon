@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege} from '@/lib/db-helpers';
 import {db} from '@/db/index';
 import {residents, kiosks, roles} from '@/db/schema';
 
@@ -11,7 +11,7 @@ export async function GET() {
     }
 
     try {
-        await requireAdminAccess(userId);
+        await requireAdminOrPrivilege(userId, 'manage_locations');
 
         const residentsList = await db.query.residents.findMany();
         const kiosksList = await db.query.kiosks.findMany();

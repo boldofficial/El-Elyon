@@ -1,5 +1,7 @@
 import {auth} from '@clerk/nextjs/server';
 import {getFullUserData} from '@/db/queries/users';
+import {type AdminPrivilege} from '@/lib/admin-privileges';
+import {hasAdminPrivilege} from '@/db/queries/admin-privileges';
 
 export async function getCurrentUser() {
 	const {userId} = await auth();
@@ -30,4 +32,23 @@ export async function requireRole(allowedRoles: string[]) {
 	}
 
 	return user;
+}
+
+export async function requireRoleOrPrivilege(
+	allowedRoles: string[],
+	privileges: AdminPrivilege[]
+) {
+	const user = await requireAuth();
+
+	if (user.role && allowedRoles.includes(user.role)) {
+		return user;
+	}
+
+	for (const privilege of privileges) {
+		if (await hasAdminPrivilege(user.clerkUserId, privilege)) {
+			return user;
+		}
+	}
+
+	throw new Error('Forbidden: Insufficient permissions');
 }

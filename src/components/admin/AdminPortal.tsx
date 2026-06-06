@@ -21,6 +21,7 @@ import LifeSafetyDocuments from '../supervisor/LifeSafetyDocuments';
 import CareLogsWorkspace from './CareLogsWorkspace';
 import MemosWorkspace from '../shared/MemosWorkspace';
 import VacationRequests from '../shared/VacationRequests';
+import AdminPrivilegesWorkspace from './AdminPrivilegesWorkspace';
 
 
 export default function AdminPortal() {
@@ -108,6 +109,8 @@ export default function AdminPortal() {
 				return <VacationRequests isAdmin={true} />;
 			case 'devices':
 				return <DeviceManagementWorkspace />;
+			case 'admin-privileges':
+				return <AdminPrivilegesWorkspace />;
 			case 'guardian-checklists':
 				return <GuardianChecklistWorkspace />;
 			case 'data-cleanup':

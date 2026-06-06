@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege} from '@/lib/db-helpers';
 import {cleanupOrphanedDataByCategories} from '@/db/mutations/cleanup';
 
 /**
@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 		}
 
 		// Require admin access
-		await requireAdminAccess(userId);
+		await requireAdminOrPrivilege(userId, 'manage_data_cleanup');
 
 		// Parse request body
 		const {categories} = await req.json();

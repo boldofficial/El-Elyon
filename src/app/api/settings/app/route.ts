@@ -7,7 +7,7 @@ import {internalServerError} from '@/lib/api-errors';
 import {db} from '@/db/index';
 import {config} from '@/db/schema';
 import {upsertConfig} from '@/db/mutations/config';
-import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege, logAudit} from '@/lib/db-helpers';
 
 export async function GET() {
 	try {
@@ -31,7 +31,7 @@ export async function PATCH(request: Request) {
     }
 
     try {
-        await requireAdminAccess(userId);
+        await requireAdminOrPrivilege(userId, 'manage_settings');
 
         const body = await request.json();
         const {

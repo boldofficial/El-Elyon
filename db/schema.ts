@@ -148,6 +148,29 @@ export const roles = pgTable(
 	})
 );
 
+// Delegated Admin Privileges Table
+export const adminPrivileges = pgTable(
+	'admin_privileges',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		clerkUserId: varchar('clerk_user_id', {length: 255}).notNull(),
+		privilege: varchar('privilege', {length: 100}).notNull(),
+		grantedBy: varchar('granted_by', {length: 255}).notNull(),
+		grantedAt: timestamp('granted_at').notNull().defaultNow(),
+		revokedBy: varchar('revoked_by', {length: 255}),
+		revokedAt: timestamp('revoked_at'),
+	},
+	(table) => ({
+		clerkUserIdIdx: index('admin_privileges_clerk_user_id_idx').on(
+			table.clerkUserId
+		),
+		activeIdx: index('admin_privileges_active_idx').on(
+			table.clerkUserId,
+			table.privilege
+		),
+	})
+);
+
 // Shifts Table
 export const shifts = pgTable(
 	'shifts',

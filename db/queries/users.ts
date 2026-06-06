@@ -3,6 +3,7 @@
 import {db} from '../index';
 import {users, employees, roles} from '../schema';
 import {eq} from 'drizzle-orm';
+import {getActiveAdminPrivileges} from '@/db/queries/admin-privileges';
 
 export async function getUserByClerkId(clerkUserId: string) {
 	return await db.query.users.findFirst({
@@ -52,6 +53,7 @@ export async function getFullUserData(clerkUserId: string) {
 		email: user.email,
 		name: user.name,
 		role: role.role?.toLowerCase(),
+		adminPrivileges: await getActiveAdminPrivileges(clerkUserId),
 		locations: assignedLocations,
 		employmentStatus: employee.employmentStatus,
 		assignedDeviceId: employee.assignedDeviceId,

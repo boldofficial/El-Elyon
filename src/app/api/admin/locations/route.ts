@@ -2,7 +2,11 @@
 
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminAccess, logAudit} from '@/lib/db-helpers';
+import {
+	requireAdminOrAnyPrivilege,
+	requireAdminOrPrivilege,
+	logAudit,
+} from '@/lib/db-helpers';
 import {createLocation} from '@/db/mutations/locations';
 import {db} from '@/db/index';
 
@@ -14,7 +18,14 @@ export async function GET() {
     }
 
     try {
-        await requireAdminAccess(userId);
+        await requireAdminOrAnyPrivilege(userId, [
+            'manage_locations',
+            'view_care_logs',
+            'manage_memos',
+            'manage_documents',
+            'manage_guardian_checklists',
+            'manage_compliance',
+        ]);
 
         const locations = await db.query.locations.findMany({
             orderBy: (locations, {asc}) => [asc(locations.name)],
@@ -35,7 +46,7 @@ export async function POST(request: Request) {
     }
 
     try {
-        await requireAdminAccess(userId);
+        await requireAdminOrPrivilege(userId, 'manage_locations');
 
         const body = await request.json();
 

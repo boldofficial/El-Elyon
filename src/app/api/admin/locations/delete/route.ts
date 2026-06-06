@@ -2,14 +2,14 @@
 // Delete a location
 // ========================================
 import {NextResponse} from 'next/server';
-import {requireRole} from '@/lib/auth';
+import {requireRoleOrPrivilege} from '@/lib/auth';
 import {db} from '@/db/index';
 import {locations, residents} from '@/db/schema';
 import {eq} from 'drizzle-orm';
 
 export async function DELETE(req: Request) {
 	try {
-		await requireRole(['admin']);
+		await requireRoleOrPrivilege(['admin'], ['manage_locations']);
 		const {locationId} = await req.json();
 
 		const location = await db.query.locations.findFirst({

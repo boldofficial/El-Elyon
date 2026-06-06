@@ -2,13 +2,13 @@
 // Sync locations from string array
 // ====================================
 import {NextResponse} from 'next/server';
-import {requireRole} from '@/lib/auth';
+import {requireRoleOrPrivilege} from '@/lib/auth';
 import {db} from '@/db/index';
 import {locations} from '@/db/schema';
 
 export async function POST(req: Request) {
 	try {
-		const user = await requireRole(['admin']);
+		const user = await requireRoleOrPrivilege(['admin'], ['manage_locations']);
 		const body = await req.json();
 		const locationNames = body.locationNames || []; // Ensure locationNames is an array
 

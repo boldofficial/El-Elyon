@@ -1,13 +1,13 @@
 // src/app/admin/kiosks/list/route.ts
 import {NextRequest, NextResponse} from 'next/server';
-import {requireRole} from '@/lib/auth';
+import {requireRoleOrPrivilege} from '@/lib/auth';
 import {db} from '@/db/index';
 import {kiosks} from '@/db/schema';
 import {eq} from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
 	try {
-		await requireRole(['admin']);
+		await requireRoleOrPrivilege(['admin'], ['manage_devices', 'manage_employees']);
 
 		const location = req.nextUrl.searchParams.get('location');
 

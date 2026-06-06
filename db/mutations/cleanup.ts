@@ -16,7 +16,7 @@ import {
 	guardianChecklistLinks,
 } from '@/db/schema';
 import {eq, inArray} from 'drizzle-orm';
-import {requireAdminAccess} from '@/lib/db-helpers';
+import {requireAdminOrPrivilege} from '@/lib/db-helpers';
 import {logAudit} from './audit';
 import {clerkClient} from '@clerk/nextjs/server';
 import {
@@ -107,7 +107,7 @@ async function deleteUserAndRelatedRecords(clerkUserId: string) {
  * Clean up orphaned users (users without proper records)
  */
 export async function cleanupOrphanedUsers(adminClerkUserId: string) {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const allEmployees = await db.query.employees.findMany();
 	const allRoles = await db.query.roles.findMany();
@@ -190,7 +190,7 @@ export async function cleanupOrphanedUsers(adminClerkUserId: string) {
 export async function cleanupOrphanedRoles(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedRoles = await scanOrphanedRoles(existingIds.employeeIds);
@@ -223,7 +223,7 @@ export async function cleanupOrphanedRoles(
 export async function cleanupOrphanedShifts(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedShifts = await scanOrphanedShifts(existingIds.employeeIds);
@@ -256,7 +256,7 @@ export async function cleanupOrphanedShifts(
 export async function cleanupOrphanedResidentLogs(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedLogs = await scanOrphanedResidentLogs(existingIds.residentIds);
@@ -289,7 +289,7 @@ export async function cleanupOrphanedResidentLogs(
 export async function cleanupOrphanedAuditLogs(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedLogs = await scanOrphanedAuditLogs(existingIds.userIds);
@@ -322,7 +322,7 @@ export async function cleanupOrphanedAuditLogs(
 export async function cleanupOrphanedIspFiles(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedFiles = await scanOrphanedIspFiles(existingIds.residentIds);
@@ -355,7 +355,7 @@ export async function cleanupOrphanedIspFiles(
 export async function cleanupOrphanedIspAccessLogs(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedLogs = await scanOrphanedIspAccessLogs(existingIds.ispFileIds);
@@ -392,7 +392,7 @@ export async function cleanupOrphanedIspAccessLogs(
 export async function cleanupOrphanedIspAcknowledgments(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedAcks = await scanOrphanedIspAcknowledgments(existingIds.ispIds);
@@ -431,7 +431,7 @@ export async function cleanupOrphanedIspAcknowledgments(
 export async function cleanupOrphanedComplianceAlerts(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedAlerts = await scanOrphanedComplianceAlerts(
@@ -472,7 +472,7 @@ export async function cleanupOrphanedComplianceAlerts(
 export async function cleanupOrphanedGuardianChecklistLinks(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedLinks = await scanOrphanedGuardianChecklistLinks(
@@ -513,7 +513,7 @@ export async function cleanupOrphanedGuardianChecklistLinks(
 export async function cleanupOrphanedGuardianResidentRefs(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedGuardians = await scanOrphanedGuardianResidentRefs(
@@ -565,7 +565,7 @@ export async function cleanupOrphanedGuardianResidentRefs(
 export async function cleanupOrphanedKiosks(
 	adminClerkUserId: string
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	const existingIds = await fetchExistingIds();
 	const orphanedKiosks = await scanOrphanedKiosks(existingIds.userIds);
@@ -599,7 +599,7 @@ export async function cleanupOrphanedDataByCategories(
 	adminClerkUserId: string,
 	categories: string[]
 ): Promise<CleanupResult> {
-	await requireAdminAccess(adminClerkUserId);
+	await requireAdminOrPrivilege(adminClerkUserId, 'manage_data_cleanup');
 
 	let totalDeleted = 0;
 	const allDeletedRecords: Record<string, string[]> = {};

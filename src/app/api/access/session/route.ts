@@ -4,6 +4,7 @@ import {getUserByClerkId} from '@/db/queries/users';
 import {getEmployeeByClerkId} from '@/db/queries/employees';
 import {getRoleByClerkId} from '@/db/queries/roles';
 import {getAllLocations} from '@/db/queries/locations';
+import {getActiveAdminPrivileges} from '@/db/queries/admin-privileges';
 
 export async function GET() {
 	try {
@@ -72,6 +73,7 @@ export async function GET() {
 				email: user.email,
 			},
 			role: role.role,
+			adminPrivileges: await getActiveAdminPrivileges(userId),
 			locations: assignedLocations,
 			defaultRoute,
 			employmentStatus: employee.employmentStatus,
