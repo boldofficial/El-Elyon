@@ -70,14 +70,9 @@ export const formatLogContent = (content: string, template: string | undefined, 
             .join(' | ');
 
         return formattedContent || 'No content';
-    } catch (error) {
-        
-        // If parsing fails completely, try to show something useful
-        // Strip any JSON formatting chars like {"content":"..."} if possible using regex as fallback?
-        // Or just return raw
-        return content.length > 200 
-            ? content.substring(0, 200) + '...'
-            : content;
+    } catch {
+        // Plain-text log entries are valid content and should be shown in full.
+        return content;
     }
 };
 
