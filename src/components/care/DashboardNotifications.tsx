@@ -28,6 +28,30 @@ interface Memo {
 	createdAt: string;
 }
 
+interface ComplianceReminder {
+	id: string;
+	type: string;
+	title: string;
+	description: string;
+	location: string;
+	severity: string;
+	createdAt: string;
+}
+
+const REMINDER_ICONS: Record<string, string> = {
+	isp: '📄',
+	fire_evac: '🚪',
+	smoke_detector: '🚨',
+	fire_drill: '🧯',
+};
+
+const SEVERITY_BORDER: Record<string, string> = {
+	critical: 'border-red-300 bg-red-50',
+	high: 'border-orange-300 bg-orange-50',
+	medium: 'border-yellow-300 bg-yellow-50',
+	low: 'border-blue-200 bg-blue-50',
+};
+
 const PRIORITY_STYLES: Record<string, string> = {
 	urgent: 'bg-red-100 text-red-800 border-red-200',
 	high: 'bg-orange-100 text-orange-800 border-orange-200',
@@ -37,6 +61,7 @@ const PRIORITY_STYLES: Record<string, string> = {
 export default function DashboardNotifications() {
 	const [pendingIspAcks, setPendingIspAcks] = useState<PendingIspAck[]>([]);
 	const [unreadMemos, setUnreadMemos] = useState<Memo[]>([]);
+	const [reminders, setReminders] = useState<ComplianceReminder[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [acking, setAcking] = useState<string | null>(null);
 
@@ -47,6 +72,7 @@ export default function DashboardNotifications() {
 			const data = await res.json();
 			setPendingIspAcks(data.pendingIspAcks || []);
 			setUnreadMemos(data.unreadMemos || []);
+			setReminders(data.complianceReminders || []);
 		} catch (error) {
 			console.error('Error loading dashboard notifications:', error);
 		} finally {
@@ -92,10 +118,57 @@ export default function DashboardNotifications() {
 
 	// Render nothing until we know there's something to show.
 	if (loading) return null;
-	if (pendingIspAcks.length === 0 && unreadMemos.length === 0) return null;
+	if (
+		pendingIspAcks.length === 0 &&
+		unreadMemos.length === 0 &&
+		reminders.length === 0
+	)
+		return null;
 
 	return (
 		<div className="space-y-4">
+			{/* Compliance deadline reminders */}
+			{reminders.length > 0 && (
+				<div className="bg-white rounded-lg shadow-sm border">
+					<div className="px-4 py-3 border-b bg-gray-50 rounded-t-lg flex items-center gap-2">
+						<span className="text-lg">⏰</span>
+						<h3 className="font-semibold text-gray-900">
+							Compliance reminders
+						</h3>
+						<span className="ml-auto text-xs font-medium bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full">
+							{reminders.length}
+						</span>
+					</div>
+					<ul className="divide-y">
+						{reminders.map((r) => (
+							<li
+								key={r.id}
+								className={`px-4 py-3 border-l-4 ${
+									SEVERITY_BORDER[r.severity] || SEVERITY_BORDER.medium
+								}`}>
+								<div className="flex items-start gap-2">
+									<span className="text-base leading-6">
+										{REMINDER_ICONS[r.type] || '⚠️'}
+									</span>
+									<div className="min-w-0">
+										<p className="text-sm font-medium text-gray-900">
+											{r.title}
+											<span className="text-gray-400 font-normal">
+												{' '}
+												· {r.location}
+											</span>
+										</p>
+										<p className="text-sm text-gray-600 mt-0.5">
+											{r.description}
+										</p>
+									</div>
+								</div>
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+
 			{/* Pending ISP acknowledgments */}
 			{pendingIspAcks.length > 0 && (
 				<div className="bg-white rounded-lg shadow-sm border border-amber-200">

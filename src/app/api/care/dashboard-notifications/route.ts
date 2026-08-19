@@ -12,6 +12,7 @@ import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {getPendingISPFileAcknowledgments} from '@/db/queries/isp';
 import {getMemos} from '@/db/queries/memos';
+import {getComplianceRemindersForUser} from '@/db/queries/compliance';
 
 export async function GET() {
 	try {
@@ -20,14 +21,15 @@ export async function GET() {
 			return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 		}
 
-		const [pendingIspAcks, memoRows] = await Promise.all([
+		const [pendingIspAcks, memoRows, complianceReminders] = await Promise.all([
 			getPendingISPFileAcknowledgments(userId),
 			getMemos({clerkUserId: userId, unreadOnly: true, limit: 20}),
+			getComplianceRemindersForUser(userId),
 		]);
 
 		const unreadMemos = memoRows.map((r) => r.memo);
 
-		return NextResponse.json({pendingIspAcks, unreadMemos});
+		return NextResponse.json({pendingIspAcks, unreadMemos, complianceReminders});
 	} catch (error: any) {
 		console.error('Error building dashboard notifications:', error);
 		return NextResponse.json({error: error.message}, {status: 500});

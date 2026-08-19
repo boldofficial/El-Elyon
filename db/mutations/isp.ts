@@ -1,6 +1,6 @@
 import {db} from '../index';
-import {isp, ispFiles, ispFileAcknowledgments, residents} from '../schema';
-import {eq, and, InferInsertModel, InferSelectModel, isNull, or} from 'drizzle-orm';
+import {isp, ispFiles, ispFileAcknowledgments, complianceAlerts, residents} from '../schema';
+import {eq, and, sql, InferInsertModel, InferSelectModel, isNull, or} from 'drizzle-orm';
 import {requireCareAccess, logAudit} from '@/lib/db-helpers';
 
 type IspInsert = InferInsertModel<typeof isp>;
@@ -151,6 +151,19 @@ export async function activateISPFile(ispFileId: string, activatedByClerkUserId:
   if (!activatedISP) {
     throw new Error('Failed to activate ISP file');
   }
+
+  // A newly activated ISP resets the 6-month clock, so clear any active ISP
+  // deadline reminder for this resident immediately ("until it is updated").
+  await db
+    .update(complianceAlerts)
+    .set({active: false, status: 'resolved'})
+    .where(
+      and(
+        eq(complianceAlerts.type, 'isp'),
+        eq(complianceAlerts.active, true),
+        sql`${complianceAlerts.metadata}->>'residentId' = ${ispFileToActivate.residentId}`
+      )
+    );
 
   await logAudit({
     clerkUserId: activatedByClerkUserId,
