@@ -15,7 +15,7 @@ interface IncidentReport {
 	incidentType: string;
 	severity: string;
 	description: string;
-	reportedByName: string;
+	reportedByName?: string | null;
 	resident?: { name: string }; // Optional resident object if available
 	location?: string;
 	actionTaken?: string;
@@ -162,7 +162,7 @@ export default function SharedIncidentsAccordion({ incidents }: SharedIncidentsA
 													<div className="flex justify-between">
 														<dt className="text-gray-500">Reported By:</dt>
 														<dd className="font-medium text-gray-900">
-															{report.reportedByName}
+															{report.reportedByName || '-'}
 														</dd>
 													</div>
 													<div className="flex justify-between">

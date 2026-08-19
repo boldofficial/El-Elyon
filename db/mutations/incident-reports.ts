@@ -1,7 +1,8 @@
 import {db} from '../index';
-import {incidentReports, residents} from '../schema';
+import {incidentReports, residents, employees} from '../schema';
 import {eq} from 'drizzle-orm';
 import {requireCareAccess} from '@/lib/db-helpers';
+import {getClerkUser} from '@/lib/clerk';
 import {logAudit} from './audit';
 import {InferSelectModel} from 'drizzle-orm';
 
@@ -34,6 +35,19 @@ export async function createIncidentReport(
 		throw new Error('Resident not found');
 	}
 
+	// Resolve the reporter's display name. requireCareAccess returns a `roles`
+	// row, which has no name column — the human-readable name lives on the
+	// employee record keyed by clerkUserId. Fall back to the reporter's Clerk
+	// full name when no employee record exists (e.g. an admin), then 'Unknown'.
+	const reporter = await db.query.employees.findFirst({
+		where: eq(employees.clerkUserId, clerkUserId),
+	});
+	let reportedByName = reporter?.name?.trim();
+	if (!reportedByName) {
+		const clerkUser = await getClerkUser(clerkUserId);
+		reportedByName = clerkUser?.name || 'Unknown';
+	}
+
 	const userLocations =
 		userRole.role === 'admin' ? [] : userRole.locations || [];
 	if (
@@ -48,7 +62,7 @@ export async function createIncidentReport(
 		.values({
 			...data,
 			reportedBy: clerkUserId,
-			// reportedByName: userRole.name, // Assuming userRole has a name property
+			reportedByName,
 			createdAt: new Date(),
 		})
 		.returning();

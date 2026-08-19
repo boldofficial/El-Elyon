@@ -13,7 +13,7 @@ interface IncidentReport {
 	incidentType: string;
 	severity: string;
 	description: string;
-	reportedByName: string;
+	reportedByName?: string | null;
 	actionTaken?: string;
 	witnessNames?: string;
 	followUpRequired: boolean;
