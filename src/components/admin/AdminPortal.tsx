@@ -22,6 +22,7 @@ import CareLogsWorkspace from './CareLogsWorkspace';
 import MemosWorkspace from '../shared/MemosWorkspace';
 import VacationRequests from '../shared/VacationRequests';
 import AdminPrivilegesWorkspace from './AdminPrivilegesWorkspace';
+import InspectorAccessWorkspace from './InspectorAccessWorkspace';
 
 
 export default function AdminPortal() {
@@ -122,6 +123,8 @@ export default function AdminPortal() {
 				return <LifeSafetyDocuments />;
 			case 'care-logs':
 				return <CareLogsWorkspace />;
+			case 'inspector-access':
+				return <InspectorAccessWorkspace />;
 			default:
 				return <AdminDashboard onNavigate={handleNavigate} />;
 		}

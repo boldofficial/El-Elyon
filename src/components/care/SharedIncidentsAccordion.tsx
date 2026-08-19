@@ -31,9 +31,19 @@ interface SharedIncidentsAccordionProps {
 	incidents: IncidentReport[];
 	/** When true, shows a "Print / Save PDF" action on each incident (admin use). */
 	allowPrint?: boolean;
+	/**
+	 * Builds the download URL for an attachment file key. Defaults to the
+	 * Clerk-gated uploads endpoint; the inspector dashboard overrides this to
+	 * use its session-gated download route.
+	 */
+	buildAttachmentUrl?: (fileKey: string) => string;
 }
 
-export default function SharedIncidentsAccordion({ incidents, allowPrint = false }: SharedIncidentsAccordionProps) {
+export default function SharedIncidentsAccordion({
+	incidents,
+	allowPrint = false,
+	buildAttachmentUrl = (fileKey) => `/api/uploads?fileId=${fileKey}`,
+}: SharedIncidentsAccordionProps) {
 	const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
 	const toggleExpand = (id: string) => {
@@ -49,7 +59,7 @@ export default function SharedIncidentsAccordion({ incidents, allowPrint = false
 	// Helper to handle download attachment
 	const handleDownloadAttachment = (fileKey: string, e: React.MouseEvent) => {
 		e.stopPropagation(); // Prevent toggling accordion
-		window.open(`/api/uploads?fileId=${fileKey}`, '_blank');
+		window.open(buildAttachmentUrl(fileKey), '_blank');
 	};
 
 	return (
