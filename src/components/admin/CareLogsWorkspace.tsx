@@ -406,7 +406,7 @@ export default function CareLogsWorkspace() {
 								<p className="text-gray-500">Loading incidents...</p>
 							</div>
 						) : (
-							<SharedIncidentsAccordion incidents={incidents} />
+							<SharedIncidentsAccordion incidents={incidents} allowPrint />
 						)}
 					</div>
 				</>

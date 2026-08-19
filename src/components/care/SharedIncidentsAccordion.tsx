@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { printIncidentReport } from './printIncidentReport';
 
 const SEVERITY_COLORS: Record<string, string> = {
 	low: 'bg-green-100 text-green-800',
@@ -23,13 +24,16 @@ interface IncidentReport {
 	followUpRequired: boolean;
 	followUpNotes?: string;
 	attachments?: string[];
+	createdAt?: Date | string;
 }
 
 interface SharedIncidentsAccordionProps {
 	incidents: IncidentReport[];
+	/** When true, shows a "Print / Save PDF" action on each incident (admin use). */
+	allowPrint?: boolean;
 }
 
-export default function SharedIncidentsAccordion({ incidents }: SharedIncidentsAccordionProps) {
+export default function SharedIncidentsAccordion({ incidents, allowPrint = false }: SharedIncidentsAccordionProps) {
 	const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
 	const toggleExpand = (id: string) => {
@@ -68,9 +72,10 @@ export default function SharedIncidentsAccordion({ incidents }: SharedIncidentsA
 									? 'ring-1 ring-red-500 border-red-500'
 									: 'hover:border-gray-300'
 							}`}>
+							<div className="w-full flex items-stretch">
 							<button
 								onClick={() => toggleExpand(report.id)}
-								className="w-full text-left px-4 py-3 sm:px-6 flex items-center justify-between gap-4 focus:outline-none">
+								className="flex-1 min-w-0 text-left px-4 py-3 sm:px-6 flex items-center justify-between gap-4 focus:outline-none">
 								<div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
 									{/* Date */}
 									<div className="md:col-span-3 text-sm text-gray-500">
@@ -124,6 +129,28 @@ export default function SharedIncidentsAccordion({ incidents }: SharedIncidentsA
 									</svg>
 								</div>
 							</button>
+
+							{allowPrint && (
+								<button
+									type="button"
+									onClick={() => printIncidentReport(report)}
+									title="Print / Save as PDF"
+									className="flex items-center gap-1.5 px-3 sm:px-4 border-l text-gray-500 hover:text-red-700 hover:bg-red-50 focus:outline-none transition-colors">
+									<svg
+										className="h-5 w-5"
+										viewBox="0 0 20 20"
+										fill="currentColor"
+										aria-hidden="true">
+										<path
+											fillRule="evenodd"
+											d="M5 4a2 2 0 00-2 2v3a2 2 0 002 2h1v2a1 1 0 001 1h6a1 1 0 001-1v-2h1a2 2 0 002-2V6a2 2 0 00-2-2H5zm10 6a1 1 0 100-2 1 1 0 000 2zm-2-6H7v2h6V4zM7 14h6v-3H7v3z"
+											clipRule="evenodd"
+										/>
+									</svg>
+									<span className="hidden sm:inline text-xs font-medium">PDF</span>
+								</button>
+							)}
+							</div>
 
 							{/* Expanded Content */}
 							{isExpanded && (
