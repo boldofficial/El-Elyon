@@ -1,5 +1,5 @@
 import {db} from '../index';
-import {isp, ispFiles, residents} from '../schema';
+import {isp, ispFiles, ispFileAcknowledgments, residents} from '../schema';
 import {eq, and, InferInsertModel, InferSelectModel, isNull, or} from 'drizzle-orm';
 import {requireCareAccess, logAudit} from '@/lib/db-helpers';
 
@@ -161,6 +161,38 @@ export async function activateISPFile(ispFileId: string, activatedByClerkUserId:
   });
 
   return activatedISP;
+}
+
+// Mutation: Acknowledge an ISP File (read receipt)
+// Idempotent — a repeat acknowledgment is ignored via the unique (file,user) index.
+export async function acknowledgeISPFile(clerkUserId: string, ispFileId: string) {
+  const file = await db.query.ispFiles.findFirst({
+    where: eq(ispFiles.id, ispFileId),
+  });
+
+  if (!file) {
+    throw new Error('ISP file not found');
+  }
+
+  await db
+    .insert(ispFileAcknowledgments)
+    .values({
+      ispFileId,
+      residentId: file.residentId,
+      clerkUserId,
+      acknowledgedAt: new Date(),
+    })
+    .onConflictDoNothing();
+
+  await logAudit({
+    clerkUserId,
+    event: 'isp_file.acknowledged',
+    details: `Acknowledged ISP file ${ispFileId} for resident ${file.residentId}, version ${file.versionLabel}`,
+    deviceId: 'system',
+    location: '',
+  });
+
+  return {success: true};
 }
 
 // Mutation: Delete ISP File
