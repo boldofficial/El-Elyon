@@ -9,7 +9,7 @@ import {
 	smokeDetectorChecks,
 } from '@/db/schema';
 import {requireCareAccess} from '@/lib/db-helpers';
-import {and, asc, desc, eq, gt, gte, inArray, isNull, lte} from 'drizzle-orm';
+import {and, asc, eq, gt, gte, inArray, isNull, lte} from 'drizzle-orm';
 
 export class LifeSafetyNotFoundError extends Error {
 	constructor(message = 'Life-safety record not found') {
@@ -84,6 +84,20 @@ export async function resolveAuthorizedLegacyLocation(
 		.limit(1);
 	if (!location) throw new LifeSafetyNotFoundError();
 	return location.name;
+}
+
+export async function listAuthorizedLifeSafetyLocations(args: {clerkUserId: string}) {
+	const context = await getLifeSafetyAccessContext(args.clerkUserId);
+	if (!context.isAdmin && context.locationNames.length === 0) return [];
+
+	const conditions = [eq(locations.status, 'active')];
+	if (!context.isAdmin) conditions.push(inArray(locations.name, context.locationNames));
+
+	return db
+		.select({id: locations.id, name: locations.name})
+		.from(locations)
+		.where(and(...conditions))
+		.orderBy(asc(locations.name), asc(locations.id));
 }
 
 export async function listLifeSafetyInspections(args: {

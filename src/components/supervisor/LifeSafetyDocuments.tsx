@@ -2,6 +2,7 @@
 
 import React, {useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
+import LifeSafetyInspectionWorkspace from './LifeSafetyInspectionWorkspace';
 
 type SmokeCheck = {
 	id?: string;
@@ -49,9 +50,9 @@ export default function LifeSafetyDocuments() {
 		sequence: 'all',
 	});
 
-	const [smokeChecks, setSmokeChecks] = useState<SmokeCheck[]>([]);
+	const [smokeChecks] = useState<SmokeCheck[]>([]);
 	const [fireDrills, setFireDrills] = useState<FireDrill[]>([]);
-	const [loadingSmoke, setLoadingSmoke] = useState(false);
+	const [loadingSmoke] = useState(false);
 	const [loadingFire, setLoadingFire] = useState(false);
 
 	const [smokeForm, setSmokeForm] = useState<SmokeCheck>({
@@ -106,35 +107,6 @@ export default function LifeSafetyDocuments() {
 		}
 		loadLocations();
 	}, []);
-
-	useEffect(() => {
-		async function fetchSmoke() {
-			setLoadingSmoke(true);
-			try {
-				const params = new URLSearchParams();
-				if (smokeFilters.location !== 'all') {
-					params.set('location', smokeFilters.location);
-				}
-				if (smokeFilters.month) {
-					const [y, m] = smokeFilters.month.split('-');
-					if (y) params.set('year', y);
-					if (m) params.set('month', m);
-				}
-				params.set('limit', '200');
-
-				const res = await fetch(`/api/documents/smoke-detector-checks?${params}`);
-				if (!res.ok) throw new Error('Failed to fetch checks');
-				const data = await res.json();
-				setSmokeChecks(data || []);
-			} catch (error) {
-				console.error(error);
-				toast.error('Could not load smoke detector checks');
-			} finally {
-				setLoadingSmoke(false);
-			}
-		}
-		fetchSmoke();
-	}, [smokeFilters]);
 
 	useEffect(() => {
 		async function fetchFire() {
@@ -339,12 +311,12 @@ export default function LifeSafetyDocuments() {
 		<div className="space-y-6">
 			<div className="flex justify-between items-center">
 				<div>
-					<h2 className="text-2xl font-bold text-gray-900">Fire Drill & Smoke Detector</h2>
-					<p className="text-gray-600">Smoke detector checks (monthly) and fire drills (semiannual)</p>
+					<h2 className="text-2xl font-bold text-gray-900">Life-Safety Reports</h2>
+					<p className="text-gray-600">Annual equipment inspections and fire drill reports</p>
 				</div>
 				<div className="flex bg-gray-100 rounded-lg p-1">
 					<button className={tabClass('smoke')} onClick={() => setActiveTab('smoke')}>
-						Smoke Detectors
+						Inspections
 					</button>
 					<button className={tabClass('fire')} onClick={() => setActiveTab('fire')}>
 						Fire Drills
@@ -353,6 +325,8 @@ export default function LifeSafetyDocuments() {
 			</div>
 
 			{activeTab === 'smoke' ? (
+				<LifeSafetyInspectionWorkspace />
+			) : false ? (
 				<div className="space-y-4">
 					<div className="bg-white p-4 rounded-lg shadow-sm border grid grid-cols-1 md:grid-cols-4 gap-4">
 						<div>
