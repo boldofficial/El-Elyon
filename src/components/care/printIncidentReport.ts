@@ -3,8 +3,10 @@
 // Builds a clean, standalone printable document for a single incident report
 // and sends it to the browser's print dialog (which offers "Save as PDF").
 //
-// Uses a hidden iframe rather than window.open() so popup blockers can't
-// suppress it. The iframe is removed after printing.
+// Uses the shared hidden-iframe runner rather than window.open() so popup
+// blockers cannot suppress it.
+
+import {escapePrintHtml as esc, printDocument} from '../shared/printDocument';
 
 export interface PrintableIncident {
 	id: string;
@@ -25,17 +27,6 @@ export interface PrintableIncident {
 
 const ORG_NAME = 'El-Elyon Care Management';
 
-// Escape user-supplied text so it can't break out of the HTML template.
-function esc(value: unknown): string {
-	if (value === null || value === undefined) return '';
-	return String(value)
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#39;');
-}
-
 function formatDate(value: Date | string | null | undefined): string {
 	if (!value) return '—';
 	const d = new Date(value);
@@ -48,7 +39,7 @@ function attachmentLabel(fileKey: string, index: number): string {
 	return filename.replace(/^\d+-[a-z0-9]+-/, '');
 }
 
-function buildPrintHtml(report: PrintableIncident): string {
+export function buildIncidentPrintHtml(report: PrintableIncident): string {
 	const residentName = report.resident?.name || 'Unknown Resident';
 	const severity = (report.severity || '').toUpperCase();
 
@@ -178,46 +169,7 @@ function buildPrintHtml(report: PrintableIncident): string {
 
 export function printIncidentReport(report: PrintableIncident): void {
 	if (typeof window === 'undefined') return;
-
-	const iframe = document.createElement('iframe');
-	iframe.style.position = 'fixed';
-	iframe.style.right = '0';
-	iframe.style.bottom = '0';
-	iframe.style.width = '0';
-	iframe.style.height = '0';
-	iframe.style.border = '0';
-	document.body.appendChild(iframe);
-
-	const cleanup = () => {
-		// Delay removal so the print dialog has fully grabbed the document.
-		setTimeout(() => {
-			if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-		}, 500);
-	};
-
-	const doc = iframe.contentWindow?.document;
-	if (!doc) {
-		cleanup();
-		return;
-	}
-
-	doc.open();
-	doc.write(buildPrintHtml(report));
-	doc.close();
-
-	const triggerPrint = () => {
-		try {
-			iframe.contentWindow?.focus();
-			iframe.contentWindow?.print();
-		} finally {
-			cleanup();
-		}
-	};
-
-	// Wait for the iframe document to finish loading before printing.
-	if (iframe.contentWindow?.document.readyState === 'complete') {
-		triggerPrint();
-	} else {
-		iframe.onload = triggerPrint;
-	}
+	void printDocument(buildIncidentPrintHtml(report), {
+		onError: (error) => console.error('Unable to print incident report', error)
+	}).catch(() => undefined);
 }
