@@ -35,7 +35,7 @@ const NAV_SECTIONS = [
 	},
 	{
 		key: 'documents',
-		label: 'Fire Drill & Smoke Detector',
+		label: 'Life-Safety Reports',
 		icon: '🧯',
 	},
 	{

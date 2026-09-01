@@ -182,9 +182,9 @@ export default function CarePortal() {
 		},
 		{
 			id: 'life-safety',
-			label: 'Fire Drill & Smoke Detector',
+			label: 'Life-Safety Reports',
 			icon: '🧯',
-			description: 'Monthly checks & drills',
+			description: 'Annual inspections & fire drills',
 		},
 		{
 			id: 'profile',

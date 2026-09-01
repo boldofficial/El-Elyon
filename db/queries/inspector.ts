@@ -8,9 +8,17 @@ import {
 	fireEvac,
 	fireDrills,
 	smokeDetectorChecks,
+	locations,
+	lifeSafetyInspectionEntries,
+	fireDrillReports,
+	fireDrillParticipants,
 } from '../schema';
-import {eq, and, desc, inArray} from 'drizzle-orm';
+import {eq, and, asc, desc, inArray, isNull} from 'drizzle-orm';
 import {hashOtp} from '@/lib/inspector-auth';
+import {
+	projectInspectorLifeSafetyData,
+	requireExactlyOneActiveInspectorLocation,
+} from '@/lib/inspector-life-safety-projection';
 
 // Find a live (non-revoked, non-expired) grant matching a submitted OTP.
 export async function findActiveInspectorAccessByOtp(otp: string) {
@@ -137,4 +145,103 @@ export async function getInspectorAllowedFileIds(
 		for (const att of incident.attachments || []) ids.add(att);
 	}
 	return ids;
+}
+
+// Minimal life-safety projection for a live inspector session. The session's
+// location name is the only scope input: route query parameters never enter
+// this boundary. Duplicate active location names fail closed.
+export async function getInspectorLifeSafetyData(sessionLocation: string) {
+	const matchingLocations = await db
+		.select({id: locations.id, name: locations.name})
+		.from(locations)
+		.where(and(eq(locations.name, sessionLocation), eq(locations.status, 'active')))
+		.orderBy(asc(locations.id))
+		.limit(2);
+	const location = requireExactlyOneActiveInspectorLocation(matchingLocations, sessionLocation);
+
+	const [inspections, reports, legacySmokeChecks, legacyFireDrills] = await Promise.all([
+		db
+			.select({
+				reportYear: lifeSafetyInspectionEntries.reportYear,
+				reportMonth: lifeSafetyInspectionEntries.reportMonth,
+				equipmentType: lifeSafetyInspectionEntries.equipmentType,
+				inspectionDate: lifeSafetyInspectionEntries.inspectionDate,
+				staffInitials: lifeSafetyInspectionEntries.staffInitials,
+				outcome: lifeSafetyInspectionEntries.outcome,
+				notes: lifeSafetyInspectionEntries.notes,
+			})
+			.from(lifeSafetyInspectionEntries)
+			.where(and(
+				eq(lifeSafetyInspectionEntries.locationId, location.id),
+				isNull(lifeSafetyInspectionEntries.voidedAt)
+			))
+			.orderBy(
+				desc(lifeSafetyInspectionEntries.reportYear),
+				asc(lifeSafetyInspectionEntries.reportMonth),
+				asc(lifeSafetyInspectionEntries.equipmentType)
+			),
+		db
+			.select({
+				id: fireDrillReports.id,
+				reportYear: fireDrillReports.reportYear,
+				sequence: fireDrillReports.sequence,
+				drillDate: fireDrillReports.drillDate,
+				drillTime: fireDrillReports.drillTime,
+				staffNames: fireDrillReports.staffNames,
+			})
+			.from(fireDrillReports)
+			.where(and(
+				eq(fireDrillReports.locationId, location.id),
+				isNull(fireDrillReports.voidedAt)
+			))
+			.orderBy(desc(fireDrillReports.reportYear), asc(fireDrillReports.sequence)),
+		db
+			.select({
+				date: smokeDetectorChecks.date,
+				smokeStatus: smokeDetectorChecks.smokeStatus,
+				coStatus: smokeDetectorChecks.coStatus,
+				staffInitials: smokeDetectorChecks.staffInitials,
+				notes: smokeDetectorChecks.notes,
+			})
+			.from(smokeDetectorChecks)
+			.where(eq(smokeDetectorChecks.location, location.name))
+			.orderBy(desc(smokeDetectorChecks.date)),
+		db
+			.select({
+				year: fireDrills.year,
+				sequence: fireDrills.sequence,
+				residentName: fireDrills.residentName,
+				date: fireDrills.date,
+				time: fireDrills.time,
+				staffName: fireDrills.staffName,
+				comment: fireDrills.comment,
+			})
+			.from(fireDrills)
+			.where(eq(fireDrills.location, location.name))
+			.orderBy(desc(fireDrills.year), asc(fireDrills.sequence), desc(fireDrills.date)),
+	]);
+
+	const participants = reports.length === 0
+		? []
+		: await db
+				.select({
+					fireDrillReportId: fireDrillParticipants.fireDrillReportId,
+					residentNameSnapshot: fireDrillParticipants.residentNameSnapshot,
+					durationMinutes: fireDrillParticipants.durationMinutes,
+					durationSeconds: fireDrillParticipants.durationSeconds,
+					comment: fireDrillParticipants.comment,
+					position: fireDrillParticipants.position,
+				})
+				.from(fireDrillParticipants)
+				.where(inArray(fireDrillParticipants.fireDrillReportId, reports.map((report) => report.id)))
+				.orderBy(asc(fireDrillParticipants.position));
+
+	return projectInspectorLifeSafetyData({
+		location,
+		inspections,
+		fireDrills: reports,
+		participants,
+		legacySmokeChecks,
+		legacyFireDrills,
+	});
 }
