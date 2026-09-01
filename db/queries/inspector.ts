@@ -12,8 +12,10 @@ import {
 	lifeSafetyInspectionEntries,
 	fireDrillReports,
 	fireDrillParticipants,
+	waterTemperatureChecks,
+	waterTemperatureRechecks,
 } from '../schema';
-import {eq, and, asc, desc, inArray, isNull} from 'drizzle-orm';
+import {eq, and, asc, desc, gte, inArray, isNull, lte} from 'drizzle-orm';
 import {hashOtp} from '@/lib/inspector-auth';
 import {listLocationAliases} from './life-safety';
 import {groupFireDrillJoinRows} from './fire-drill-aggregate';
@@ -21,6 +23,13 @@ import {
 	projectInspectorLifeSafetyData,
 	InspectorLifeSafetyScopeError,
 } from '@/lib/inspector-life-safety-projection';
+import {
+	InspectorWaterTemperatureScopeError,
+	inspectorWaterTemperatureMonthBounds,
+	isValidInspectorReportMonth,
+	isValidInspectorReportYear,
+	projectInspectorWaterTemperatureMonth,
+} from '@/lib/inspector-water-temperature-projection';
 
 // Find a live (non-revoked, non-expired) grant matching a submitted OTP.
 export async function findActiveInspectorAccessByOtp(otp: string) {
@@ -256,5 +265,86 @@ export async function getInspectorLifeSafetyData(locationId: string) {
 		participants,
 		legacySmokeChecks,
 		legacyFireDrills,
+	});
+}
+
+// Minimal water-temperature month projection for a live inspector session
+// (U6 / R15-R16, R18).
+//
+// `locationId` is supplied by the route from the validated session ONLY --
+// there is no client house parameter anywhere on this path. The month/year
+// selectors are the sole client inputs and are re-validated here, so a
+// malformed selector can never widen the SQL predicate. Voided rows are
+// excluded in SQL and again inside the projection, and every selected column
+// is named explicitly: no `select()` of the whole row reaches an inspector.
+export async function getInspectorWaterTemperatureData(
+	locationId: string,
+	year: number,
+	month: number
+) {
+	if (!isValidInspectorReportYear(year) || !isValidInspectorReportMonth(month)) {
+		throw new InspectorWaterTemperatureScopeError();
+	}
+
+	const location = await db.query.locations.findFirst({
+		where: and(eq(locations.id, locationId), eq(locations.status, 'active')),
+	});
+	if (!location) {
+		throw new InspectorWaterTemperatureScopeError();
+	}
+
+	const {start, end} = inspectorWaterTemperatureMonthBounds(year, month);
+
+	const checkRows = await db
+		.select({
+			id: waterTemperatureChecks.id,
+			operationalDate: waterTemperatureChecks.operationalDate,
+			shiftSlot: waterTemperatureChecks.shiftSlot,
+			kitchenTempTenths: waterTemperatureChecks.kitchenTempTenths,
+			bathTempTenths: waterTemperatureChecks.bathTempTenths,
+			staffInitialsSnapshot: waterTemperatureChecks.staffInitialsSnapshot,
+			comments: waterTemperatureChecks.comments,
+			action: waterTemperatureChecks.action,
+			state: waterTemperatureChecks.state,
+		})
+		.from(waterTemperatureChecks)
+		.where(
+			and(
+				eq(waterTemperatureChecks.locationId, location.id),
+				gte(waterTemperatureChecks.operationalDate, start),
+				lte(waterTemperatureChecks.operationalDate, end),
+				isNull(waterTemperatureChecks.voidedAt)
+			)
+		)
+		.orderBy(asc(waterTemperatureChecks.operationalDate), asc(waterTemperatureChecks.shiftSlot));
+
+	const recheckRows = checkRows.length
+		? await db
+				.select({
+					checkId: waterTemperatureRechecks.checkId,
+					fixture: waterTemperatureRechecks.fixture,
+					tempTenths: waterTemperatureRechecks.tempTenths,
+					staffInitialsSnapshot: waterTemperatureRechecks.staffInitialsSnapshot,
+					measuredAt: waterTemperatureRechecks.measuredAt,
+					sequence: waterTemperatureRechecks.sequence,
+					supersededAt: waterTemperatureRechecks.supersededAt,
+					voidedAt: waterTemperatureRechecks.voidedAt,
+				})
+				.from(waterTemperatureRechecks)
+				.where(
+					inArray(
+						waterTemperatureRechecks.checkId,
+						checkRows.map((row) => row.id)
+					)
+				)
+				.orderBy(asc(waterTemperatureRechecks.sequence))
+		: [];
+
+	return projectInspectorWaterTemperatureMonth({
+		location,
+		year,
+		month,
+		checks: checkRows,
+		rechecks: recheckRows,
 	});
 }

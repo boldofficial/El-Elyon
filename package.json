@@ -9,7 +9,7 @@
 		"lint": "eslint",
 		"test:life-safety": "tsx --test lib/life-safety-reporting.test.ts lib/inspector-life-safety-projection.test.ts db/queries/fire-drill-aggregate.test.ts db/queries/life-safety-scope.test.ts src/app/api/documents/life-safety-api.test.ts src/app/api/inspector/life-safety/route.test.ts src/components/shared/printDocument.test.ts src/components/supervisor/printLifeSafetyReports.test.ts src/components/supervisor/lifeSafetyInspectionModel.test.ts src/components/supervisor/lifeSafetyInspectionWorkspaceState.test.ts src/components/supervisor/fireDrillModel.test.ts src/components/inspector/lifeSafetyPresentation.test.ts",
 		"test:life-safety:db": "tsx --test db/life-safety.integration.test.ts",
-		"test:water-temperature": "tsx --test lib/water-temperature.test.ts src/app/api/documents/water-temperature-api.test.ts src/components/care/CareShiftWorkspace.test.tsx src/components/care/waterTemperatureEntryModel.test.ts src/components/supervisor/waterTemperatureModel.test.ts src/components/supervisor/printWaterTemperatureReport.test.ts",
+		"test:water-temperature": "tsx --test lib/water-temperature.test.ts lib/inspector-water-temperature-projection.test.ts src/app/api/documents/water-temperature-api.test.ts src/app/api/inspector/water-temperature/route.test.ts src/components/care/CareShiftWorkspace.test.tsx src/components/care/waterTemperatureEntryModel.test.ts src/components/supervisor/waterTemperatureModel.test.ts src/components/supervisor/printWaterTemperatureReport.test.ts src/components/inspector/waterTemperaturePresentation.test.ts",
 		"test:water-temperature:db": "tsx --test db/water-temperature.integration.test.ts",
 		"db:generate": "drizzle-kit generate --name",
 		"db:migrate": "drizzle-kit migrate",
