@@ -21,10 +21,7 @@ export async function parseLifeSafetyJson<T>(request: Request, schema: ZodType<T
 	if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
 		throw new LifeSafetyRequestError('Request body is too large', 413);
 	}
-	const text = await request.text();
-	if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {
-		throw new LifeSafetyRequestError('Request body is too large', 413);
-	}
+	const text = request.body ? await readRequestTextWithLimit(request) : await request.text();
 	let value: unknown;
 	try {
 		value = JSON.parse(text);
@@ -68,4 +65,29 @@ export function legacyWriteDenied() {
 		{error: 'Legacy life-safety records are read-only', code: 'LEGACY_READ_ONLY'},
 		{status: 405, headers: {Allow: 'GET'}}
 	);
+}
+
+async function readRequestTextWithLimit(request: Request): Promise<string> {
+	const reader = request.body!.getReader();
+	const decoder = new TextDecoder();
+	const chunks: string[] = [];
+	let totalBytes = 0;
+
+	try {
+		while (true) {
+			const {done, value} = await reader.read();
+			if (done) break;
+			if (!value) continue;
+			totalBytes += value.byteLength;
+			if (totalBytes > MAX_BODY_BYTES) {
+				await reader.cancel().catch(() => undefined);
+				throw new LifeSafetyRequestError('Request body is too large', 413);
+			}
+			chunks.push(decoder.decode(value, {stream: true}));
+		}
+		chunks.push(decoder.decode());
+		return chunks.join('');
+	} finally {
+		reader.releaseLock();
+	}
 }

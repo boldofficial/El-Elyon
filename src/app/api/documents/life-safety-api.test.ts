@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 
+import {z} from 'zod';
 import {
 	fireDrillReportCreateSchema,
 	fireDrillReportUpdateSchema,
@@ -9,6 +9,14 @@ import {
 	lifeSafetyInspectionUpdateSchema,
 	lifeSafetyLegacyQuerySchema,
 } from '@/lib/validation-schemas';
+
+setLifeSafetyTestEnv();
+
+const lifeSafetyRouteModule = import('./_life-safety-route');
+const smokeRouteModule = import('./smoke-detector-checks/route');
+const smokeByIdRouteModule = import('./smoke-detector-checks/[id]/route');
+const fireDrillRouteModule = import('./fire-drills/route');
+const fireDrillByIdRouteModule = import('./fire-drills/[id]/route');
 
 const LOCATION_ID = '11111111-1111-4111-8111-111111111111';
 const RESIDENT_ID = '22222222-2222-4222-8222-222222222222';
@@ -89,17 +97,108 @@ test('legacy pagination is bounded and requires a concrete known-name candidate'
 	assert.equal(lifeSafetyLegacyQuerySchema.safeParse({location: 'all'}).success, false);
 });
 
-test('both legacy route pairs expose GET but deny every mutation method', async () => {
-	for (const file of [
-		'src/app/api/documents/smoke-detector-checks/route.ts',
-		'src/app/api/documents/smoke-detector-checks/[id]/route.ts',
-		'src/app/api/documents/fire-drills/route.ts',
-		'src/app/api/documents/fire-drills/[id]/route.ts',
-	]) {
-		const source = await readFile(file, 'utf8');
-		assert.match(source, /export async function GET/);
-		for (const method of ['POST', 'PATCH', 'DELETE']) {
-			assert.match(source, new RegExp(`export async function ${method}\\(\\) \\{ return legacyWriteDenied\\(\\); \\}`));
+test('chunked JSON bodies over the limit are rejected without a content-length header', async () => {
+	const {parseLifeSafetyJson, LifeSafetyRequestError} = await lifeSafetyRouteModule;
+	let cancelled = false;
+	const request = requestFromChunks([
+		'{"payload":"',
+		'a'.repeat(70_000),
+		'b'.repeat(70_000),
+		'"}',
+	], () => {
+		cancelled = true;
+	});
+
+	await assert.rejects(
+		parseLifeSafetyJson(
+			request,
+			z.object({payload: z.string()}).strict()
+		),
+		(error: unknown) => error instanceof LifeSafetyRequestError && error.status === 413
+	);
+	assert.equal(cancelled, true);
+});
+
+test('chunked JSON bodies under the limit still parse correctly', async () => {
+	const {parseLifeSafetyJson} = await lifeSafetyRouteModule;
+	const request = requestFromChunks(['{"payload":"', 'hello', ' world"}']);
+	assert.deepEqual(
+		await parseLifeSafetyJson(
+			request,
+			z.object({payload: z.string()}).strict()
+		),
+		{payload: 'hello world'}
+	);
+});
+
+test('both legacy route pairs deny every mutation method at runtime', async () => {
+	const [
+		{POST: smokePost, PATCH: smokePatch, DELETE: smokeDelete},
+		{POST: smokeByIdPost, PATCH: smokeByIdPatch, DELETE: smokeByIdDelete},
+		{POST: fireDrillPost, PATCH: fireDrillPatch, DELETE: fireDrillDelete},
+		{POST: fireDrillByIdPost, PATCH: fireDrillByIdPatch, DELETE: fireDrillByIdDelete},
+	] = await Promise.all([
+		smokeRouteModule,
+		smokeByIdRouteModule,
+		fireDrillRouteModule,
+		fireDrillByIdRouteModule,
+	]);
+
+	for (const [label, handlers] of [
+		['smoke detector checks', [smokePost, smokePatch, smokeDelete]],
+		['smoke detector checks by id', [smokeByIdPost, smokeByIdPatch, smokeByIdDelete]],
+		['fire drills', [fireDrillPost, fireDrillPatch, fireDrillDelete]],
+		['fire drill reports by id', [fireDrillByIdPost, fireDrillByIdPatch, fireDrillByIdDelete]],
+	] as const) {
+		for (const handler of handlers) {
+			const response = await handler();
+			assert.equal(response.status, 405, `${label} mutation should be denied`);
+			assert.equal(response.headers.get('Allow'), 'GET', `${label} mutation should advertise GET`);
+			assert.deepEqual(await response.json(), {
+				error: 'Legacy life-safety records are read-only',
+				code: 'LEGACY_READ_ONLY',
+			});
 		}
 	}
 });
+
+function setLifeSafetyTestEnv() {
+	const env = {
+		DATABASE_URL: 'postgresql://test:test@localhost:5432/test',
+		AWS_REGION: 'us-east-1',
+		AWS_ENDPOINT_URL: 'http://localhost:9000',
+		AWS_ACCESS_KEY_ID: 'test',
+		AWS_SECRET_ACCESS_KEY: 'test',
+		AWS_S3_BUCKET_NAME: 'test-bucket',
+		NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: 'pk_test',
+		CLERK_SECRET_KEY: 'sk_test',
+	};
+
+	for (const [key, value] of Object.entries(env)) {
+		if (!process.env[key]) process.env[key] = value;
+	}
+}
+
+function requestFromChunks(chunks: string[], onCancel?: () => void): Request {
+	const encoder = new TextEncoder();
+	let index = 0;
+	const stream = new ReadableStream<Uint8Array>({
+		pull(controller) {
+			if (index >= chunks.length) {
+				controller.close();
+				return;
+			}
+			controller.enqueue(encoder.encode(chunks[index++] ?? ''));
+		},
+		cancel() {
+			onCancel?.();
+		},
+	});
+
+	return new Request('http://localhost/api/documents/life-safety-inspections', {
+		method: 'POST',
+		headers: {'content-type': 'application/json'},
+		body: stream as any,
+		duplex: 'half' as any,
+	} as RequestInit);
+}

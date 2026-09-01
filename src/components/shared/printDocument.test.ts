@@ -137,6 +137,25 @@ test('load and image failures also clean up without printing stale content', asy
 	}
 });
 
+test('prepare timeouts fail cleanly, report the error, and release the print guard', async () => {
+	const load = deferred();
+	const fake = fakeAdapter({load});
+	const reported: PrintDocumentError[] = [];
+	const printing = printDocument('slow', {
+		adapter: fake.adapter,
+		prepareTimeoutMs: 1,
+		onError: (error) => reported.push(error),
+	});
+
+	await Promise.resolve();
+	fake.runTimers();
+	await assert.rejects(printing, PrintDocumentError);
+	assert.equal(fake.events.includes('print'), false);
+	assert.equal(fake.events.at(-1), 'remove');
+	assert.equal(reported.length, 1);
+	assert.equal(reported[0]?.message, 'Timed out while loading print resources');
+});
+
 test('incident report HTML remains available through the extracted shared runner boundary', () => {
 	const html = buildIncidentPrintHtml({
 		id: 'incident-1',
