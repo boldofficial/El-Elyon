@@ -176,6 +176,11 @@ export const adminPrivileges = pgTable(
 );
 
 // Shifts Table
+// locationId/shiftSlot/operationalDate/operationalTimeZoneSnapshot are nullable
+// for backward compatibility with shifts that predate the daily water-temperature
+// check feature. Post-cutover clock-ins are expected to populate all four
+// together (enforced at the application layer in later units); the DB-level
+// identityCompletenessCheck only guards against a partially-populated identity.
 export const shifts = pgTable(
 	'shifts',
 	{
@@ -188,12 +193,39 @@ export const shifts = pgTable(
 		kioskId: uuid('kiosk_id'),
 		notes: text('notes'),
 		clockInSelfie: varchar('clock_in_selfie', {length: 255}),
-		clockOutSelfie: varchar('clock_out_selfie', {length: 255})
+		clockOutSelfie: varchar('clock_out_selfie', {length: 255}),
+		locationId: uuid('location_id').references(() => locations.id, {
+			onDelete: 'restrict'
+		}),
+		shiftSlot: integer('shift_slot'),
+		operationalDate: date('operational_date', {mode: 'string'}),
+		operationalTimeZoneSnapshot: varchar('operational_time_zone_snapshot', {
+			length: 100
+		})
 	},
 	(table) => ({
 		clerkUserIdIdx: index('shifts_clerk_user_id_idx').on(table.clerkUserId),
 		locationIdx: index('shifts_location_idx').on(table.location),
-		clockInTimeIdx: index('shifts_clock_in_time_idx').on(table.clockInTime)
+		clockInTimeIdx: index('shifts_clock_in_time_idx').on(table.clockInTime),
+		locationIdIdx: index('shifts_location_id_idx').on(table.locationId),
+		operationalDateIdx: index('shifts_operational_date_idx').on(
+			table.locationId,
+			table.operationalDate
+		),
+		shiftSlotCheck: check(
+			'shifts_shift_slot_check',
+			sql`${table.shiftSlot} is null or ${table.shiftSlot} in (1, 2, 3)`
+		),
+		identityCompletenessCheck: check(
+			'shifts_identity_completeness_check',
+			sql`(
+				${table.locationId} is null and ${table.shiftSlot} is null and
+				${table.operationalDate} is null and ${table.operationalTimeZoneSnapshot} is null
+			) or (
+				${table.locationId} is not null and ${table.shiftSlot} is not null and
+				${table.operationalDate} is not null and ${table.operationalTimeZoneSnapshot} is not null
+			)`
+		)
 	})
 );
 
@@ -451,15 +483,31 @@ export const fireEvac = pgTable(
 );
 
 // Config Table
-export const config = pgTable('config', {
-	id: uuid('id').primaryKey().defaultRandom(),
-	complianceReminderTemplate: text('compliance_reminder_template'),
-	guardianInviteTemplate: text('guardian_invite_template'),
-	alertWeekday: integer('alert_weekday'),
-	alertHour: integer('alert_hour'),
-	alertMinute: integer('alert_minute'),
-	selfieEnforced: boolean('selfie_enforced')
-});
+export const config = pgTable(
+	'config',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		complianceReminderTemplate: text('compliance_reminder_template'),
+		guardianInviteTemplate: text('guardian_invite_template'),
+		alertWeekday: integer('alert_weekday'),
+		alertHour: integer('alert_hour'),
+		alertMinute: integer('alert_minute'),
+		selfieEnforced: boolean('selfie_enforced'),
+		// Canonical organization-local timezone used to freeze operational dates
+		// for shifts and water-temperature checks (see KTD2 in the daily
+		// water-temperature checks plan). IANA validity is enforced in
+		// lib/water-temperature.ts, not at the database level.
+		operationalTimeZone: varchar('operational_time_zone', {length: 100})
+			.notNull()
+			.default('America/Chicago')
+	},
+	(table) => ({
+		operationalTimeZoneCheck: check(
+			'config_operational_time_zone_check',
+			sql`length(btrim(${table.operationalTimeZone})) > 0`
+		)
+	})
+);
 
 // Guardian Checklist Templates Table
 export const guardianChecklistTemplates = pgTable(
@@ -1087,6 +1135,213 @@ export const lifeSafetyReportRevisions = pgTable(
 	})
 );
 
+// Daily water-temperature checks. One non-voided record exists per
+// (locationId, operationalDate, shiftSlot); staff append-only add rechecks and
+// actions, while supervisors/admins may append reasoned corrections/voids that
+// are captured in waterTemperatureCheckRevisions. Kitchen/bath readings are
+// stored as integer tenths-of-a-degree Fahrenheit (e.g. 1180 = 118.0F) to avoid
+// binary-floating-point comparisons; see lib/water-temperature.ts.
+export const waterTemperatureChecks = pgTable(
+	'water_temperature_checks',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		locationId: uuid('location_id')
+			.notNull()
+			.references(() => locations.id, {onDelete: 'restrict'}),
+		houseNameSnapshot: varchar('house_name_snapshot', {
+			length: 255
+		}).notNull(),
+		operationalDate: date('operational_date', {mode: 'string'}).notNull(),
+		shiftSlot: integer('shift_slot').notNull(),
+		shiftId: uuid('shift_id').references(() => shifts.id, {
+			onDelete: 'set null'
+		}),
+		kitchenTempTenths: integer('kitchen_temp_tenths').notNull(),
+		bathTempTenths: integer('bath_temp_tenths').notNull(),
+		staffId: varchar('staff_id', {length: 255}).notNull(),
+		staffNameSnapshot: varchar('staff_name_snapshot', {
+			length: 255
+		}).notNull(),
+		staffInitialsSnapshot: varchar('staff_initials_snapshot', {
+			length: 10
+		}).notNull(),
+		observedAt: timestamp('observed_at').notNull(),
+		comments: text('comments'),
+		action: text('action'),
+		state: varchar('state', {length: 30}).notNull(),
+		version: integer('version').notNull().default(1),
+		voidedAt: timestamp('voided_at'),
+		voidedBy: varchar('voided_by', {length: 255}),
+		voidReason: text('void_reason'),
+		createdBy: varchar('created_by', {length: 255}).notNull(),
+		updatedBy: varchar('updated_by', {length: 255}),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		updatedAt: timestamp('updated_at')
+	},
+	(table) => ({
+		locationDateIdx: index('water_temperature_checks_location_date_idx').on(
+			table.locationId,
+			table.operationalDate
+		),
+		shiftIdIdx: index('water_temperature_checks_shift_id_idx').on(
+			table.shiftId
+		),
+		activeIdentityIdx: uniqueIndex(
+			'water_temperature_checks_active_identity_uidx'
+		)
+			.on(table.locationId, table.operationalDate, table.shiftSlot)
+			.where(sql`${table.voidedAt} is null`),
+		shiftSlotCheck: check(
+			'water_temperature_checks_shift_slot_check',
+			sql`${table.shiftSlot} in (1, 2, 3)`
+		),
+		kitchenTempCheck: check(
+			'water_temperature_checks_kitchen_temp_check',
+			sql`${table.kitchenTempTenths} between 0 and 2500`
+		),
+		bathTempCheck: check(
+			'water_temperature_checks_bath_temp_check',
+			sql`${table.bathTempTenths} between 0 and 2500`
+		),
+		stateCheck: check(
+			'water_temperature_checks_state_check',
+			sql`${table.state} in ('complete', 'complete_with_attention', 'action_required', 'recheck_required')`
+		),
+		versionCheck: check(
+			'water_temperature_checks_version_check',
+			sql`${table.version} >= 1`
+		),
+		snapshotCheck: check(
+			'water_temperature_checks_snapshot_check',
+			sql`length(btrim(${table.houseNameSnapshot})) > 0 and length(btrim(${table.staffNameSnapshot})) > 0 and length(btrim(${table.staffInitialsSnapshot})) > 0 and length(btrim(${table.staffId})) > 0`
+		),
+		actionRequiredCheck: check(
+			'water_temperature_checks_action_required_check',
+			sql`${table.state} not in ('action_required', 'recheck_required') or (${table.action} is not null and length(btrim(${table.action})) > 0)`
+		),
+		voidCheck: check(
+			'water_temperature_checks_void_check',
+			sql`(${table.voidedAt} is null and ${table.voidedBy} is null and ${table.voidReason} is null) or (${table.voidedAt} is not null and ${table.voidedBy} is not null and coalesce(length(btrim(${table.voidReason})), 0) > 0)`
+		)
+	})
+);
+
+// Append-only recheck facts for a fixture that started above the safe range.
+// Rows are never updated or deleted; a mistyped/incorrect recheck is
+// superseded (supersededAt/By/Reason) so state derivation can ignore it while
+// the original fact remains in history.
+export const waterTemperatureRechecks = pgTable(
+	'water_temperature_rechecks',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		checkId: uuid('check_id')
+			.notNull()
+			.references(() => waterTemperatureChecks.id, {onDelete: 'restrict'}),
+		fixture: varchar('fixture', {length: 20}).notNull(),
+		tempTenths: integer('temp_tenths').notNull(),
+		staffId: varchar('staff_id', {length: 255}).notNull(),
+		staffNameSnapshot: varchar('staff_name_snapshot', {
+			length: 255
+		}).notNull(),
+		staffInitialsSnapshot: varchar('staff_initials_snapshot', {
+			length: 10
+		}).notNull(),
+		measuredAt: timestamp('measured_at').notNull(),
+		sequence: integer('sequence').notNull(),
+		supersededAt: timestamp('superseded_at'),
+		supersededBy: varchar('superseded_by', {length: 255}),
+		supersededReason: text('superseded_reason'),
+		voidedAt: timestamp('voided_at'),
+		voidedBy: varchar('voided_by', {length: 255}),
+		voidReason: text('void_reason'),
+		createdBy: varchar('created_by', {length: 255}).notNull(),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(table) => ({
+		checkIdIdx: index('water_temperature_rechecks_check_id_idx').on(
+			table.checkId
+		),
+		checkFixtureSequenceIdx: uniqueIndex(
+			'water_temperature_rechecks_check_fixture_sequence_uidx'
+		).on(table.checkId, table.fixture, table.sequence),
+		fixtureCheck: check(
+			'water_temperature_rechecks_fixture_check',
+			sql`${table.fixture} in ('kitchen', 'bath_shower')`
+		),
+		tempCheck: check(
+			'water_temperature_rechecks_temp_check',
+			sql`${table.tempTenths} between 0 and 2500`
+		),
+		sequenceCheck: check(
+			'water_temperature_rechecks_sequence_check',
+			sql`${table.sequence} >= 1`
+		),
+		snapshotCheck: check(
+			'water_temperature_rechecks_snapshot_check',
+			sql`length(btrim(${table.staffNameSnapshot})) > 0 and length(btrim(${table.staffInitialsSnapshot})) > 0 and length(btrim(${table.staffId})) > 0`
+		),
+		supersededCheck: check(
+			'water_temperature_rechecks_superseded_check',
+			sql`(${table.supersededAt} is null and ${table.supersededBy} is null and ${table.supersededReason} is null) or (${table.supersededAt} is not null and ${table.supersededBy} is not null and coalesce(length(btrim(${table.supersededReason})), 0) > 0)`
+		),
+		voidCheck: check(
+			'water_temperature_rechecks_void_check',
+			sql`(${table.voidedAt} is null and ${table.voidedBy} is null and ${table.voidReason} is null) or (${table.voidedAt} is not null and ${table.voidedBy} is not null and coalesce(length(btrim(${table.voidReason})), 0) > 0)`
+		)
+	})
+);
+
+// Aggregate before/after audit trail for a water-temperature check, covering
+// create/correct/action/recheck/supersede/void. Snapshots are plain JSON
+// captures of the check (and, where relevant, its rechecks) at the time of
+// the action; they are never mutated after insert.
+export const waterTemperatureCheckRevisions = pgTable(
+	'water_temperature_check_revisions',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		checkId: uuid('check_id')
+			.notNull()
+			.references(() => waterTemperatureChecks.id, {onDelete: 'restrict'}),
+		version: integer('version').notNull(),
+		action: varchar('action', {length: 20}).notNull(),
+		beforeSnapshot: jsonb('before_snapshot').$type<Record<
+			string,
+			unknown
+		> | null>(),
+		afterSnapshot: jsonb('after_snapshot')
+			.$type<Record<string, unknown>>()
+			.notNull(),
+		reason: text('reason'),
+		actorId: varchar('actor_id', {length: 255}).notNull(),
+		actorNameSnapshot: varchar('actor_name_snapshot', {length: 255}),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(table) => ({
+		checkIdIdx: index('water_temperature_check_revisions_check_id_idx').on(
+			table.checkId
+		),
+		checkVersionIdx: uniqueIndex(
+			'water_temperature_check_revisions_check_version_uidx'
+		).on(table.checkId, table.version),
+		actionCheck: check(
+			'water_temperature_check_revisions_action_check',
+			sql`${table.action} in ('create', 'correct', 'action', 'recheck', 'supersede', 'void')`
+		),
+		versionCheck: check(
+			'water_temperature_check_revisions_version_check',
+			sql`${table.version} >= 1`
+		),
+		afterSnapshotCheck: check(
+			'water_temperature_check_revisions_after_snapshot_check',
+			sql`jsonb_typeof(${table.afterSnapshot}) = 'object'`
+		),
+		beforeSnapshotCheck: check(
+			'water_temperature_check_revisions_before_snapshot_check',
+			sql`${table.beforeSnapshot} is null or jsonb_typeof(${table.beforeSnapshot}) = 'object'`
+		)
+	})
+);
+
 // Inspector Access Table
 // One-time-password grants that let a state inspector view a location's
 // compliance data through a read-only dashboard, without a Clerk account.
@@ -1174,7 +1429,9 @@ export const residentsRelations = relations(residents, ({many}) => ({
 
 export const locationsRelations = relations(locations, ({many}) => ({
 	lifeSafetyInspectionEntries: many(lifeSafetyInspectionEntries),
-	fireDrillReports: many(fireDrillReports)
+	fireDrillReports: many(fireDrillReports),
+	waterTemperatureChecks: many(waterTemperatureChecks),
+	shifts: many(shifts)
 }));
 
 export const lifeSafetyInspectionEntriesRelations = relations(
@@ -1245,8 +1502,49 @@ export const shiftsRelations = relations(shifts, ({one, many}) => ({
 		fields: [shifts.kioskId],
 		references: [kiosks.id]
 	}),
-	residentLogs: many(residentLogs)
+	residentLogs: many(residentLogs),
+	location: one(locations, {
+		fields: [shifts.locationId],
+		references: [locations.id]
+	}),
+	waterTemperatureChecks: many(waterTemperatureChecks)
 }));
+
+export const waterTemperatureChecksRelations = relations(
+	waterTemperatureChecks,
+	({one, many}) => ({
+		location: one(locations, {
+			fields: [waterTemperatureChecks.locationId],
+			references: [locations.id]
+		}),
+		shift: one(shifts, {
+			fields: [waterTemperatureChecks.shiftId],
+			references: [shifts.id]
+		}),
+		rechecks: many(waterTemperatureRechecks),
+		revisions: many(waterTemperatureCheckRevisions)
+	})
+);
+
+export const waterTemperatureRechecksRelations = relations(
+	waterTemperatureRechecks,
+	({one}) => ({
+		check: one(waterTemperatureChecks, {
+			fields: [waterTemperatureRechecks.checkId],
+			references: [waterTemperatureChecks.id]
+		})
+	})
+);
+
+export const waterTemperatureCheckRevisionsRelations = relations(
+	waterTemperatureCheckRevisions,
+	({one}) => ({
+		check: one(waterTemperatureChecks, {
+			fields: [waterTemperatureCheckRevisions.checkId],
+			references: [waterTemperatureChecks.id]
+		})
+	})
+);
 
 export const residentLogsRelations = relations(residentLogs, ({one, many}) => ({
 	resident: one(residents, {
