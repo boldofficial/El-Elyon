@@ -3,9 +3,59 @@
 import React, {useState, useEffect} from 'react';
 import SelfieCapture from '../shared/SelfieCapture';
 import {toast} from 'sonner';
+import {SHIFT_SLOTS, type ShiftSlot} from '@/lib/water-temperature';
 
 interface CareShiftWorkspaceProps {
 	onShiftChange?: () => void;
+}
+
+const SHIFT_SLOT_LABELS: Record<ShiftSlot, string> = {
+	1: '1st Shift',
+	2: '2nd Shift',
+	3: '3rd Shift',
+};
+
+/**
+ * Builds the clock-in request payload from the currently selected house and
+ * shift slot, or returns null if either is missing/invalid. Used by both
+ * the normal and selfie clock-in paths so they always submit the same
+ * (location, shiftSlot) pair -- see R1/KTD1 in the daily water-temperature
+ * checks plan: the slot must be explicitly selected, never inferred, and
+ * must be preserved across the selfie-capture interstitial.
+ */
+export function buildClockInPayload(
+	selectedLocation: string,
+	selectedShiftSlot: ShiftSlot | ''
+): {location: string; shiftSlot: ShiftSlot} | null {
+	if (!selectedLocation || !selectedLocation.trim()) return null;
+	if (selectedShiftSlot === '') return null;
+	if (!SHIFT_SLOTS.includes(selectedShiftSlot)) return null;
+	return {location: selectedLocation, shiftSlot: selectedShiftSlot};
+}
+
+/**
+ * Gate used by both the Clock In button's `disabled` state and the
+ * beginning of handleClockIn/handleSelfieCapture, so a double-submit
+ * (e.g. a rapid double Enter/click before React re-renders the disabled
+ * button) is rejected the same way the UI already visually prevents it.
+ */
+export function canSubmitClockIn(args: {
+	selectedLocation: string;
+	selectedShiftSlot: ShiftSlot | '';
+	isProcessing: boolean;
+}): boolean {
+	if (args.isProcessing) return false;
+	return buildClockInPayload(args.selectedLocation, args.selectedShiftSlot) !== null;
+}
+
+/** Gate for the one-time legacy-shift classification action. */
+export function canSubmitClassification(args: {
+	selectedShiftSlot: ShiftSlot | '';
+	isProcessing: boolean;
+}): boolean {
+	if (args.isProcessing) return false;
+	if (args.selectedShiftSlot === '') return false;
+	return SHIFT_SLOTS.includes(args.selectedShiftSlot);
 }
 
 export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspaceProps) {
@@ -15,6 +65,9 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [showSelfieCapture, setShowSelfieCapture] = useState(false);
 	const [selectedLocation, setSelectedLocation] = useState('');
+	const [selectedShiftSlot, setSelectedShiftSlot] = useState<ShiftSlot | ''>('');
+	const [classifyShiftSlot, setClassifyShiftSlot] = useState<ShiftSlot | ''>('');
+	const [isClassifying, setIsClassifying] = useState(false);
 	const [selfieAction, setSelfieAction] = useState<
 		'clockIn' | 'clockOut' | null
 	>(null);
@@ -65,10 +118,25 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 			return;
 		}
 
+		if (selectedShiftSlot === '') {
+			toast.error('Select a shift (1st, 2nd, or 3rd) before clocking in.');
+			return;
+		}
+
+		if (!canSubmitClockIn({selectedLocation, selectedShiftSlot, isProcessing})) {
+			return;
+		}
+
 		// Check if selfie is required
 		if (isSelfieEnforced) {
 			setSelfieAction('clockIn');
 			setShowSelfieCapture(true);
+			return;
+		}
+
+		const payload = buildClockInPayload(selectedLocation, selectedShiftSlot);
+		if (!payload) {
+			toast.error('Select a location and shift before clocking in.');
 			return;
 		}
 
@@ -78,9 +146,7 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 			const res = await fetch('/api/shifts/clock-in', {
 				method: 'POST',
 				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify({
-					location: selectedLocation,
-				}),
+				body: JSON.stringify(payload),
 			});
 
 			if (!res.ok) {
@@ -143,15 +209,20 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 		try {
 			let res;
 			if (selfieAction === 'clockIn') {
-				if (!selectedLocation) {
-					throw new Error('Select a location before clocking in.');
+				// The house and shift slot selected before selfie capture opened
+				// are preserved in component state and reused here unchanged
+				// (see buildClockInPayload) -- selfie capture must never lose or
+				// reset the identity the staff member already chose.
+				const payload = buildClockInPayload(selectedLocation, selectedShiftSlot);
+				if (!payload) {
+					throw new Error('Select a location and shift before clocking in.');
 				}
 
 				res = await fetch('/api/shifts/clock-in', {
 					method: 'POST',
 					headers: {'Content-Type': 'application/json'},
 					body: JSON.stringify({
-						location: selectedLocation,
+						...payload,
 						selfieStorageId: storageId,
 					}),
 				});
@@ -192,6 +263,47 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 		} finally {
 			setIsProcessing(false);
 			setSelfieAction(null);
+		}
+	};
+
+	const handleClassifyShift = async () => {
+		if (!canSubmitClassification({selectedShiftSlot: classifyShiftSlot, isProcessing: isClassifying})) {
+			if (classifyShiftSlot === '') {
+				toast.error('Select a shift (1st, 2nd, or 3rd) to continue.');
+			}
+			return;
+		}
+
+		setIsClassifying(true);
+		try {
+			const res = await fetch('/api/shifts/current/classify', {
+				method: 'POST',
+				headers: {'Content-Type': 'application/json'},
+				body: JSON.stringify({shiftSlot: classifyShiftSlot}),
+			});
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => null);
+				throw new Error(data?.error || 'Failed to classify shift');
+			}
+
+			const shift = await res.json();
+			setCurrentShift(shift);
+			toast.success('Shift updated');
+			onShiftChange?.();
+		} catch (error: any) {
+			toast.error(error.message || 'Failed to classify shift');
+			// Reload the authoritative current shift so a failed/ambiguous
+			// classification never leaves stale local state on screen.
+			try {
+				const shiftRes = await fetch('/api/shifts/current');
+				const shift = await shiftRes.json();
+				setCurrentShift(shift);
+			} catch {
+				// Ignore; the existing currentShift state is preserved.
+			}
+		} finally {
+			setIsClassifying(false);
 		}
 	};
 
@@ -242,10 +354,61 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 								<p className="text-sm text-gray-600">
 									Location: {currentShift.location}
 								</p>
+								{currentShift.shiftSlot ? (
+									<p className="text-sm text-gray-600">
+										Shift: {SHIFT_SLOT_LABELS[currentShift.shiftSlot as ShiftSlot]}
+									</p>
+								) : null}
 								<p className="text-lg font-semibold text-gray-900">
 									Duration: {formatDuration(currentShift.clockInTime)}
 								</p>
 							</div>
+
+							{currentShift.needsClassification ? (
+								<div className="max-w-xs mx-auto text-left bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+									<p className="text-sm text-amber-800">
+										This shift was started before shift tracking was required.
+										Select which shift you are working to continue.
+									</p>
+									<div>
+										<label
+											htmlFor="classify-shift-slot"
+											className="block text-sm font-medium text-gray-700 mb-2">
+											Shift
+										</label>
+										<select
+											id="classify-shift-slot"
+											value={classifyShiftSlot}
+											onChange={(event) =>
+												setClassifyShiftSlot(
+													event.target.value
+														? (Number(event.target.value) as ShiftSlot)
+														: ''
+												)
+											}
+											disabled={isClassifying}
+											className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:opacity-50">
+											<option value="">Select a shift</option>
+											{SHIFT_SLOTS.map((slot) => (
+												<option key={slot} value={slot}>
+													{SHIFT_SLOT_LABELS[slot]}
+												</option>
+											))}
+										</select>
+									</div>
+									<button
+										onClick={handleClassifyShift}
+										disabled={
+											!canSubmitClassification({
+												selectedShiftSlot: classifyShiftSlot,
+												isProcessing: isClassifying,
+											})
+										}
+										className="w-full bg-amber-600 text-white py-2 px-4 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">
+										{isClassifying ? 'Saving...' : 'Confirm Shift'}
+									</button>
+								</div>
+							) : null}
 
 							<button
 								onClick={handleClockOut}
@@ -262,7 +425,7 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 							</div>
 
 							{sessionInfo?.locations?.length ? (
-								<div className="space-y-2">
+								<div className="space-y-4">
 									{sessionInfo.locations.length > 1 ? (
 										<div className="max-w-xs mx-auto text-left">
 											<label
@@ -288,9 +451,39 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 											Assigned Location: {sessionInfo.locations[0]}
 										</p>
 									)}
+
+									<div className="max-w-xs mx-auto text-left">
+										<label
+											htmlFor="clock-in-shift-slot"
+											className="block text-sm font-medium text-gray-700 mb-2">
+											Shift
+										</label>
+										<select
+											id="clock-in-shift-slot"
+											value={selectedShiftSlot}
+											onChange={(event) =>
+												setSelectedShiftSlot(
+													event.target.value
+														? (Number(event.target.value) as ShiftSlot)
+														: ''
+												)
+											}
+											disabled={isProcessing}
+											className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-500/20 disabled:opacity-50">
+											<option value="">Select a shift</option>
+											{SHIFT_SLOTS.map((slot) => (
+												<option key={slot} value={slot}>
+													{SHIFT_SLOT_LABELS[slot]}
+												</option>
+											))}
+										</select>
+									</div>
+
 									<button
 										onClick={handleClockIn}
-										disabled={isProcessing || !selectedLocation}
+										disabled={
+											!canSubmitClockIn({selectedLocation, selectedShiftSlot, isProcessing})
+										}
 										className="w-full max-w-xs mx-auto bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">
 										{isProcessing ? 'Clocking In...' : 'Clock In'}
 									</button>

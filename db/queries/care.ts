@@ -1,7 +1,8 @@
 import {db} from '../index';
-import {residents, roles, employees, residentLogs, config, shifts, isp, ispAcknowledgments} from '../schema';
-import {eq, or, and, isNull} from 'drizzle-orm';
+import {residents, roles, employees, residentLogs, config, shifts, locations, isp, ispAcknowledgments} from '../schema';
+import {eq, or, and, isNull, asc} from 'drizzle-orm';
 import {requireCareAccess} from '@/lib/db-helpers';
+import {isValidIanaTimeZone, type ShiftSlot} from '@/lib/water-temperature';
 
 // Query: Get residents for current user's locations
 export async function getMyResidents(clerkUserId: string) {
@@ -351,8 +352,118 @@ export async function isSelfieEnforced() {
 	return config?.selfieEnforced || false;
 }
 
+export type AuthorizedCareLocation = {id: string; name: string};
+
+// Matches the shape drizzle passes into db.transaction()'s callback, so the
+// helpers below can run either against the top-level `db` or inside an
+// in-flight transaction (see db/mutations/life-safety.ts for the same
+// pattern).
+export type CareTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type CareExecutor = typeof db | CareTransaction;
+
+/**
+ * Fail-closed resolution of a location name to its immutable active
+ * location row, scoped to the caller's authorized locations (or all active
+ * locations for admins). Mirrors the fail-closed pattern used for
+ * life-safety location resolution (db/queries/life-safety.ts): a blank
+ * name, an inactive location, an ambiguous multi-row name match, or a name
+ * outside the caller's authorized set all resolve to `null` rather than
+ * partially matching or defaulting to any candidate row.
+ */
+export async function resolveAuthorizedCareLocation(
+	executor: CareExecutor,
+	args: {
+		role: string | null | undefined;
+		authorizedLocationNames: string[];
+		locationName: string;
+	}
+): Promise<AuthorizedCareLocation | null> {
+	const trimmedName = args.locationName.trim();
+	if (!trimmedName) return null;
+
+	const rows = await executor
+		.select({id: locations.id, name: locations.name})
+		.from(locations)
+		.where(and(eq(locations.name, trimmedName), eq(locations.status, 'active')))
+		.orderBy(asc(locations.id))
+		.limit(2);
+
+	// Zero matches (missing/inactive) or two+ matches (ambiguous name) both
+	// fail closed rather than guessing.
+	if (rows.length !== 1) return null;
+	const location = rows[0]!;
+
+	if (args.role === 'admin') return location;
+
+	const authorizedNames = args.authorizedLocationNames
+		.map((name) => name.trim())
+		.filter(Boolean);
+	if (!authorizedNames.includes(location.name)) return null;
+
+	return location;
+}
+
+export class InvalidOperationalTimeZoneConfigError extends Error {
+	constructor() {
+		super(
+			'The organization operational time zone is not configured correctly. Contact an administrator.'
+		);
+		this.name = 'InvalidOperationalTimeZoneConfigError';
+	}
+}
+
+/**
+ * Loads and validates the canonical organization operational timezone (see
+ * KTD2 in the daily water-temperature checks plan). Throws rather than
+ * falling back to a default so clock-in/classification fail visibly when
+ * the configuration is absent or not a recognized IANA timezone.
+ */
+export async function getOperationalTimeZone(
+	executor: CareExecutor = db
+): Promise<string> {
+	const appConfig = await executor.query.config.findFirst();
+	const timeZone = appConfig?.operationalTimeZone;
+	if (!timeZone || !isValidIanaTimeZone(timeZone)) {
+		throw new InvalidOperationalTimeZoneConfigError();
+	}
+	return timeZone;
+}
+
+export type CurrentShiftDto = {
+	id: string;
+	locationId: string | null;
+	location: string;
+	shiftSlot: ShiftSlot | null;
+	operationalDate: string | null;
+	clockInTime: Date;
+	duration: number;
+	needsClassification: boolean;
+};
+
+function toCurrentShiftDto(shift: {
+	id: string;
+	location: string;
+	locationId: string | null;
+	shiftSlot: number | null;
+	operationalDate: string | null;
+	clockInTime: Date;
+}): CurrentShiftDto {
+	return {
+		id: shift.id,
+		locationId: shift.locationId,
+		location: shift.location,
+		shiftSlot: (shift.shiftSlot as ShiftSlot | null) ?? null,
+		operationalDate: shift.operationalDate,
+		clockInTime: shift.clockInTime,
+		duration: Date.now() - shift.clockInTime.getTime(),
+		needsClassification: shift.locationId === null,
+	};
+}
+
 // Query: Get current shift for user
-export async function getCurrentShift(clerkUserId: string) {
+export async function getCurrentShift(
+	clerkUserId: string
+): Promise<CurrentShiftDto | null> {
 	await requireCareAccess(clerkUserId);
 
 	const currentShift = await db.query.shifts.findFirst({
@@ -363,14 +474,7 @@ export async function getCurrentShift(clerkUserId: string) {
 		orderBy: (shifts, {desc}) => [desc(shifts.clockInTime)],
 	});
 
-	return currentShift
-		? {
-				id: currentShift.id,
-				location: currentShift.location,
-				clockInTime: currentShift.clockInTime,
-				duration: Date.now() - currentShift.clockInTime.getTime(),
-			}
-		: null;
+	return currentShift ? toCurrentShiftDto(currentShift) : null;
 }
 
 // Query: Get resident ISP status

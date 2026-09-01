@@ -9,6 +9,7 @@ export default function SystemSettings() {
 		alertHour: 9,
 		alertMinute: 0,
 		selfieEnforced: false,
+		operationalTimeZone: 'America/Chicago',
 	});
 
 	const [originalSettings, setOriginalSettings] = useState(settings);
@@ -31,6 +32,7 @@ export default function SystemSettings() {
 				alertHour: data.alertHour ?? 9,
 				alertMinute: data.alertMinute ?? 0,
 				selfieEnforced: data.selfieEnforced ?? false,
+				operationalTimeZone: data.operationalTimeZone || 'America/Chicago',
 			};
 
 			setSettings(loadedSettings);
@@ -80,6 +82,8 @@ export default function SystemSettings() {
 				alertHour: updatedData.alertHour ?? 9,
 				alertMinute: updatedData.alertMinute ?? 0,
 				selfieEnforced: updatedData.selfieEnforced ?? false,
+				operationalTimeZone:
+					updatedData.operationalTimeZone || 'America/Chicago',
 			};
 
 			setOriginalSettings(updatedSettings);
@@ -274,6 +278,48 @@ export default function SystemSettings() {
 						{weekdays.find((d) => d.value === settings.alertWeekday)?.label} at{' '}
 						{settings.alertHour.toString().padStart(2, '0')}:
 						{settings.alertMinute.toString().padStart(2, '0')}
+					</p>
+				</div>
+			</div>
+
+			{/* Operational Timezone Section */}
+			<div className="bg-white rounded-lg shadow-sm border p-6">
+				<div className="mb-6">
+					<h3 className="text-lg font-semibold text-gray-900 mb-2">
+						Operational Timezone
+					</h3>
+					<p className="text-sm text-gray-600">
+						The single organization-local timezone used to freeze shift and
+						daily water-temperature check dates, including overnight shifts
+						and daylight-saving transitions. This is an organization-wide
+						setting, not a per-user or per-house choice.
+					</p>
+				</div>
+
+				<div className="max-w-sm">
+					<label
+						htmlFor="operational-time-zone-input"
+						className="block text-sm font-medium text-gray-700 mb-2">
+						IANA Time Zone
+					</label>
+					<input
+						id="operational-time-zone-input"
+						type="text"
+						value={settings.operationalTimeZone}
+						onChange={(e) =>
+							setSettings({
+								...settings,
+								operationalTimeZone: e.target.value,
+							})
+						}
+						placeholder="America/Chicago"
+						className="w-full border border-gray-300 rounded-md px-3 py-2"
+					/>
+					<p className="text-xs text-gray-500 mt-1">
+						Must be a valid IANA time zone identifier (e.g. America/Chicago,
+						America/New_York). Changing this only affects clock-ins and
+						checks recorded after the change; historical records keep the
+						timezone that was in effect when they were created.
 					</p>
 				</div>
 			</div>

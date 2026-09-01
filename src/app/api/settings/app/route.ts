@@ -8,6 +8,7 @@ import {db} from '@/db/index';
 import {config} from '@/db/schema';
 import {upsertConfig} from '@/db/mutations/config';
 import {requireAdminOrPrivilege, logAudit} from '@/lib/db-helpers';
+import {organizationTimeZoneSchema} from '@/lib/water-temperature';
 
 export async function GET() {
 	try {
@@ -41,7 +42,27 @@ export async function PATCH(request: Request) {
             alertHour,
             alertMinute,
             selfieEnforced,
+            operationalTimeZone,
         } = body;
+
+        // R2/KTD2: the operational timezone is the single canonical setting
+        // used to freeze water-temperature/shift operational dates. Validate
+        // it as an IANA timezone here (not just at the DB check-constraint
+        // level, which only rejects blank strings) so a malformed admin edit
+        // fails visibly instead of silently breaking future clock-ins. It is
+        // only ever set here, in the admin settings contract -- never as a
+        // care-user clock-in choice.
+        let validatedOperationalTimeZone: string | undefined;
+        if (operationalTimeZone !== undefined) {
+            const parsed = organizationTimeZoneSchema.safeParse(operationalTimeZone);
+            if (!parsed.success) {
+                return NextResponse.json(
+                    {error: parsed.error.issues[0]?.message || 'Invalid time zone'},
+                    {status: 400}
+                );
+            }
+            validatedOperationalTimeZone = parsed.data;
+        }
 
         const updatedSettings = await upsertConfig({
             complianceReminderTemplate,
@@ -50,6 +71,9 @@ export async function PATCH(request: Request) {
             alertHour,
             alertMinute,
             selfieEnforced,
+            ...(validatedOperationalTimeZone !== undefined
+                ? {operationalTimeZone: validatedOperationalTimeZone}
+                : {}),
         });
 
         await logAudit({

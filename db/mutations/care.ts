@@ -3,6 +3,61 @@ import {residents, residentLogs, config, shifts, isp, ispAcknowledgments} from '
 import {eq, and, isNull} from 'drizzle-orm';
 import {requireCareAccess} from '@/lib/db-helpers';
 import {logAudit} from './audit';
+import {
+	getOperationalTimeZone,
+	resolveAuthorizedCareLocation,
+	type CurrentShiftDto,
+} from '../queries/care';
+import {computeOperationalDate} from '@/lib/operational-time';
+import {shiftSlotSchema, type ShiftSlot} from '@/lib/water-temperature';
+
+export class CareShiftValidationError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'CareShiftValidationError';
+	}
+}
+
+export class CareShiftAccessDeniedError extends Error {
+	constructor(message = 'Access denied to clock in at this location') {
+		super(message);
+		this.name = 'CareShiftAccessDeniedError';
+	}
+}
+
+export class CareShiftConflictError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'CareShiftConflictError';
+	}
+}
+
+export class CareShiftNotFoundError extends Error {
+	constructor(message = 'No active shift found') {
+		super(message);
+		this.name = 'CareShiftNotFoundError';
+	}
+}
+
+function toCurrentShiftDto(shift: {
+	id: string;
+	location: string;
+	locationId: string | null;
+	shiftSlot: number | null;
+	operationalDate: string | null;
+	clockInTime: Date;
+}): CurrentShiftDto {
+	return {
+		id: shift.id,
+		locationId: shift.locationId,
+		location: shift.location,
+		shiftSlot: (shift.shiftSlot as ShiftSlot | null) ?? null,
+		operationalDate: shift.operationalDate,
+		clockInTime: shift.clockInTime,
+		duration: Date.now() - shift.clockInTime.getTime(),
+		needsClassification: shift.locationId === null,
+	};
+}
 
 // Mutation: Create resident log
 export async function createResidentLog(clerkUserId: string, residentId: string, template: string, content: string) {
@@ -179,20 +234,60 @@ export async function acknowledgeIsp(clerkUserId: string, residentId: string, is
 }
 
 // Mutation: Clock in
-export async function clockIn(clerkUserId: string, location: string, selfieStorageId?: string) {
+//
+// R1/R2/R16: requires an authorized house and a fixed shift slot; resolves
+// the client-supplied location name to its immutable ID fail-closed
+// (unauthorized/inactive/blank/ambiguous names never widen an active
+// shift), and freezes the operational date + timezone snapshot from the
+// canonical organization setting into a single atomic insert.
+//
+// Note: this does not wrap its reads/write in `db.transaction(...)`. This
+// project's `db` client (drizzle-orm/neon-http, see db/index.ts) does not
+// support multi-statement transactions -- `db.transaction()` throws "No
+// transactions support in neon-http driver" unconditionally at runtime.
+// Instead, every column that must be frozen together (locationId,
+// shiftSlot, operationalDate, operationalTimeZoneSnapshot) is computed
+// before a single `insert(...).returning()` statement, so the shift row
+// itself is always internally consistent even though the preceding reads
+// are separate round trips.
+export async function clockIn(
+	clerkUserId: string,
+	location: string,
+	shiftSlotInput: unknown,
+	selfieStorageId?: string
+) {
 	const userRole = await requireCareAccess(clerkUserId);
 
-	// Check if user has access to the specified location
-	const userLocations =
-		userRole.role === 'admin' ? [] : userRole.locations || [];
-	if (userRole.role !== 'admin' && !userLocations.includes(location)) {
-		throw new Error('Access denied to clock in at this location');
+	const slotResult = shiftSlotSchema.safeParse(shiftSlotInput);
+	if (!slotResult.success) {
+		throw new CareShiftValidationError(
+			'Select a shift (1st, 2nd, or 3rd) before clocking in.'
+		);
+	}
+	const shiftSlot = slotResult.data;
+
+	if (typeof location !== 'string' || !location.trim()) {
+		throw new CareShiftValidationError('Select a location before clocking in.');
 	}
 
 	// Check if selfie is enforced
 	const appConfig = await db.query.config.findFirst();
 	if (appConfig?.selfieEnforced && !selfieStorageId) {
-		throw new Error('Selfie verification is required for clock in');
+		throw new CareShiftValidationError(
+			'Selfie verification is required for clock in'
+		);
+	}
+
+	const authorizedLocationNames =
+		userRole.role === 'admin' ? [] : userRole.locations || [];
+
+	const resolvedLocation = await resolveAuthorizedCareLocation(db, {
+		role: userRole.role,
+		authorizedLocationNames,
+		locationName: location,
+	});
+	if (!resolvedLocation) {
+		throw new CareShiftAccessDeniedError();
 	}
 
 	const existingShift = await db.query.shifts.findFirst({
@@ -204,28 +299,50 @@ export async function clockIn(clerkUserId: string, location: string, selfieStora
 	});
 
 	if (existingShift) {
-		if (existingShift.location === location) {
-			throw new Error(`Already clocked in at ${existingShift.location}.`);
+		if (existingShift.location === resolvedLocation.name) {
+			throw new CareShiftConflictError(
+				`Already clocked in at ${existingShift.location}.`
+			);
 		}
 
-		throw new Error(
+		throw new CareShiftConflictError(
 			`Already clocked in at ${existingShift.location}. Clock out before switching locations.`
 		);
 	}
 
-	let newShift;
+	// R2/R16-17: freeze the operational date/timezone from the canonical
+	// setting now, so it is written atomically with the rest of the row in
+	// the insert below. An absent/invalid configuration fails clock-in
+	// visibly rather than falling back to the browser or database host
+	// timezone.
+	const operationalTimeZone = await getOperationalTimeZone(db);
+	const clockInTime = new Date();
+	const operationalDate = computeOperationalDate(
+		clockInTime,
+		operationalTimeZone
+	);
 
+	let newShift;
 	try {
-		[newShift] = await db.insert(shifts).values({
-			clerkUserId,
-			location: location,
-			clockInTime: new Date(),
-			deviceId: 'web-browser', // Assuming 'web-browser' for now, can be passed from client
-			clockInSelfie: selfieStorageId,
-		}).returning();
+		[newShift] = await db
+			.insert(shifts)
+			.values({
+				clerkUserId,
+				location: resolvedLocation.name,
+				locationId: resolvedLocation.id,
+				shiftSlot,
+				operationalDate,
+				operationalTimeZoneSnapshot: operationalTimeZone,
+				clockInTime,
+				deviceId: 'web-browser', // Assuming 'web-browser' for now, can be passed from client
+				clockInSelfie: selfieStorageId,
+			})
+			.returning();
 	} catch (error: any) {
 		if (error?.code === '23505' || error?.cause?.code === '23505') {
-			throw new Error('Already clocked in. Please clock out first.');
+			throw new CareShiftConflictError(
+				'Already clocked in. Please clock out first.'
+			);
 		}
 
 		throw error;
@@ -238,11 +355,118 @@ export async function clockIn(clerkUserId: string, location: string, selfieStora
 	await logAudit({
 		clerkUserId,
 		event: 'clock_in',
-		details: `location=${location},selfie=${selfieStorageId ? 'yes' : 'no'}`,
+		details: `location=${resolvedLocation.name},shiftSlot=${shiftSlot},operationalDate=${operationalDate},selfie=${selfieStorageId ? 'yes' : 'no'}`,
 		deviceId: 'system',
 		location: '',
 	});
 	return newShift.id;
+}
+
+// Mutation: Classify a legacy open shift (one clocked in before the daily
+// water-temperature check feature existed, so it has null
+// locationId/shiftSlot/operationalDate/operationalTimeZoneSnapshot).
+//
+// This is a one-time transition: it resolves the shift's original location
+// name fail-closed, accepts a single authorized slot from staff, and
+// freezes the operational date from the *original* clock-in timestamp (not
+// "now"). A second classification attempt on an already-classified shift
+// conflicts rather than silently overwriting the frozen identity (R2's
+// immutability guarantee applies to legacy shifts too).
+//
+// As in clockIn above, this does not use `db.transaction(...)` (unsupported
+// by this project's neon-http driver). The "classify once" guarantee comes
+// from the `isNull(shifts.locationId)` compare-and-swap condition on the
+// single UPDATE statement below: Postgres evaluates that WHERE clause
+// atomically, so a concurrent second classification attempt updates zero
+// rows rather than racing the first.
+export async function classifyCurrentShift(
+	clerkUserId: string,
+	shiftSlotInput: unknown
+): Promise<CurrentShiftDto> {
+	const userRole = await requireCareAccess(clerkUserId);
+
+	const slotResult = shiftSlotSchema.safeParse(shiftSlotInput);
+	if (!slotResult.success) {
+		throw new CareShiftValidationError(
+			'Select a shift (1st, 2nd, or 3rd) to classify this shift.'
+		);
+	}
+	const shiftSlot = slotResult.data;
+
+	const authorizedLocationNames =
+		userRole.role === 'admin' ? [] : userRole.locations || [];
+
+	const currentShift = await db.query.shifts.findFirst({
+		where: and(
+			eq(shifts.clerkUserId, clerkUserId),
+			isNull(shifts.clockOutTime)
+		),
+		orderBy: (shifts, {desc}) => [desc(shifts.clockInTime)],
+	});
+
+	if (!currentShift) {
+		throw new CareShiftNotFoundError();
+	}
+
+	if (currentShift.locationId !== null) {
+		// Already classified (either at clock-in or by a prior
+		// classification call) -- do not allow staff to change frozen
+		// identity after the fact.
+		throw new CareShiftConflictError('This shift is already classified.');
+	}
+
+	const resolvedLocation = await resolveAuthorizedCareLocation(db, {
+		role: userRole.role,
+		authorizedLocationNames,
+		locationName: currentShift.location,
+	});
+	if (!resolvedLocation) {
+		throw new CareShiftAccessDeniedError(
+			'Unable to resolve this shift to an authorized active location.'
+		);
+	}
+
+	const operationalTimeZone = await getOperationalTimeZone(db);
+	const operationalDate = computeOperationalDate(
+		currentShift.clockInTime,
+		operationalTimeZone
+	);
+
+	const [classifiedShift] = await db
+		.update(shifts)
+		.set({
+			locationId: resolvedLocation.id,
+			location: resolvedLocation.name,
+			shiftSlot,
+			operationalDate,
+			operationalTimeZoneSnapshot: operationalTimeZone,
+		})
+		.where(
+			and(
+				eq(shifts.id, currentShift.id),
+				eq(shifts.clerkUserId, clerkUserId),
+				isNull(shifts.clockOutTime),
+				isNull(shifts.locationId)
+			)
+		)
+		.returning();
+
+	// The compare-and-swap `isNull(shifts.locationId)` guard means a
+	// concurrent second classification attempt updates zero rows here
+	// rather than overwriting the winner's frozen identity.
+	if (!classifiedShift) {
+		throw new CareShiftConflictError('This shift is already classified.');
+	}
+
+	await logAudit({
+		clerkUserId,
+		event: 'classify_shift',
+		details: `shiftId=${classifiedShift.id},location=${resolvedLocation.name},shiftSlot=${shiftSlot},operationalDate=${operationalDate}`,
+		deviceId: 'system',
+		location: '',
+	});
+
+	return toCurrentShiftDto(classifiedShift);
 }
 
 // Mutation: Clock out
