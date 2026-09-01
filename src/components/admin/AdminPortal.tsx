@@ -18,6 +18,7 @@ import AdminDeviceBadge from './AdminDeviceBadge';
 import EmployeeHRManagement from './EmployeeHRManagement';
 import ResidentProfileManagement from './ResidentProfileManagement';
 import LifeSafetyDocuments from '../supervisor/LifeSafetyDocuments';
+import WaterTemperatureWorkspace from '../supervisor/WaterTemperatureWorkspace';
 import CareLogsWorkspace from './CareLogsWorkspace';
 import MemosWorkspace from '../shared/MemosWorkspace';
 import VacationRequests from '../shared/VacationRequests';
@@ -121,6 +122,10 @@ export default function AdminPortal() {
 
 			case 'documents':
 				return <LifeSafetyDocuments />;
+			// Admin surfaces always get the management view; the canonical
+			// admin check still runs server-side on every read and write.
+			case 'water-temperature':
+				return <WaterTemperatureWorkspace canManage />;
 			case 'care-logs':
 				return <CareLogsWorkspace />;
 			case 'inspector-access':

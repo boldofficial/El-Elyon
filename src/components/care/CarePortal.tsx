@@ -26,6 +26,7 @@ import SupervisorTeamWorkspace from '../supervisor/SupervisorTeamWorkspace';
 import SupervisorShiftHistory from '../supervisor/SupervisorShiftHistory';
 import CarePortalResidentDetails from './CarePortalResidentDetails';
 import LifeSafetyDocuments from '../supervisor/LifeSafetyDocuments';
+import WaterTemperatureWorkspace from '../supervisor/WaterTemperatureWorkspace';
 import MemosWorkspace from '../shared/MemosWorkspace';
 import VacationRequests from '../shared/VacationRequests';
 import PeopleWorkspace from '../admin/PeopleWorkspace';
@@ -342,6 +343,12 @@ export default function CarePortal() {
 			description: 'Annual inspections & fire drills',
 		},
 		{
+			id: 'water-temperature',
+			label: 'Water Temperature',
+			icon: '🌡️',
+			description: 'Daily check log',
+		},
+		{
 			id: 'profile',
 			label: 'My Profile',
 			icon: '👤',
@@ -427,6 +434,17 @@ export default function CarePortal() {
 				return <VacationRequests isAdmin={false} />;
 			case 'life-safety':
 				return <LifeSafetyDocuments />;
+			// Staff get the read-only guidance panel; the current-shift entry
+			// action stays on U4's persistent reminder banner. Supervisors and
+			// delegated document managers additionally get the month grid,
+			// summary counts, print, and audit controls. The server enforces
+			// the same boundary independently (R11/R18).
+			case 'water-temperature':
+				return (
+					<WaterTemperatureWorkspace
+						canManage={isSupervisor || adminPrivileges.includes('manage_documents')}
+					/>
+				);
 			case 'profile':
 				return <CareProfileWorkspace />;
 			case 'manage-people':
