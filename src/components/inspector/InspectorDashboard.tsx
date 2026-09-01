@@ -338,8 +338,8 @@ function InspectorLifeSafetyPanel({
 	const years = useMemo(() => data ? inspectorYears(data, currentYear) : [currentYear], [data, currentYear]);
 	const selected = useMemo(() => data ? filterInspectorLifeSafetyYear(data, year) : null, [data, year]);
 	const annualRows = useMemo(
-		() => buildInspectorAnnualInspectionRows(selected?.inspections ?? [], year),
-		[selected, year]
+		() => buildInspectorAnnualInspectionRows(data?.inspections ?? [], year),
+		[data, year]
 	);
 
 	async function printSelectedReport() {

@@ -171,22 +171,6 @@ export function moveParticipant<T>(items: T[], from: number, to: number): T[] {
 	return result;
 }
 
-export async function collectLegacyPages<T>(
-	fetchPage: (cursor: string | null) => Promise<{data: T[]; nextCursor: string | null}>,
-	maximumPages = 100
-): Promise<T[]> {
-	const rows: T[] = [];
-	let cursor: string | null = null;
-	for (let page = 0; page < maximumPages; page += 1) {
-		const result = await fetchPage(cursor);
-		rows.push(...result.data);
-		if (!result.nextCursor) return rows;
-		if (result.nextCursor === cursor) throw new Error('Legacy pagination returned the same cursor twice');
-		cursor = result.nextCursor;
-	}
-	throw new Error('Legacy history exceeded the supported pagination limit');
-}
-
 export function formatLocalFireDrillDate(value: string | null | undefined): string {
 	const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
 	return match ? `${match[2]}/${match[3]}/${match[1]}` : '—';

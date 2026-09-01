@@ -130,15 +130,22 @@ export async function getLifeSafetyInspection(args: {
 	id: string;
 }) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
-	const allowedIds = await authorizedLocationIds(context);
-	if (allowedIds.length === 0) throw new LifeSafetyNotFoundError();
+	if (!context.isAdmin && context.locationNames.length === 0) {
+		throw new LifeSafetyNotFoundError();
+	}
+	const allowedLocationIds = context.isAdmin
+		? db.select({id: locations.id}).from(locations)
+		: db
+				.select({id: locations.id})
+				.from(locations)
+				.where(inArray(locations.name, context.locationNames));
 	const [entry] = await db
 		.select()
 		.from(lifeSafetyInspectionEntries)
 		.where(
 			and(
 				eq(lifeSafetyInspectionEntries.id, args.id),
-				inArray(lifeSafetyInspectionEntries.locationId, allowedIds)
+				inArray(lifeSafetyInspectionEntries.locationId, allowedLocationIds)
 			)
 		)
 		.limit(1);
@@ -172,15 +179,22 @@ export async function getFireDrillReport(args: {
 	id: string;
 }) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
-	const allowedIds = await authorizedLocationIds(context);
-	if (allowedIds.length === 0) throw new LifeSafetyNotFoundError();
+	if (!context.isAdmin && context.locationNames.length === 0) {
+		throw new LifeSafetyNotFoundError();
+	}
+	const allowedLocationIds = context.isAdmin
+		? db.select({id: locations.id}).from(locations)
+		: db
+				.select({id: locations.id})
+				.from(locations)
+				.where(inArray(locations.name, context.locationNames));
 	const [report] = await db
 		.select()
 		.from(fireDrillReports)
 		.where(
 			and(
 				eq(fireDrillReports.id, args.id),
-				inArray(fireDrillReports.locationId, allowedIds)
+				inArray(fireDrillReports.locationId, allowedLocationIds)
 			)
 		)
 		.limit(1);
@@ -234,12 +248,16 @@ export async function getLegacySmokeDetectorCheck(args: {
 	id: string;
 }) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
-	const allowedNames = await authorizedLocationNames(context);
-	if (allowedNames.length === 0) throw new LifeSafetyNotFoundError();
+	if (!context.isAdmin && context.locationNames.length === 0) {
+		throw new LifeSafetyNotFoundError();
+	}
+	const locationScope = context.isAdmin
+		? inArray(smokeDetectorChecks.location, db.select({name: locations.name}).from(locations))
+		: inArray(smokeDetectorChecks.location, context.locationNames);
 	const [row] = await db
 		.select()
 		.from(smokeDetectorChecks)
-		.where(and(eq(smokeDetectorChecks.id, args.id), inArray(smokeDetectorChecks.location, allowedNames)))
+		.where(and(eq(smokeDetectorChecks.id, args.id), locationScope))
 		.limit(1);
 	if (!row) throw new LifeSafetyNotFoundError();
 	return row;
@@ -273,30 +291,19 @@ export async function getLegacyFireDrill(args: {
 	id: string;
 }) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
-	const allowedNames = await authorizedLocationNames(context);
-	if (allowedNames.length === 0) throw new LifeSafetyNotFoundError();
+	if (!context.isAdmin && context.locationNames.length === 0) {
+		throw new LifeSafetyNotFoundError();
+	}
+	const locationScope = context.isAdmin
+		? inArray(fireDrills.location, db.select({name: locations.name}).from(locations))
+		: inArray(fireDrills.location, context.locationNames);
 	const [row] = await db
 		.select()
 		.from(fireDrills)
-		.where(and(eq(fireDrills.id, args.id), inArray(fireDrills.location, allowedNames)))
+		.where(and(eq(fireDrills.id, args.id), locationScope))
 		.limit(1);
 	if (!row) throw new LifeSafetyNotFoundError();
 	return row;
-}
-
-async function authorizedLocationIds(context: LifeSafetyAccessContext): Promise<string[]> {
-	if (!context.isAdmin && context.locationNames.length === 0) return [];
-	const rows = await db
-		.select({id: locations.id})
-		.from(locations)
-		.where(context.isAdmin ? undefined : inArray(locations.name, context.locationNames));
-	return rows.map((row) => row.id);
-}
-
-async function authorizedLocationNames(context: LifeSafetyAccessContext): Promise<string[]> {
-	if (!context.isAdmin) return context.locationNames;
-	const rows = await db.select({name: locations.name}).from(locations);
-	return Array.from(new Set(rows.map((row) => row.name)));
 }
 
 async function attachParticipants<T extends {id: string}>(reports: T[]) {

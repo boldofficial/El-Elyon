@@ -9,13 +9,16 @@ import {
 	formatLocalInspectionDate,
 	initialsFromName,
 	inspectionDateBounds,
+	type InspectionEquipmentType,
 	type InspectionOutcome,
 	type LifeSafetyInspectionEntry,
 } from './lifeSafetyInspectionModel';
+import {printAnnualInspectionReport} from './printLifeSafetyReports';
 import {
-	printAnnualInspectionReport,
-	type InspectionEquipmentType,
-} from './printLifeSafetyReports';
+	collectLegacyPages,
+	lifeSafetyErrorMessage,
+	readLifeSafetyResponse,
+} from './lifeSafetyWorkspace';
 
 type LocationOption = {id: string; name: string};
 
@@ -76,7 +79,7 @@ export default function LifeSafetyInspectionWorkspace() {
 			setLocationsState('loading');
 			try {
 				const response = await fetch('/api/documents/life-safety-locations', {cache: 'no-store'});
-				const payload = await readResponse<{data: LocationOption[]}>(response);
+				const payload = await readLifeSafetyResponse<{data: LocationOption[]}>(response);
 				if (cancelled) return;
 				setLocations(payload.data);
 				setSelectedLocationId((current) =>
@@ -88,7 +91,7 @@ export default function LifeSafetyInspectionWorkspace() {
 			} catch (error) {
 				if (cancelled) return;
 				setLocationsState('error');
-				toast.error(errorMessage(error, 'Could not load authorized houses'));
+				toast.error(lifeSafetyErrorMessage(error, 'Could not load authorized houses'));
 			}
 		}
 		void loadLocations();
@@ -121,7 +124,7 @@ export default function LifeSafetyInspectionWorkspace() {
 				setRecordsState('ready');
 			} catch (error) {
 				if (cancelled) return;
-				const message = errorMessage(error, 'Could not load inspection records');
+				const message = lifeSafetyErrorMessage(error, 'Could not load inspection records');
 				setRecordsError(message);
 				setRecordsState('error');
 			}
@@ -192,12 +195,12 @@ export default function LifeSafetyInspectionWorkspace() {
 				setConflict(true);
 				return;
 			}
-			await readResponse(response);
+			await readLifeSafetyResponse(response);
 			toast.success(isCorrection ? 'Inspection corrected' : 'Inspection recorded');
 			closeEditorAfterSave();
 			setReloadToken((value) => value + 1);
 		} catch (error) {
-			toast.error(errorMessage(error, 'Could not save inspection'));
+			toast.error(lifeSafetyErrorMessage(error, 'Could not save inspection'));
 		} finally {
 			setSaving(false);
 		}
@@ -220,12 +223,12 @@ export default function LifeSafetyInspectionWorkspace() {
 				setConflict(true);
 				return;
 			}
-			await readResponse(response);
+			await readLifeSafetyResponse(response);
 			toast.success('Inspection voided; its audit history was retained');
 			closeEditorAfterSave();
 			setReloadToken((value) => value + 1);
 		} catch (error) {
-			toast.error(errorMessage(error, 'Could not void inspection'));
+			toast.error(lifeSafetyErrorMessage(error, 'Could not void inspection'));
 		} finally {
 			setSaving(false);
 		}
@@ -246,7 +249,7 @@ export default function LifeSafetyInspectionWorkspace() {
 				})),
 			});
 		} catch (error) {
-			toast.error(errorMessage(error, 'Could not open the print report'));
+			toast.error(lifeSafetyErrorMessage(error, 'Could not open the print report'));
 		} finally {
 			setPrinting(false);
 		}
@@ -545,43 +548,17 @@ function StatusPanel({title, detail, tone = 'neutral'}: {title: string; detail: 
 async function fetchInspections(locationId: string, year: number) {
 	const params = new URLSearchParams({locationId, year: String(year)});
 	const response = await fetch(`/api/documents/life-safety-inspections?${params}`, {cache: 'no-store'});
-	const payload = await readResponse<{data: LifeSafetyInspectionEntry[]}>(response);
+	const payload = await readLifeSafetyResponse<{data: LifeSafetyInspectionEntry[]}>(response);
 	return payload.data;
 }
 
 async function fetchAllLegacyChecks(location: string, year: number) {
-	const rows: LegacySmokeCheck[] = [];
-	let cursor: string | null = null;
-	for (let pageNumber = 0; pageNumber < 100; pageNumber += 1) {
+	return collectLegacyPages<LegacySmokeCheck>(async (cursor) => {
 		const params = new URLSearchParams({location, year: String(year), limit: '100'});
 		if (cursor) params.set('cursor', cursor);
 		const response = await fetch(`/api/documents/smoke-detector-checks?${params}`, {cache: 'no-store'});
-		const page = await readResponse<{data: LegacySmokeCheck[]; nextCursor: string | null}>(response);
-		rows.push(...page.data);
-		cursor = page.nextCursor;
-		if (!cursor) return rows;
-	}
-	throw new Error('Legacy history exceeded the supported pagination limit');
-}
-
-async function readResponse<T = unknown>(response: Response): Promise<T> {
-	let payload: unknown = null;
-	try {
-		payload = await response.json();
-	} catch {
-		// Preserve the status-based error below when an upstream response is not JSON.
-	}
-	if (!response.ok) {
-		const message = payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-			? payload.error
-			: `Request failed (${response.status})`;
-		throw new Error(message);
-	}
-	return payload as T;
-}
-
-function errorMessage(error: unknown, fallback: string) {
-	return error instanceof Error && error.message ? error.message : fallback;
+		return readLifeSafetyResponse<{data: LegacySmokeCheck[]; nextCursor: string | null}>(response);
+	});
 }
 
 function localToday() {

@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
 	FIRE_DRILL_SLOTS,
-	collectLegacyPages,
 	moveParticipant,
 	preserveUnavailableRosterSnapshots,
 	reportForSequence,
@@ -11,6 +10,7 @@ import {
 	type FireDrillReportRecord,
 	type ParticipantDraft,
 } from './fireDrillModel';
+import {collectLegacyPages} from './lifeSafetyWorkspace';
 
 test('the reporting workspace exposes exactly the semi-annual and annual sequence slots', () => {
 	assert.deepEqual(FIRE_DRILL_SLOTS.map((slot) => [slot.sequence, slot.label]), [

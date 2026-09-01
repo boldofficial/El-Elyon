@@ -3,6 +3,7 @@ import {
 	printDocument,
 	type PrintDocumentOptions
 } from '../shared/printDocument';
+import type {LifeSafetyEquipmentType} from '@/lib/life-safety-reporting';
 
 const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
 const LOGO_URL = '/logo.svg';
@@ -11,11 +12,9 @@ const MAX_TEXT = 2_000;
 const MAX_STAFF = 24;
 const MAX_PARTICIPANTS = 64;
 
-export type InspectionEquipmentType = 'smoke' | 'carbon_monoxide' | 'fire_extinguisher';
-
 export interface PrintableInspectionEntry {
 	reportMonth: number;
-	equipmentType: InspectionEquipmentType;
+	equipmentType: LifeSafetyEquipmentType;
 	inspectionDate: string;
 	staffInitials: string;
 }
@@ -53,7 +52,7 @@ export function buildAnnualInspectionPrintHtml(report: PrintableAnnualInspection
 	const entries = new Map(
 		report.entries.map((entry) => [`${entry.reportMonth}:${entry.equipmentType}`, entry])
 	);
-	const cell = (month: number, type: InspectionEquipmentType, field: 'date' | 'initials') => {
+	const cell = (month: number, type: LifeSafetyEquipmentType, field: 'date' | 'initials') => {
 		const entry = entries.get(`${month}:${type}`);
 		if (!entry) return '';
 		return escapePrintHtml(field === 'date' ? formatLocalDate(entry.inspectionDate) : entry.staffInitials);

@@ -4,6 +4,11 @@ import type {
 	InspectorLifeSafetyData,
 	InspectorLifeSafetyInspection,
 } from '@/lib/inspector-life-safety-projection';
+import {formatLocalInspectionDate} from '../supervisor/lifeSafetyInspectionModel';
+import {
+	formatGatheringDuration,
+	formatLocalFireDrillTime,
+} from '../supervisor/fireDrillModel';
 
 export const INSPECTOR_EQUIPMENT: ReadonlyArray<{type: InspectorEquipmentType; label: string}> = [
 	{type: 'smoke', label: 'Smoke detectors'},
@@ -65,23 +70,9 @@ export function inspectorFireDrillForSequence(
 	return reports.find((report) => report.sequence === sequence);
 }
 
-export function formatInspectorLocalDate(value: string | null | undefined): string {
-	const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? '');
-	return match ? `${match[2]}/${match[3]}/${match[1]}` : '—';
-}
-
-export function formatInspectorLocalTime(value: string | null | undefined): string {
-	const match = /^(\d{2}):(\d{2})/.exec(value ?? '');
-	if (!match) return '—';
-	const hour = Number(match[1]);
-	return `${hour % 12 || 12}:${match[2]} ${hour >= 12 ? 'PM' : 'AM'}`;
-}
-
-export function formatInspectorDuration(minutes: number | null, seconds: number | null): string {
-	return minutes === null || seconds === null
-		? 'No recorded time'
-		: `${minutes} min ${seconds} sec`;
-}
+export const formatInspectorLocalDate = formatLocalInspectionDate;
+export const formatInspectorLocalTime = formatLocalFireDrillTime;
+export const formatInspectorDuration = formatGatheringDuration;
 
 function localYear(value: string): number | null {
 	const match = /^(\d{4})-/.exec(value);

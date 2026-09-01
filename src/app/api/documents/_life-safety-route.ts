@@ -1,4 +1,5 @@
 import {LifeSafetyConflictError, LifeSafetyNotFoundError} from '@/db/queries/life-safety';
+import {createValidationErrorResponse} from '@/lib/validation-schemas';
 import {NextResponse} from 'next/server';
 import {ZodError, type ZodType} from 'zod';
 
@@ -42,7 +43,7 @@ export function lifeSafetyJson(data: unknown, init?: ResponseInit) {
 export function lifeSafetyErrorResponse(error: unknown) {
 	if (error instanceof ZodError) {
 		return lifeSafetyJson(
-			{error: 'Validation failed', fields: Object.fromEntries(error.issues.map((issue) => [issue.path.join('.'), issue.message]))},
+			createValidationErrorResponse(error),
 			{status: 400}
 		);
 	}

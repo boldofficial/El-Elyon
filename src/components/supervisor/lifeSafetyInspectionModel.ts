@@ -1,4 +1,6 @@
-import type {InspectionEquipmentType} from './printLifeSafetyReports';
+import type {LifeSafetyEquipmentType} from '@/lib/life-safety-reporting';
+
+export type InspectionEquipmentType = LifeSafetyEquipmentType;
 
 export const INSPECTION_MONTHS = [
 	'January',

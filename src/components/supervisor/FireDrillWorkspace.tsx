@@ -4,7 +4,6 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
 import {
 	FIRE_DRILL_SLOTS,
-	collectLegacyPages,
 	formatGatheringDuration,
 	formatLocalFireDrillDate,
 	formatLocalFireDrillTime,
@@ -17,6 +16,11 @@ import {
 	type FireDrillReportRecord,
 	type ParticipantDraft,
 } from './fireDrillModel';
+import {
+	collectLegacyPages,
+	lifeSafetyErrorMessage,
+	readLifeSafetyResponse,
+} from './lifeSafetyWorkspace';
 import {printFireDrillReport} from './printLifeSafetyReports';
 
 type LocationOption = {id: string; name: string};
@@ -81,7 +85,7 @@ export default function FireDrillWorkspace() {
 			setLocationsState('loading');
 			try {
 				const response = await fetch('/api/documents/life-safety-locations', {cache: 'no-store'});
-				const payload = await readResponse<{data: LocationOption[]}>(response);
+				const payload = await readLifeSafetyResponse<{data: LocationOption[]}>(response);
 				if (cancelled) return;
 				setLocations(payload.data);
 				setSelectedLocationId((current) =>
@@ -93,7 +97,7 @@ export default function FireDrillWorkspace() {
 			} catch (error) {
 				if (cancelled) return;
 				setLocationsState('error');
-				toast.error(errorMessage(error, 'Could not load authorized houses'));
+				toast.error(lifeSafetyErrorMessage(error, 'Could not load authorized houses'));
 			}
 		}
 		void loadLocations();
@@ -131,7 +135,7 @@ export default function FireDrillWorkspace() {
 				setRecordsState('ready');
 			} catch (error) {
 				if (cancelled) return;
-				setRecordsError(errorMessage(error, 'Could not load fire drill records'));
+				setRecordsError(lifeSafetyErrorMessage(error, 'Could not load fire drill records'));
 				setRecordsState('error');
 			}
 		}
@@ -241,12 +245,12 @@ export default function FireDrillWorkspace() {
 				setConflict(true);
 				return;
 			}
-			await readResponse(response);
+			await readLifeSafetyResponse(response);
 			toast.success(isCorrection ? 'Fire drill corrected' : 'Fire drill recorded');
 			closeEditorAfterSave();
 			setReloadToken((value) => value + 1);
 		} catch (error) {
-			setFormErrors([errorMessage(error, 'Could not save the fire drill')]);
+			setFormErrors([lifeSafetyErrorMessage(error, 'Could not save the fire drill')]);
 		} finally {
 			setSaving(false);
 		}
@@ -269,12 +273,12 @@ export default function FireDrillWorkspace() {
 				setConflict(true);
 				return;
 			}
-			await readResponse(response);
+			await readLifeSafetyResponse(response);
 			toast.success('Fire drill voided; its event facts and revision history were retained');
 			closeEditorAfterSave();
 			setReloadToken((value) => value + 1);
 		} catch (error) {
-			setFormErrors([errorMessage(error, 'Could not void the fire drill')]);
+			setFormErrors([lifeSafetyErrorMessage(error, 'Could not void the fire drill')]);
 		} finally {
 			setSaving(false);
 		}
@@ -302,7 +306,7 @@ export default function FireDrillWorkspace() {
 				})),
 			});
 		} catch (error) {
-			toast.error(errorMessage(error, 'Could not open the fire drill report'));
+			toast.error(lifeSafetyErrorMessage(error, 'Could not open the fire drill report'));
 		} finally {
 			setPrinting(false);
 		}
@@ -665,14 +669,14 @@ function StatusPanel({title, detail, tone = 'neutral'}: {title: string; detail: 
 async function fetchFireDrillReports(locationId: string, year: number) {
 	const params = new URLSearchParams({locationId, year: String(year)});
 	const response = await fetch(`/api/documents/fire-drill-reports?${params}`, {cache: 'no-store'});
-	const payload = await readResponse<{data: FireDrillReportRecord[]}>(response);
+	const payload = await readLifeSafetyResponse<{data: FireDrillReportRecord[]}>(response);
 	return payload.data;
 }
 
 async function fetchResidents(locationId: string) {
 	const params = new URLSearchParams({locationId});
 	const response = await fetch(`/api/documents/life-safety-residents?${params}`, {cache: 'no-store'});
-	const payload = await readResponse<{data: ResidentOption[]}>(response);
+	const payload = await readLifeSafetyResponse<{data: ResidentOption[]}>(response);
 	return payload.data;
 }
 
@@ -681,28 +685,8 @@ async function fetchAllLegacyDrills(location: string, year: number) {
 		const params = new URLSearchParams({location, year: String(year), limit: '100'});
 		if (cursor) params.set('cursor', cursor);
 		const response = await fetch(`/api/documents/fire-drills?${params}`, {cache: 'no-store'});
-		return readResponse<{data: LegacyFireDrill[]; nextCursor: string | null}>(response);
+		return readLifeSafetyResponse<{data: LegacyFireDrill[]; nextCursor: string | null}>(response);
 	});
-}
-
-async function readResponse<T = unknown>(response: Response): Promise<T> {
-	let payload: unknown = null;
-	try {
-		payload = await response.json();
-	} catch {
-		// Preserve the status-based error below when an upstream response is not JSON.
-	}
-	if (!response.ok) {
-		const message = payload && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
-			? payload.error
-			: `Request failed (${response.status})`;
-		throw new Error(message);
-	}
-	return payload as T;
-}
-
-function errorMessage(error: unknown, fallback: string) {
-	return error instanceof Error && error.message ? error.message : fallback;
 }
 
 function newDraftKey() {
