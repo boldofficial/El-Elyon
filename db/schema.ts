@@ -1215,9 +1215,16 @@ export const waterTemperatureChecks = pgTable(
 			'water_temperature_checks_snapshot_check',
 			sql`length(btrim(${table.houseNameSnapshot})) > 0 and length(btrim(${table.staffNameSnapshot})) > 0 and length(btrim(${table.staffInitialsSnapshot})) > 0 and length(btrim(${table.staffId})) > 0`
 		),
+		// Only `recheck_required` requires non-blank action text: that state is
+		// only reachable via the 'action' mutation, which sets action text
+		// before advancing state. `action_required` is the state a fresh
+		// above-115F observation lands in *before* any action is documented
+		// (see lib/water-temperature.ts's deriveWaterTemperatureState and
+		// drizzle/0012_fix_water_temperature_action_required_check.sql, which
+		// corrects this constraint from the original 0011 migration).
 		actionRequiredCheck: check(
 			'water_temperature_checks_action_required_check',
-			sql`${table.state} not in ('action_required', 'recheck_required') or (${table.action} is not null and length(btrim(${table.action})) > 0)`
+			sql`${table.state} <> 'recheck_required' or (${table.action} is not null and length(btrim(${table.action})) > 0)`
 		),
 		voidCheck: check(
 			'water_temperature_checks_void_check',

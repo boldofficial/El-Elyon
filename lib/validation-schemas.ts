@@ -5,6 +5,19 @@ import {
 	lifeSafetyInspectionInputSchema,
 	lifeSafetyVoidInputSchema,
 } from './life-safety-reporting';
+import {
+	MAX_ACTION_LENGTH,
+	MAX_COMMENT_LENGTH,
+	MAX_SUPERSEDE_REASON_LENGTH,
+	MAX_VOID_REASON_LENGTH,
+	WATER_TEMPERATURE_FIXTURES,
+	fahrenheitReadingSchema,
+	operationalDateSchema,
+	shiftSlotSchema,
+	staffIdSchema,
+	staffInitialsSchema,
+	staffNameSchema,
+} from './water-temperature';
 
 // ============================================================================
 // MEMO SCHEMAS
@@ -128,6 +141,190 @@ export type LifeSafetyCollectionQuery = z.infer<
 	typeof lifeSafetyCollectionQuerySchema
 >;
 export type LifeSafetyLegacyQuery = z.infer<typeof lifeSafetyLegacyQuerySchema>;
+
+// ============================================================================
+// DAILY WATER-TEMPERATURE CHECK SCHEMAS
+//
+// Reuses lib/water-temperature.ts's Zod building blocks (shiftSlotSchema,
+// operationalDateSchema, fahrenheitReadingSchema, staff* schemas, the
+// MAX_*_LENGTH constants) rather than duplicating them -- see U1. These are
+// the *wire* contracts for the U3 API routes. Staff-facing create/action/
+// recheck requests deliberately omit identity fields (locationId/
+// shiftSlot/operationalDate/staffId/staffName/staffInitials): the server
+// derives those exclusively from the caller's active shift (R16). Only
+// privileged (supervisor/admin) manual-entry and correction requests carry
+// those fields explicitly, alongside a required reason.
+// ============================================================================
+
+const waterTemperatureUuidSchema = z.string().uuid('Invalid ID');
+const waterTemperatureExpectedVersionSchema = z.number().int().min(1);
+
+export const waterTemperatureIdempotencyKeySchema = z
+	.string()
+	.trim()
+	.min(1, 'Idempotency key is required')
+	.max(100, 'Idempotency key must be 100 characters or fewer')
+	.regex(/^[A-Za-z0-9_-]+$/, 'Idempotency key must contain only letters, numbers, - or _');
+
+// Control characters (other than the newline/carriage-return/tab already
+// implied by free text) are rejected outright rather than stripped, so a
+// malformed submission fails validation instead of silently losing content.
+const WATER_TEMPERATURE_CONTROL_CHAR_PATTERN = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/;
+
+function waterTemperatureNarrativeText(label: string, maxLength: number, required: boolean) {
+	const base = z
+		.string()
+		.trim()
+		.max(maxLength, `${label} must be ${maxLength} characters or fewer`)
+		.refine(
+			(value) => !WATER_TEMPERATURE_CONTROL_CHAR_PATTERN.test(value),
+			`${label} contains unsupported control characters`
+		);
+	return required ? base.min(1, `${label} is required`) : base;
+}
+
+function optionalWaterTemperatureNarrativeText(label: string, maxLength: number) {
+	return z
+		.union([waterTemperatureNarrativeText(label, maxLength, false), z.literal('')])
+		.nullable()
+		.optional()
+		.transform((value) => (value ? value : null));
+}
+
+// Staff/inspector-facing guidance (surfaced by U4's UI, not enforced here
+// beyond length/character bounds): do not enter resident-identifying or
+// medical information in comments/action text, since it appears in
+// inspector and print output.
+export const waterTemperatureCommentsSchema = optionalWaterTemperatureNarrativeText(
+	'Comments',
+	MAX_COMMENT_LENGTH
+);
+export const waterTemperatureOptionalActionTextSchema = optionalWaterTemperatureNarrativeText(
+	'Action taken',
+	MAX_ACTION_LENGTH
+);
+export const waterTemperatureActionTextSchema = waterTemperatureNarrativeText(
+	'Action taken',
+	MAX_ACTION_LENGTH,
+	true
+);
+export const waterTemperatureReasonSchema = waterTemperatureNarrativeText(
+	'Reason',
+	MAX_VOID_REASON_LENGTH,
+	true
+);
+export const waterTemperatureSupersedeReasonSchema = waterTemperatureNarrativeText(
+	'Supersede reason',
+	MAX_SUPERSEDE_REASON_LENGTH,
+	true
+);
+
+export const waterTemperatureRecordIdSchema = waterTemperatureUuidSchema;
+
+export const waterTemperatureMonthQuerySchema = z
+	.object({
+		locationId: waterTemperatureUuidSchema,
+		year: z.coerce.number().int().min(2020).max(2100),
+		month: z.coerce.number().int().min(1).max(12),
+		includeVoided: z
+			.enum(['true', 'false'])
+			.default('false')
+			.transform((value) => value === 'true'),
+	})
+	.strict();
+
+export const waterTemperatureStaffCreateSchema = z
+	.object({
+		source: z.literal('shift'),
+		kitchenTempF: fahrenheitReadingSchema,
+		bathTempF: fahrenheitReadingSchema,
+		comments: waterTemperatureCommentsSchema,
+		idempotencyKey: waterTemperatureIdempotencyKeySchema,
+	})
+	.strict();
+
+export const waterTemperatureManualCreateSchema = z
+	.object({
+		source: z.literal('manual'),
+		locationId: waterTemperatureUuidSchema,
+		shiftSlot: shiftSlotSchema,
+		operationalDate: operationalDateSchema,
+		kitchenTempF: fahrenheitReadingSchema,
+		bathTempF: fahrenheitReadingSchema,
+		staffId: staffIdSchema,
+		staffName: staffNameSchema,
+		staffInitials: staffInitialsSchema,
+		observedAt: z.coerce.date(),
+		comments: waterTemperatureCommentsSchema,
+		reason: waterTemperatureReasonSchema,
+		idempotencyKey: waterTemperatureIdempotencyKeySchema,
+	})
+	.strict();
+
+export const waterTemperatureCreateRequestSchema = z.discriminatedUnion('source', [
+	waterTemperatureStaffCreateSchema,
+	waterTemperatureManualCreateSchema,
+]);
+
+export const waterTemperatureActionRequestSchema = z
+	.object({
+		type: z.literal('action'),
+		expectedVersion: waterTemperatureExpectedVersionSchema,
+		action: waterTemperatureActionTextSchema,
+		idempotencyKey: waterTemperatureIdempotencyKeySchema,
+	})
+	.strict();
+
+export const waterTemperatureRecheckRequestSchema = z
+	.object({
+		type: z.literal('recheck'),
+		expectedVersion: waterTemperatureExpectedVersionSchema,
+		fixture: z.enum(WATER_TEMPERATURE_FIXTURES),
+		tempF: fahrenheitReadingSchema,
+		measuredAt: z.coerce.date(),
+		idempotencyKey: waterTemperatureIdempotencyKeySchema,
+	})
+	.strict();
+
+export const waterTemperatureSupersedeRequestSchema = z
+	.object({
+		type: z.literal('supersede'),
+		expectedVersion: waterTemperatureExpectedVersionSchema,
+		recheckId: waterTemperatureUuidSchema,
+		reason: waterTemperatureSupersedeReasonSchema,
+		idempotencyKey: waterTemperatureIdempotencyKeySchema,
+	})
+	.strict();
+
+export const waterTemperatureRecheckRouteRequestSchema = z.discriminatedUnion('type', [
+	waterTemperatureActionRequestSchema,
+	waterTemperatureRecheckRequestSchema,
+	waterTemperatureSupersedeRequestSchema,
+]);
+
+export const waterTemperatureCorrectionRequestSchema = z
+	.object({
+		expectedVersion: waterTemperatureExpectedVersionSchema,
+		reason: waterTemperatureReasonSchema,
+		kitchenTempF: fahrenheitReadingSchema,
+		bathTempF: fahrenheitReadingSchema,
+		comments: waterTemperatureCommentsSchema,
+		action: waterTemperatureOptionalActionTextSchema,
+		idempotencyKey: waterTemperatureIdempotencyKeySchema,
+	})
+	.strict();
+
+export const waterTemperatureVoidRequestSchema = z
+	.object({
+		expectedVersion: waterTemperatureExpectedVersionSchema,
+		reason: waterTemperatureReasonSchema,
+		idempotencyKey: waterTemperatureIdempotencyKeySchema,
+	})
+	.strict();
+
+export type WaterTemperatureCreateRequest = z.infer<typeof waterTemperatureCreateRequestSchema>;
+export type WaterTemperatureRecheckRouteRequest = z.infer<typeof waterTemperatureRecheckRouteRequestSchema>;
+export type WaterTemperatureMonthQuery = z.infer<typeof waterTemperatureMonthQuerySchema>;
 
 // ============================================================================
 // INCIDENT REPORT SCHEMAS

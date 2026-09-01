@@ -6,6 +6,25 @@ import test from "node:test";
 import { Pool, type PoolClient } from "pg";
 
 import { deriveWaterTemperatureState } from "@/lib/water-temperature";
+// Type-only: erased entirely at compile time, so this does not trigger
+// db/mutations/water-temperature.ts's runtime module evaluation (and thus
+// not @/db/index's validateEnvironment() either) ahead of
+// setWaterTemperatureIntegrationTestEnv() below.
+import type { WaterTemperatureExecutor } from "@/db/mutations/water-temperature";
+
+// U3's mutation module (db/mutations/water-temperature.ts) transitively
+// imports @/db/index, which calls validateEnvironment() at module load
+// time. Static ES module imports are hoisted ahead of any same-file
+// executable statement, so a fake-env-var call placed *after* a static
+// import of that module here would run too late to matter. Instead, the
+// mutation/query modules and drizzle-orm/node-postgres are imported
+// dynamically, only from inside the skip-gated test callback below (after
+// setWaterTemperatureIntegrationTestEnv() has already run as this file's
+// first top-level statement) -- so a plain `npm run test:water-temperature:db`
+// invocation with no WATER_TEMPERATURE_TEST_DATABASE_URL set never touches
+// @/db/index at all, exactly like the rest of this file's existing
+// raw-`pg`-only exercises.
+setWaterTemperatureIntegrationTestEnv();
 
 const TEST_DATABASE_URL = process.env.WATER_TEMPERATURE_TEST_DATABASE_URL;
 const PRODUCTION_DATABASE_URL = process.env.DATABASE_URL;
@@ -47,6 +66,20 @@ test(
         "utf8",
       );
       await client.query(migration);
+      // U3 fix: 0011's action_required_check incorrectly required non-blank
+      // `action` text for the `action_required` state itself (the state a
+      // fresh above-115F observation lands in *before* any action is
+      // documented), blocking the feature's core workflow. See
+      // drizzle/0012_fix_water_temperature_action_required_check.sql.
+      const constraintFix = await readFile(
+        path.join(
+          process.cwd(),
+          "drizzle",
+          "0012_fix_water_temperature_action_required_check.sql",
+        ),
+        "utf8",
+      );
+      await client.query(constraintFix);
 
       await assertLegacyShiftUntouched(client, legacyShiftBefore);
       await assertConfigBackfill(client);
@@ -57,6 +90,8 @@ test(
       await exerciseSupersedeAndRevisionRetention(client);
       await exerciseReferentialIntegrity(client);
       await exerciseAggregateRollback(client);
+      await exerciseConcurrentCreatesViaMutationLayer(client, schemaName);
+      await exerciseRecheckRacesVoidViaMutationLayer(client, schemaName);
     } finally {
       await client.query("RESET search_path").catch(() => undefined);
       await client.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
@@ -263,10 +298,17 @@ async function exerciseInputValidityConstraints(
   await expectPgError(baseInsert({ kitchen_temp_tenths: 5000 }), "23514");
   await expectPgError(baseInsert({ staff_name_snapshot: "   " }), "23514");
   await expectPgError(baseInsert({ house_name_snapshot: "" }), "23514");
+  // recheck_required still requires non-blank action text (it is only
+  // reachable after the 'action' mutation has already set one).
   await expectPgError(
-    baseInsert({ state: "action_required" }), // no action text supplied
+    baseInsert({ state: "recheck_required" }), // no action text supplied
     "23514",
   );
+  // action_required is the state a fresh above-115F observation lands in
+  // *before* any action is documented -- per the 0012 fix, it must NOT
+  // require action text (this was 0011's defect; see the migration
+  // application above).
+  await baseInsert({ state: "action_required" }); // no action text supplied; must succeed
 
   // None of the rejected attempts above left rows behind, so 108F (below) and
   // 118F (above) can still be inserted as valid, storable inputs.
@@ -536,4 +578,241 @@ function normalizeConnectionString(
   const url = new URL(value);
   url.searchParams.sort();
   return url.toString();
+}
+
+// ============================================================================
+// U3 CONCURRENCY/ATOMICITY PROOFS
+//
+// These two exercises run the *actual* production mutation code from
+// db/mutations/water-temperature.ts (createWaterTemperatureCheckAggregate /
+// appendWaterTemperatureRecheckAggregate / voidWaterTemperatureCheckAggregate)
+// against this same dockerized Postgres, through a real
+// drizzle-orm/node-postgres instance -- not hand-copied SQL. This is the
+// only way to exercise that code against a live Postgres server: the
+// production `db` singleton (drizzle-orm/neon-http) speaks Neon's HTTP wire
+// protocol and cannot be repointed at a plain/dockerized Postgres, so every
+// mutation function in that module accepts a `WaterTemperatureExecutor`
+// (defaulting to the production `db`) specifically so a test can substitute
+// a differently-driven-but-otherwise-identical executor here.
+// ============================================================================
+
+async function buildMutationTestExecutor(
+  schemaName: string,
+): Promise<{ executor: WaterTemperatureExecutor; close: () => Promise<void> }> {
+  const { drizzle } = await import("drizzle-orm/node-postgres");
+  // A dedicated pool (distinct from the outer `client`'s single connection)
+  // with more than one connection, so two calls issued "concurrently" from
+  // this test can genuinely have two statements in flight against Postgres
+  // at once, rather than being serialized through one connection.
+  //
+  // search_path is set via the connection's `options` startup parameter
+  // (libpq's `-c name=value`), not a post-connect `SET` query: the startup
+  // parameter is applied before the connection can run any query at all, so
+  // there is no race window where a freshly-created pool connection (e.g.
+  // one opened late, for a conflict-resolution read) could run a real query
+  // against the wrong schema or still be mid-`SET` when the pool is closed.
+  const pool = new Pool({
+    connectionString: TEST_DATABASE_URL,
+    options: `-c search_path="${schemaName}",public`,
+    max: 4,
+  });
+  const executor = drizzle(pool) as unknown as WaterTemperatureExecutor;
+  return { executor, close: () => pool.end() };
+}
+
+async function exerciseConcurrentCreatesViaMutationLayer(
+  client: PoolClient,
+  schemaName: string,
+): Promise<void> {
+  const { createWaterTemperatureCheckAggregate } = await import(
+    "@/db/mutations/water-temperature"
+  );
+  const { WaterTemperatureConflictError } = await import(
+    "@/db/queries/water-temperature"
+  );
+  const { executor, close } = await buildMutationTestExecutor(schemaName);
+
+  try {
+    const baseArgs = {
+      locationId: LOCATION_ID,
+      houseName: "House One",
+      operationalDate: "2026-07-01",
+      shiftSlot: 1 as const,
+      shiftId: null,
+      kitchenTempTenths: 1120,
+      bathTempTenths: 1140,
+      observedAt: new Date("2026-07-01T08:00:00Z"),
+      comments: null,
+      reason: null,
+    };
+
+    const [outcomeA, outcomeB] = await Promise.allSettled([
+      createWaterTemperatureCheckAggregate(executor, {
+        ...baseArgs,
+        staffId: "staff-race-1",
+        staffName: "Race Worker One",
+        staffInitials: "R1",
+        actorId: "staff-race-1",
+        actorName: "Race Worker One",
+        idempotencyKey: "race-create-a",
+      }),
+      createWaterTemperatureCheckAggregate(executor, {
+        ...baseArgs,
+        staffId: "staff-race-2",
+        staffName: "Race Worker Two",
+        staffInitials: "R2",
+        actorId: "staff-race-2",
+        actorName: "Race Worker Two",
+        idempotencyKey: "race-create-b",
+      }),
+    ]);
+
+    const outcomes = [outcomeA, outcomeB];
+    const fulfilledCount = outcomes.filter((o) => o.status === "fulfilled").length;
+    const rejections = outcomes.flatMap((o) => (o.status === "rejected" ? [o.reason] : []));
+    assert.equal(fulfilledCount, 1, "exactly one concurrent create should win");
+    assert.equal(
+      rejections.length,
+      1,
+      "the loser must receive a typed conflict, not silently overwrite the winner",
+    );
+    assert.ok(rejections[0] instanceof WaterTemperatureConflictError);
+    const conflict = rejections[0] as InstanceType<typeof WaterTemperatureConflictError>;
+    assert.equal(conflict.code, "UNIQUE_CONFLICT");
+    assert.ok(conflict.current, "the loser can reload the winning record to recover");
+
+    const activeRows = await client.query(
+      `SELECT count(*)::integer AS count FROM "water_temperature_checks"
+       WHERE "location_id" = $1 AND "operational_date" = $2 AND "shift_slot" = $3 AND "voided_at" IS NULL`,
+      [LOCATION_ID, "2026-07-01", 1],
+    );
+    assert.equal(
+      activeRows.rows[0].count,
+      1,
+      "exactly one active row exists for this house/date/slot after the race",
+    );
+  } finally {
+    await close();
+  }
+}
+
+async function exerciseRecheckRacesVoidViaMutationLayer(
+  client: PoolClient,
+  schemaName: string,
+): Promise<void> {
+  const { appendWaterTemperatureRecheckAggregate, voidWaterTemperatureCheckAggregate } =
+    await import("@/db/mutations/water-temperature");
+  const { WaterTemperatureConflictError, WaterTemperatureNotFoundError } = await import(
+    "@/db/queries/water-temperature"
+  );
+  const { executor, close } = await buildMutationTestExecutor(schemaName);
+
+  try {
+    const inserted = await client.query(
+      `INSERT INTO "water_temperature_checks" (
+         "location_id", "house_name_snapshot", "operational_date", "shift_slot",
+         "kitchen_temp_tenths", "bath_temp_tenths", "staff_id", "staff_name_snapshot",
+         "staff_initials_snapshot", "observed_at", "state", "action", "created_by"
+       ) VALUES (
+         $1, 'House One', '2026-07-02', 1, 1180, 1130, 'staff-1', 'Jordan Ellis', 'JE',
+         now(), 'recheck_required', 'Restricted use; will recheck', 'staff-1'
+       ) RETURNING "id"`,
+      [LOCATION_ID],
+    );
+    const checkId = inserted.rows[0].id as string;
+
+    const [recheckOutcome, voidOutcome] = await Promise.allSettled([
+      appendWaterTemperatureRecheckAggregate(executor, {
+        checkId,
+        locationId: LOCATION_ID,
+        operationalDate: "2026-07-02",
+        shiftSlot: 1,
+        expectedVersion: 1,
+        fixture: "kitchen",
+        tempTenths: 1140,
+        staffId: "staff-2",
+        staffName: "Replacement Worker",
+        staffInitials: "RW",
+        measuredAt: new Date("2026-07-02T10:00:00Z"),
+        actorId: "staff-2",
+        actorName: "Replacement Worker",
+        idempotencyKey: "race-recheck",
+      }),
+      voidWaterTemperatureCheckAggregate(executor, {
+        checkId,
+        locationId: LOCATION_ID,
+        expectedVersion: 1,
+        reason: "Entered under wrong house",
+        actorId: "supervisor-1",
+        actorName: "Supervisor One",
+        idempotencyKey: "race-void",
+      }),
+    ]);
+
+    const oneWon =
+      (recheckOutcome.status === "fulfilled" && voidOutcome.status === "rejected") ||
+      (recheckOutcome.status === "rejected" && voidOutcome.status === "fulfilled");
+    assert.ok(
+      oneWon,
+      "exactly one of the racing recheck-append/void attempts should win the header's compare-and-swap",
+    );
+
+    if (voidOutcome.status === "rejected") {
+      assert.ok(
+        voidOutcome.reason instanceof WaterTemperatureConflictError ||
+          voidOutcome.reason instanceof WaterTemperatureNotFoundError,
+      );
+    }
+    if (recheckOutcome.status === "rejected") {
+      assert.ok(
+        recheckOutcome.reason instanceof WaterTemperatureConflictError ||
+          recheckOutcome.reason instanceof WaterTemperatureNotFoundError,
+      );
+    }
+
+    const finalRow = await client.query(
+      `SELECT "voided_at", "version" FROM "water_temperature_checks" WHERE "id" = $1`,
+      [checkId],
+    );
+    const recheckCount = await client.query(
+      `SELECT count(*)::integer AS count FROM "water_temperature_rechecks" WHERE "check_id" = $1`,
+      [checkId],
+    );
+
+    assert.equal(finalRow.rows[0].version, 2, "exactly one write advanced the header version");
+
+    if (finalRow.rows[0].voided_at !== null) {
+      // The void won the race: the stale recheck attempt must not have
+      // appended to the now-superseded (voided) aggregate.
+      assert.equal(
+        recheckCount.rows[0].count,
+        0,
+        "a stale recheck racing a void must not append to the voided aggregate",
+      );
+      assert.equal(recheckOutcome.status, "rejected");
+    } else {
+      // The recheck won the race: the void attempt must not have voided the
+      // check out from under the just-appended recheck.
+      assert.equal(recheckCount.rows[0].count, 1);
+      assert.equal(voidOutcome.status, "rejected");
+    }
+  } finally {
+    await close();
+  }
+}
+
+function setWaterTemperatureIntegrationTestEnv(): void {
+  const env: Record<string, string> = {
+    DATABASE_URL: "postgresql://test:test@localhost:5432/test",
+    AWS_REGION: "us-east-1",
+    AWS_ENDPOINT_URL: "http://localhost:9000",
+    AWS_ACCESS_KEY_ID: "test",
+    AWS_SECRET_ACCESS_KEY: "test",
+    AWS_S3_BUCKET_NAME: "test-bucket",
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: "pk_test",
+    CLERK_SECRET_KEY: "sk_test",
+  };
+  for (const [key, value] of Object.entries(env)) {
+    if (!process.env[key]) process.env[key] = value;
+  }
 }
