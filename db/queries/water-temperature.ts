@@ -459,7 +459,18 @@ export type WaterTemperatureStatus =
 	| 'recheck_required'
 	| 'complete'
 	| 'complete_with_attention'
+	| 'no_shift'
 	| 'unknown';
+
+// `no_shift` and `unknown` are deliberately distinct (U4 amendment to U3's
+// contract). R9 reserves `unknown` for "unable to verify" -- a state that must
+// show a retry affordance and must never read as complete. A caller with no
+// open/classified shift is not uncertain at all: there is simply no obligation
+// addressed to them, and collapsing that into `unknown` would show every
+// clocked-out user a spurious "unable to verify, retry" banner. The server
+// therefore returns `no_shift` for that case and never returns `unknown`; the
+// client synthesizes `unknown` locally when a status fetch fails, is aborted,
+// or returns a non-200/unrecognized payload.
 
 /**
  * Resolves the coarse status/CTA for the caller's currently active shift.
@@ -472,7 +483,7 @@ export async function getWaterTemperatureStatusForCurrentShift(
 	clerkUserId: string
 ): Promise<{status: WaterTemperatureStatus}> {
 	const identity = await getActiveShiftIdentity(clerkUserId);
-	if (!identity) return {status: 'unknown'};
+	if (!identity) return {status: 'no_shift'};
 
 	const [row] = await db
 		.select({state: waterTemperatureChecks.state})

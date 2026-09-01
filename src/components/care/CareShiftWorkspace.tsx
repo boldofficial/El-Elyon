@@ -1,12 +1,17 @@
 'use client';
 
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import SelfieCapture from '../shared/SelfieCapture';
 import {toast} from 'sonner';
 import {SHIFT_SLOTS, type ShiftSlot} from '@/lib/water-temperature';
+import type {WaterTemperatureStatus} from '@/db/queries/water-temperature';
+import {resolveClockOutDecision} from './waterTemperatureEntryModel';
 
 interface CareShiftWorkspaceProps {
 	onShiftChange?: () => void;
+	/** Current water-temperature obligation status, supplied by CarePortal.
+	 * Used only to warn before clock-out (R10) -- it never blocks it. */
+	waterTemperatureStatus?: WaterTemperatureStatus;
 }
 
 const SHIFT_SLOT_LABELS: Record<ShiftSlot, string> = {
@@ -58,7 +63,10 @@ export function canSubmitClassification(args: {
 	return SHIFT_SLOTS.includes(args.selectedShiftSlot);
 }
 
-export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspaceProps) {
+export default function CareShiftWorkspace({
+	onShiftChange,
+	waterTemperatureStatus = 'no_shift',
+}: CareShiftWorkspaceProps) {
 	const [sessionInfo, setSessionInfo] = useState<any>(null);
 	const [currentShift, setCurrentShift] = useState<any>(null);
 	const [isSelfieEnforced, setIsSelfieEnforced] = useState(false);
@@ -72,6 +80,8 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 		'clockIn' | 'clockOut' | null
 	>(null);
 	const [currentTime, setCurrentTime] = useState(Date.now());
+	const [clockOutWarning, setClockOutWarning] = useState<string | null>(null);
+	const clockOutWarningRef = useRef<HTMLDivElement | null>(null);
 
 	// Fetch session info and current shift
 	useEffect(() => {
@@ -170,8 +180,27 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 		}
 	};
 
+	/**
+	 * Clock-out is warned about but never blocked when the water-temperature
+	 * obligation is missing or unresolved (R10/AE12, "Not To Do" #5). The
+	 * first press surfaces the warning; confirming proceeds and leaves the
+	 * server obligation untouched and visible to supervisors and replacement
+	 * staff.
+	 */
 	const handleClockOut = async () => {
 		if (!currentShift) return;
+
+		const decision = resolveClockOutDecision({
+			status: waterTemperatureStatus,
+			confirmed: clockOutWarning !== null,
+		});
+		if (!decision.proceed) {
+			setClockOutWarning(decision.warning);
+			// Move focus to the warning so it is not silently skipped.
+			window.setTimeout(() => clockOutWarningRef.current?.focus(), 0);
+			return;
+		}
+		setClockOutWarning(null);
 
 		// Check if selfie is required for clock out
 		if (isSelfieEnforced) {
@@ -410,11 +439,35 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 								</div>
 							) : null}
 
+							{clockOutWarning ? (
+								<div
+									ref={clockOutWarningRef}
+									tabIndex={-1}
+									role="alert"
+									aria-live="assertive"
+									className="max-w-xs mx-auto text-left bg-amber-50 border-2 border-amber-400 rounded-lg p-4 space-y-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
+									<p className="text-sm font-semibold text-amber-900">
+										<span aria-hidden="true">⚠ </span>
+										Water temperature check outstanding
+									</p>
+									<p className="text-sm text-amber-900">{clockOutWarning}</p>
+									<button
+										onClick={() => setClockOutWarning(null)}
+										className="w-full min-h-[44px] border border-amber-500 text-amber-900 rounded-lg px-4 hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 font-medium">
+										Go back and record it
+									</button>
+								</div>
+							) : null}
+
 							<button
 								onClick={handleClockOut}
 								disabled={isProcessing}
-								className="w-full max-w-xs mx-auto bg-red-600 text-white py-3 px-6 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium">
-								{isProcessing ? 'Clocking Out...' : 'Clock Out'}
+								className="w-full max-w-xs mx-auto min-h-[44px] bg-red-600 text-white py-3 px-6 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500">
+								{isProcessing
+									? 'Clocking Out...'
+									: clockOutWarning
+										? 'Clock Out Anyway'
+										: 'Clock Out'}
 							</button>
 						</div>
 					) : (

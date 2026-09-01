@@ -2,9 +2,23 @@
 
 'use client';
 
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useCallback, useMemo, useRef} from 'react';
 import {SignOutButton} from '../auth/SignOutButton';
 import CareShiftWorkspace from './CareShiftWorkspace';
+import WaterTemperatureReminder, {WaterTemperatureNavBadge} from './WaterTemperatureReminder';
+import WaterTemperatureEntryDialog from './WaterTemperatureEntryDialog';
+import type {WaterTemperatureStatus} from '@/db/queries/water-temperature';
+import {
+	WATER_TEMPERATURE_POLL_INTERVAL_MS,
+	canOpenWaterTemperatureEntry,
+	isWaterTemperatureEntryStale,
+	mapStatusFetchResult,
+	shouldApplyStatusResponse,
+	shouldPollWaterTemperatureStatus,
+	toWaterTemperatureShiftIdentity,
+	type StatusFetchResult,
+	type WaterTemperatureShiftIdentity,
+} from './waterTemperatureEntryModel';
 import CareResidentsWorkspace from './CareResidentsWorkspace';
 import CareProfileWorkspace from './CareProfileWorkspace';
 import SupervisorComplianceWorkspace from '../supervisor/SupervisorComplianceWorkspace';
@@ -133,6 +147,147 @@ export default function CarePortal() {
 		}
 	};
 
+	// ------------------------------------------------------------------
+	// Water-temperature obligation (U4). Every decision below -- which
+	// banner/badge to render, whether a response is stale, whether polling
+	// should run -- lives in ./waterTemperatureEntryModel and is tested in
+	// waterTemperatureEntryModel.test.ts. This block owns only the effects.
+	// ------------------------------------------------------------------
+	const waterIdentity = useMemo(
+		() => toWaterTemperatureShiftIdentity(currentShift),
+		[currentShift]
+	);
+	const waterIdentityKey = waterIdentity
+		? `${waterIdentity.shiftId}|${waterIdentity.locationId}|${waterIdentity.shiftSlot}|${waterIdentity.operationalDate}`
+		: '';
+
+	const [waterStatus, setWaterStatus] = useState<WaterTemperatureStatus>('no_shift');
+	const [isWaterStatusRefreshing, setIsWaterStatusRefreshing] = useState(false);
+	const [waterEntryIdentity, setWaterEntryIdentity] =
+		useState<WaterTemperatureShiftIdentity | null>(null);
+
+	// A monotonic request generation plus the identity each request was
+	// issued for. Both must still match when a response lands, so a slow
+	// reply from a previous house/shift can never paint the current one.
+	const waterGenerationRef = useRef(0);
+	const waterAbortRef = useRef<AbortController | null>(null);
+	const waterIdentityRef = useRef<WaterTemperatureShiftIdentity | null>(null);
+
+	const refreshWaterStatus = useCallback(async () => {
+		const requestIdentity = waterIdentityRef.current;
+		if (!requestIdentity) {
+			setWaterStatus('no_shift');
+			return;
+		}
+
+		waterAbortRef.current?.abort();
+		const controller = new AbortController();
+		waterAbortRef.current = controller;
+		waterGenerationRef.current += 1;
+		const requestGeneration = waterGenerationRef.current;
+		setIsWaterStatusRefreshing(true);
+
+		let result: StatusFetchResult;
+		try {
+			const response = await fetch('/api/care/water-temperature-status', {
+				cache: 'no-store',
+				signal: controller.signal,
+			});
+			const body = await response.json().catch(() => null);
+			result = {kind: 'response', httpStatus: response.status, body};
+		} catch {
+			// An abort is a superseded request, not a verification failure:
+			// leave the current status alone for the newer request to set.
+			if (controller.signal.aborted) return;
+			result = {kind: 'failure'};
+		}
+
+		if (
+			!shouldApplyStatusResponse({
+				requestGeneration,
+				currentGeneration: waterGenerationRef.current,
+				requestIdentity,
+				currentIdentity: waterIdentityRef.current,
+			})
+		) {
+			return;
+		}
+
+		setIsWaterStatusRefreshing(false);
+		setWaterStatus(mapStatusFetchResult(result));
+	}, []);
+
+	// Identity changes (bootstrap, normal/selfie clock-in, legacy-shift
+	// classification, clock-out) invalidate in-flight requests and trigger
+	// an immediate authoritative refresh.
+	useEffect(() => {
+		waterIdentityRef.current = waterIdentity;
+		waterGenerationRef.current += 1;
+		waterAbortRef.current?.abort();
+		waterAbortRef.current = null;
+		setIsWaterStatusRefreshing(false);
+		if (!waterIdentity) {
+			setWaterStatus('no_shift');
+			setWaterEntryIdentity(null);
+			return;
+		}
+		void refreshWaterStatus();
+		// waterIdentity is recomputed on every currentShift refetch; the
+		// stable key keeps this to one refresh per real identity change.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [waterIdentityKey, refreshWaterStatus]);
+
+	// Refresh whenever the app is refocused or becomes visible again, so a
+	// colleague completing the shared obligation clears this worker's banner.
+	useEffect(() => {
+		const refreshIfActive = () => {
+			if (waterIdentityRef.current) void refreshWaterStatus();
+		};
+		const handleVisibility = () => {
+			if (!document.hidden) refreshIfActive();
+		};
+		window.addEventListener('focus', refreshIfActive);
+		document.addEventListener('visibilitychange', handleVisibility);
+		return () => {
+			window.removeEventListener('focus', refreshIfActive);
+			document.removeEventListener('visibilitychange', handleVisibility);
+		};
+	}, [refreshWaterStatus]);
+
+	// Bounded poll: only while clocked in and only while the tab is visible.
+	useEffect(() => {
+		if (!waterIdentityKey) return;
+		const interval = setInterval(() => {
+			if (
+				shouldPollWaterTemperatureStatus({
+					identity: waterIdentityRef.current,
+					documentHidden: document.hidden,
+				})
+			) {
+				void refreshWaterStatus();
+			}
+		}, WATER_TEMPERATURE_POLL_INTERVAL_MS);
+		return () => clearInterval(interval);
+	}, [waterIdentityKey, refreshWaterStatus]);
+
+	useEffect(() => () => waterAbortRef.current?.abort(), []);
+
+	// An editor opened for a house/shift that is no longer current is not
+	// rendered at all, so it can never submit against the prior obligation.
+	const activeWaterEntryIdentity =
+		waterEntryIdentity &&
+		!isWaterTemperatureEntryStale({
+			openedForIdentity: waterEntryIdentity,
+			currentIdentity: waterIdentity,
+		})
+			? waterIdentity
+			: null;
+
+	const openWaterEntry = () => {
+		if (!canOpenWaterTemperatureEntry({identity: waterIdentity, status: waterStatus})) return;
+		setWaterEntryIdentity(waterIdentity);
+	};
+
 	useEffect(() => {
 		async function fetchData() {
 			try {
@@ -235,7 +390,7 @@ export default function CarePortal() {
 
 	const renderContent = () => {
 		if (!isClockedIn) {
-			return <CareShiftWorkspace onShiftChange={refetchShift} />;
+			return <CareShiftWorkspace onShiftChange={refetchShift} waterTemperatureStatus={waterStatus} />;
 		}
 
 		if (activeView === 'resident-details' && selectedResident) {
@@ -261,7 +416,7 @@ export default function CarePortal() {
 
 		switch (activeView) {
 			case 'shift':
-				return <CareShiftWorkspace onShiftChange={refetchShift} />;
+				return <CareShiftWorkspace onShiftChange={refetchShift} waterTemperatureStatus={waterStatus} />;
 			case 'residents':
 				return (
 					<CareResidentsWorkspace onResidentSelect={handleResidentSelect} />
@@ -320,7 +475,12 @@ export default function CarePortal() {
 					<div>Access denied</div>
 				);
 			default:
-				return <CareShiftWorkspace />;
+				return (
+					<CareShiftWorkspace
+						onShiftChange={refetchShift}
+						waterTemperatureStatus={waterStatus}
+					/>
+				);
 		}
 	};
 
@@ -365,6 +525,11 @@ export default function CarePortal() {
 							<div className="flex-1 min-w-0">
 								<div className="font-medium flex items-center">
 									{item.label}
+									{/* The water-temperature obligation stays visible from
+									    every portal view, not just the Shift workspace. */}
+									{item.id === 'shift' && (
+										<WaterTemperatureNavBadge status={waterStatus} />
+									)}
 									{item.badge && (
 										<span className="ml-2 px-2 py-0.5 text-xs bg-red-500 text-white rounded-full">
 											{item.badge}
@@ -453,9 +618,27 @@ export default function CarePortal() {
 							You must clock in to access the rest of the Care Portal.
 						</div>
 					)}
+					{/* Non-dismissible and above the portal content, so the
+					    obligation is present in every view (R8/KTD5). */}
+					<WaterTemperatureReminder
+						status={waterStatus}
+						isRefreshing={isWaterStatusRefreshing}
+						onOpen={openWaterEntry}
+						onRetry={() => void refreshWaterStatus()}
+					/>
 					{renderContent()}
 				</div>
 			</main>
+
+			{activeWaterEntryIdentity && (
+				<WaterTemperatureEntryDialog
+					identity={activeWaterEntryIdentity}
+					status={waterStatus}
+					sessionUserName={sessionInfo?.user?.name}
+					onMutated={() => void refreshWaterStatus()}
+					onClose={() => setWaterEntryIdentity(null)}
+				/>
+			)}
 		</div>
 	);
 }
