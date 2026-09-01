@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  MAX_FIRE_DRILL_DURATION_MINUTES,
   fireDrillParticipantInputSchema,
   fireDrillReportInputSchema,
   isValidLocalDate,
@@ -107,6 +108,18 @@ test("participant duration is an all-or-none pair with bounded seconds", () => {
   );
   assert.equal(
     fireDrillParticipantInputSchema.safeParse(
+      participant({ durationMinutes: MAX_FIRE_DRILL_DURATION_MINUTES }),
+    ).success,
+    true,
+  );
+  assert.equal(
+    fireDrillParticipantInputSchema.safeParse(
+      participant({ durationMinutes: MAX_FIRE_DRILL_DURATION_MINUTES + 1 }),
+    ).success,
+    false,
+  );
+  assert.equal(
+    fireDrillParticipantInputSchema.safeParse(
       participant({ durationMinutes: 1, durationSeconds: null }),
     ).success,
     false,
@@ -158,6 +171,12 @@ test("participant provenance agrees with the optional roster reference", () => {
   assert.equal(
     fireDrillParticipantInputSchema.safeParse(
       participant({ residentId: null, participantSource: "roster" }),
+    ).success,
+    false,
+  );
+  assert.equal(
+    fireDrillParticipantInputSchema.safeParse(
+      participant({ participantSource: "manual" }),
     ).success,
     false,
   );

@@ -1,3 +1,5 @@
+import {MAX_FIRE_DRILL_DURATION_MINUTES} from '@/lib/life-safety-reporting';
+
 export const FIRE_DRILL_SLOTS = [
 	{sequence: 1 as const, label: 'Semi-Annual Fire Drill'},
 	{sequence: 2 as const, label: 'Annual Fire Drill'},
@@ -96,7 +98,7 @@ export function validateParticipantDrafts(drafts: ParticipantDraft[]): Participa
 			seenRosterIds.add(draft.residentId);
 		} else if (name) {
 			const comparableName = name.toLocaleLowerCase('en-US');
-			if (seenUnlinkedNames.has(comparableName)) errors.push(`Resident ${position + 1}: this saved resident was already added.`);
+			if (seenUnlinkedNames.has(comparableName)) errors.push(`Resident ${position + 1}: this participant was already added.`);
 			seenUnlinkedNames.add(comparableName);
 		}
 
@@ -109,8 +111,14 @@ export function validateParticipantDrafts(drafts: ParticipantDraft[]): Participa
 		} else {
 			durationMinutes = Number(draft.durationMinutes);
 			durationSeconds = Number(draft.durationSeconds);
-			if (!Number.isInteger(durationMinutes) || durationMinutes < 0) {
-				errors.push(`Resident ${position + 1}: minutes must be a whole number of zero or more.`);
+			if (
+				!Number.isInteger(durationMinutes) ||
+				durationMinutes < 0 ||
+				durationMinutes > MAX_FIRE_DRILL_DURATION_MINUTES
+			) {
+				errors.push(
+					`Resident ${position + 1}: minutes must be a whole number between 0 and ${MAX_FIRE_DRILL_DURATION_MINUTES}.`
+				);
 			}
 			if (!Number.isInteger(durationSeconds) || durationSeconds < 0 || durationSeconds > 59) {
 				errors.push(`Resident ${position + 1}: seconds must be a whole number from 0 through 59.`);

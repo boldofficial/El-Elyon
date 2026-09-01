@@ -21,6 +21,7 @@ import type {
 	FireDrillReportInput,
 	LifeSafetyInspectionInput,
 } from '@/lib/life-safety-reporting';
+import {selectFireDrillResidentNameSnapshot} from '@/lib/life-safety-reporting';
 import {and, asc, eq, inArray, isNull} from 'drizzle-orm';
 
 type AuditActor = {id: string; name: string | null};
@@ -147,7 +148,11 @@ export async function createFireDrillReport(args: {
 		const location = await resolveAuthorizedLifeSafetyLocation(context, args.input.locationId);
 		const actor = await resolveAuditActor(args.clerkUserId);
 		return await db.transaction(async (tx) => {
-			const participants = await resolveParticipants(tx, location.name, args.input.participants);
+			const participants = await resolveParticipants(
+				tx,
+				location.name,
+				args.input.participants
+			);
 			const [report] = await tx
 				.insert(fireDrillReports)
 				.values({
@@ -184,7 +189,12 @@ export async function updateFireDrillReport(args: {
 		const destination = await resolveAuthorizedLifeSafetyLocation(context, args.input.locationId);
 		const actor = await resolveAuditActor(args.clerkUserId);
 		return await db.transaction(async (tx) => {
-			const participants = await resolveParticipants(tx, destination.name, args.input.participants);
+			const participants = await resolveParticipants(
+				tx,
+				destination.name,
+				args.input.participants,
+				current.participants
+			);
 			const [report] = await tx
 				.update(fireDrillReports)
 				.set({
@@ -315,8 +325,19 @@ type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 async function resolveParticipants(
 	tx: Transaction,
 	locationName: string,
-	inputs: FireDrillParticipantInput[]
+	inputs: FireDrillParticipantInput[],
+	existingParticipants: Pick<
+		typeof fireDrillParticipants.$inferSelect,
+		'residentId' | 'residentNameSnapshot'
+	>[] = []
 ) {
+	const snapshotByResidentId = new Map(
+		existingParticipants
+			.filter((participant): participant is {residentId: string; residentNameSnapshot: string} =>
+				participant.residentId !== null
+			)
+			.map((participant) => [participant.residentId, participant.residentNameSnapshot])
+	);
 	const rosterIds = inputs
 		.filter((participant) => participant.participantSource === 'roster')
 		.map((participant) => participant.residentId)
@@ -331,10 +352,11 @@ async function resolveParticipants(
 	const rosterById = new Map(rosterRows.map((resident) => [resident.id, resident.name]));
 	return inputs.map((participant) => ({
 		residentId: participant.residentId,
-		residentNameSnapshot:
-			participant.participantSource === 'roster'
-				? rosterById.get(participant.residentId as string) as string
-				: participant.residentNameSnapshot,
+		residentNameSnapshot: selectFireDrillResidentNameSnapshot({
+			participant,
+			snapshotByResidentId,
+			rosterById,
+		}),
 		participantSource: participant.participantSource,
 		durationMinutes: participant.durationMinutes,
 		durationSeconds: participant.durationSeconds,

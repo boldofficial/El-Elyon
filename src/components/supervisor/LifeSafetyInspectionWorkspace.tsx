@@ -15,6 +15,11 @@ import {
 } from './lifeSafetyInspectionModel';
 import {printAnnualInspectionReport} from './printLifeSafetyReports';
 import {
+	isLifeSafetyInspectionScopeReady,
+	sameLifeSafetyInspectionScope,
+	type LifeSafetyInspectionScope,
+} from './lifeSafetyInspectionWorkspaceState';
+import {
 	collectLegacyPages,
 	lifeSafetyErrorMessage,
 	readLifeSafetyResponse,
@@ -33,6 +38,7 @@ type LegacySmokeCheck = {
 };
 
 type EditorState = {
+	scope: LifeSafetyInspectionScope;
 	month: number;
 	equipmentType: InspectionEquipmentType;
 	entry?: LifeSafetyInspectionEntry;
@@ -60,6 +66,7 @@ export default function LifeSafetyInspectionWorkspace() {
 	const [recordsState, setRecordsState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
 	const [recordsError, setRecordsError] = useState('');
 	const [reloadToken, setReloadToken] = useState(0);
+	const [loadedScope, setLoadedScope] = useState<LifeSafetyInspectionScope | null>(null);
 	const [editor, setEditor] = useState<EditorState | null>(null);
 	const [editorForm, setEditorForm] = useState<EditorForm | null>(null);
 	const [saving, setSaving] = useState(false);
@@ -72,6 +79,12 @@ export default function LifeSafetyInspectionWorkspace() {
 	const rows = useMemo(() => buildAnnualInspectionRows(entries), [entries]);
 	const defaultInitials = initialsFromName(user?.fullName || user?.username || '');
 	const validYear = Number.isInteger(year) && year >= 2020 && year <= 2100;
+	const currentScope = selectedLocation && validYear ? {locationId: selectedLocation.id, year} : null;
+	const recordsReady = isLifeSafetyInspectionScopeReady({
+		currentScope,
+		loadedScope,
+		recordsState,
+	});
 
 	useEffect(() => {
 		let cancelled = false;
@@ -102,14 +115,22 @@ export default function LifeSafetyInspectionWorkspace() {
 
 	useEffect(() => {
 		if (!selectedLocation || !validYear) {
+			closeEditorAfterSave();
 			setEntries([]);
 			setLegacyRows([]);
+			setLoadedScope(null);
+			setRecordsError('');
 			setRecordsState('idle');
 			return;
 		}
 		const location = selectedLocation;
+		const scope = {locationId: location.id, year};
 
 		let cancelled = false;
+		closeEditorAfterSave();
+		setEntries([]);
+		setLegacyRows([]);
+		setLoadedScope(null);
 		async function loadRecords() {
 			setRecordsState('loading');
 			setRecordsError('');
@@ -121,6 +142,7 @@ export default function LifeSafetyInspectionWorkspace() {
 				if (cancelled) return;
 				setEntries(inspectionPayload);
 				setLegacyRows(legacy);
+				setLoadedScope(scope);
 				setRecordsState('ready');
 			} catch (error) {
 				if (cancelled) return;
@@ -136,9 +158,10 @@ export default function LifeSafetyInspectionWorkspace() {
 	}, [selectedLocation, validYear, year, reloadToken]);
 
 	function openEditor(month: number, equipmentType: InspectionEquipmentType, entry?: LifeSafetyInspectionEntry) {
+		if (!currentScope) return;
 		const bounds = inspectionDateBounds(year, month);
 		const today = localToday();
-		setEditor({month, equipmentType, entry});
+		setEditor({scope: currentScope, month, equipmentType, entry});
 		setEditorForm({
 			inspectionDate: entry?.inspectionDate ?? (today >= bounds.minimum && today <= bounds.maximum ? today : ''),
 			staffInitials: entry?.staffInitials ?? defaultInitials,
@@ -161,7 +184,8 @@ export default function LifeSafetyInspectionWorkspace() {
 
 	async function saveEntry(event: React.FormEvent) {
 		event.preventDefault();
-		if (!editor || !editorForm || !selectedLocation) return;
+		if (!editor || !editorForm || !selectedLocation || !currentScope) return;
+		if (!sameLifeSafetyInspectionScope(editor.scope, currentScope) || !recordsReady) return;
 		setSaving(true);
 		setConflict(false);
 		const entry = {
@@ -207,7 +231,8 @@ export default function LifeSafetyInspectionWorkspace() {
 	}
 
 	async function voidEntry() {
-		if (!editor?.entry || voidReason.trim().length === 0) return;
+		if (!editor?.entry || voidReason.trim().length === 0 || !currentScope) return;
+		if (!sameLifeSafetyInspectionScope(editor.scope, currentScope) || !recordsReady) return;
 		setSaving(true);
 		setConflict(false);
 		try {
@@ -235,7 +260,7 @@ export default function LifeSafetyInspectionWorkspace() {
 	}
 
 	async function printReport() {
-		if (!selectedLocation || !validYear || printing) return;
+		if (!selectedLocation || !validYear || printing || !recordsReady || !currentScope) return;
 		setPrinting(true);
 		try {
 			await printAnnualInspectionReport({
@@ -310,7 +335,7 @@ export default function LifeSafetyInspectionWorkspace() {
 					<button
 						type="button"
 						onClick={() => void printReport()}
-						disabled={!selectedLocation || !validYear || recordsState === 'loading' || printing}
+						disabled={!recordsReady || printing}
 						className="inline-flex min-h-10 items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">
 						{printing ? 'Preparing report…' : 'Print annual sheet'}
 					</button>
@@ -325,14 +350,12 @@ export default function LifeSafetyInspectionWorkspace() {
 				</div>
 			)}
 
-			<section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm" aria-busy={recordsState === 'loading'}>
+			<section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm" aria-busy={!recordsReady && recordsState === 'loading'}>
 				<div className="border-b border-gray-200 px-4 py-3">
 					<h3 className="font-semibold text-gray-900">Annual inspection record</h3>
 					<p className="mt-1 text-sm text-gray-600">Blank cells mean no inspection has been recorded. They are not failures.</p>
 				</div>
-				{recordsState === 'loading' ? (
-					<div className="p-8 text-center text-sm text-gray-600" role="status">Loading annual inspection entries…</div>
-				) : (
+				{recordsReady ? (
 					<>
 						<div className="hidden overflow-x-auto md:block">
 							<table className="min-w-[980px] table-fixed border-collapse text-left text-sm">
@@ -368,12 +391,19 @@ export default function LifeSafetyInspectionWorkspace() {
 							))}
 						</div>
 					</>
+				) : recordsState === 'error' ? (
+					<div className="p-8 text-center text-sm text-gray-600" role="status">
+						<p className="font-semibold">No inspection entries are visible for the current house and year.</p>
+						<p className="mt-1">Use the retry link above to reload the current scope.</p>
+					</div>
+				) : (
+					<div className="p-8 text-center text-sm text-gray-600" role="status">Loading annual inspection entries…</div>
 				)}
 			</section>
 
-			<LegacyHistory rows={legacyRows} loading={recordsState === 'loading'} />
+			{recordsReady && <LegacyHistory rows={legacyRows} loading={false} />}
 
-			{editor && editorForm && selectedLocation && (
+			{editor && editorForm && selectedLocation && currentScope && recordsReady && sameLifeSafetyInspectionScope(editor.scope, currentScope) && (
 				<InspectionEditor
 					editor={editor}
 					form={editorForm}

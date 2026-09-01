@@ -4,6 +4,7 @@ export const LIFE_SAFETY_REPORT_YEAR_MIN = 2020;
 export const LIFE_SAFETY_REPORT_YEAR_MAX = 2100;
 export const MAX_FIRE_DRILL_STAFF = 24;
 export const MAX_FIRE_DRILL_PARTICIPANTS = 64;
+export const MAX_FIRE_DRILL_DURATION_MINUTES = 2_147_483_647;
 
 export const LIFE_SAFETY_EQUIPMENT_TYPES = [
   "smoke",
@@ -98,7 +99,7 @@ export const fireDrillParticipantInputSchema = z
     residentId: UUID_SCHEMA.nullable(),
     residentNameSnapshot: boundedText("Resident name", 255),
     participantSource: z.enum(FIRE_DRILL_PARTICIPANT_SOURCES),
-    durationMinutes: z.number().int().min(0).nullable(),
+    durationMinutes: z.number().int().min(0).max(MAX_FIRE_DRILL_DURATION_MINUTES).nullable(),
     durationSeconds: z.number().int().min(0).max(59).nullable(),
     comment: optionalText(2000),
     position: z
@@ -208,6 +209,20 @@ export type FireDrillParticipantInput = z.infer<
 >;
 export type FireDrillReportInput = z.infer<typeof fireDrillReportInputSchema>;
 export type LifeSafetyVoidInput = z.infer<typeof lifeSafetyVoidInputSchema>;
+
+export function selectFireDrillResidentNameSnapshot(args: {
+	participant: Pick<
+		FireDrillParticipantInput,
+		'participantSource' | 'residentId' | 'residentNameSnapshot'
+	>;
+	snapshotByResidentId: ReadonlyMap<string, string>;
+	rosterById: ReadonlyMap<string, string>;
+}) {
+	return args.participant.participantSource === 'roster'
+		? args.snapshotByResidentId.get(args.participant.residentId as string) ??
+			(args.rosterById.get(args.participant.residentId as string) as string)
+		: args.participant.residentNameSnapshot;
+}
 
 export function isValidLocalDate(value: string): boolean {
   const [year, month, day] = localDateParts(value);

@@ -123,13 +123,13 @@ CREATE TABLE IF NOT EXISTS "fire_drill_participants" (
 		CHECK ("participant_source" IN ('roster', 'manual', 'external')),
 	CONSTRAINT "fire_drill_participants_source_reference_check"
 		CHECK (
-			"participant_source" = 'roster'
+			("participant_source" = 'roster' AND "resident_id" IS NOT NULL)
 			OR
 			("participant_source" IN ('manual', 'external') AND "resident_id" IS NULL)
 		),
 	CONSTRAINT "fire_drill_participants_duration_check"
 		CHECK (
-			("duration_minutes" IS NOT NULL AND "duration_minutes" >= 0 AND "duration_seconds" BETWEEN 0 AND 59)
+			("duration_minutes" IS NOT NULL AND "duration_minutes" BETWEEN 0 AND 2147483647 AND "duration_seconds" BETWEEN 0 AND 59)
 			OR
 			("duration_minutes" IS NULL AND "duration_seconds" IS NULL AND coalesce(length(btrim("comment")), 0) > 0)
 		),

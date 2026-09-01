@@ -997,11 +997,11 @@ export const fireDrillParticipants = pgTable(
 		),
 		sourceReferenceCheck: check(
 			'fire_drill_participants_source_reference_check',
-			sql`${table.participantSource} = 'roster' or (${table.participantSource} in ('manual', 'external') and ${table.residentId} is null)`
+			sql`(${table.participantSource} = 'roster' and ${table.residentId} is not null) or (${table.participantSource} in ('manual', 'external') and ${table.residentId} is null)`
 		),
 		durationCheck: check(
 			'fire_drill_participants_duration_check',
-			sql`(${table.durationMinutes} is not null and ${table.durationMinutes} >= 0 and ${table.durationSeconds} between 0 and 59) or (${table.durationMinutes} is null and ${table.durationSeconds} is null and coalesce(length(btrim(${table.comment})), 0) > 0)`
+			sql`(${table.durationMinutes} is not null and ${table.durationMinutes} between 0 and 2147483647 and ${table.durationSeconds} between 0 and 59) or (${table.durationMinutes} is null and ${table.durationSeconds} is null and coalesce(length(btrim(${table.comment})), 0) > 0)`
 		),
 		positionCheck: check(
 			'fire_drill_participants_position_check',

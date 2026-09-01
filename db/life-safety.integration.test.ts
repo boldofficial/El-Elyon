@@ -5,10 +5,14 @@ import test from "node:test";
 
 import { Pool, type PoolClient } from "pg";
 
+import { MAX_FIRE_DRILL_DURATION_MINUTES } from "@/lib/life-safety-reporting";
+import { selectFireDrillResidentNameSnapshot } from "@/lib/life-safety-reporting";
+
 const TEST_DATABASE_URL = process.env.LIFE_SAFETY_TEST_DATABASE_URL;
 const PRODUCTION_DATABASE_URL = process.env.DATABASE_URL;
 const LOCATION_ID = "11111111-1111-4111-8111-111111111111";
 const RESIDENT_ID = "22222222-2222-4222-8222-222222222222";
+const RESIDENT_TWO_ID = "33333333-3333-4333-8333-333333333333";
 
 const skipReason = TEST_DATABASE_URL
   ? false
@@ -58,6 +62,27 @@ test(
   },
 );
 
+test("fire-drill corrections preserve old snapshots for existing residents", () => {
+  const participant = {
+    participantSource: "roster" as const,
+    residentId: RESIDENT_ID,
+    residentNameSnapshot: "Current edit placeholder",
+  };
+  const preserved = selectFireDrillResidentNameSnapshot({
+    participant,
+    snapshotByResidentId: new Map([[RESIDENT_ID, "Resident One"]]),
+    rosterById: new Map([[RESIDENT_ID, "Resident Renamed"]]),
+  });
+  const fresh = selectFireDrillResidentNameSnapshot({
+    participant: {...participant, residentId: RESIDENT_TWO_ID},
+    snapshotByResidentId: new Map([[RESIDENT_ID, "Resident One"]]),
+    rosterById: new Map([[RESIDENT_TWO_ID, "Resident Two"]]),
+  });
+
+  assert.equal(preserved, "Resident One");
+  assert.equal(fresh, "Resident Two");
+});
+
 async function createPrerequisites(client: PoolClient): Promise<void> {
   await client.query(`
 		CREATE TABLE "locations" (
@@ -95,6 +120,10 @@ async function seedLegacyFixtures(client: PoolClient): Promise<void> {
   await client.query(
     `INSERT INTO "residents" ("id", "name", "location") VALUES ($1, 'Resident One', 'House One')`,
     [RESIDENT_ID],
+  );
+  await client.query(
+    `INSERT INTO "residents" ("id", "name", "location") VALUES ($1, 'Resident Two', 'House One')`,
+    [RESIDENT_TWO_ID],
   );
   await client.query(`
 		INSERT INTO "smoke_detector_checks"
@@ -184,6 +213,13 @@ async function exerciseFireDrillConstraints(client: PoolClient): Promise<void> {
 		) VALUES ($1, $2, 'Resident One', 'roster', 0, 42, 0)`,
     [reportId, RESIDENT_ID],
   );
+  await client.query(
+    `INSERT INTO "fire_drill_participants" (
+			"fire_drill_report_id", "resident_id", "resident_name_snapshot", "participant_source",
+			"duration_minutes", "duration_seconds", "position"
+		) VALUES ($1, $2, 'Resident Two', 'roster', $3, 5, 1)`,
+    [reportId, RESIDENT_TWO_ID, MAX_FIRE_DRILL_DURATION_MINUTES],
+  );
 
   await expectPgError(
     client.query(
@@ -202,6 +238,36 @@ async function exerciseFireDrillConstraints(client: PoolClient): Promise<void> {
 				"duration_minutes", "duration_seconds", "position"
 			) VALUES ($1, 'Bad duration', 'manual', 1, NULL, 1)`,
       [reportId],
+    ),
+    "23514",
+  );
+  await expectPgError(
+    client.query(
+      `INSERT INTO "fire_drill_participants" (
+				"fire_drill_report_id", "resident_name_snapshot", "participant_source",
+				"duration_minutes", "duration_seconds", "position"
+			) VALUES ($1, 'Bad minutes', 'manual', 2147483648, 5, 2)`,
+      [reportId],
+    ),
+    "23514",
+  );
+  await expectPgError(
+    client.query(
+      `INSERT INTO "fire_drill_participants" (
+				"fire_drill_report_id", "resident_id", "resident_name_snapshot", "participant_source",
+				"duration_minutes", "duration_seconds", "position"
+			) VALUES ($1, 'Bad roster source', 'roster', 2, 15, 2)`,
+      [reportId],
+    ),
+    "23514",
+  );
+  await expectPgError(
+    client.query(
+      `INSERT INTO "fire_drill_participants" (
+				"fire_drill_report_id", "resident_id", "resident_name_snapshot", "participant_source",
+				"duration_minutes", "duration_seconds", "position"
+			) VALUES ($1, $2, 'Bad manual source', 'manual', 3, 15, 2)`,
+      [reportId, RESIDENT_TWO_ID],
     ),
     "23514",
   );
@@ -232,11 +298,12 @@ async function exerciseFireDrillConstraints(client: PoolClient): Promise<void> {
   );
   await client.query(`DELETE FROM "residents" WHERE "id" = $1`, [RESIDENT_ID]);
   const participantAfterDelete = await client.query(
-    `SELECT "resident_id", "resident_name_snapshot" FROM "fire_drill_participants" WHERE "fire_drill_report_id" = $1`,
+    `SELECT "resident_id", "resident_name_snapshot" FROM "fire_drill_participants" WHERE "fire_drill_report_id" = $1 ORDER BY "position"`,
     [reportId],
   );
   assert.deepEqual(participantAfterDelete.rows, [
     { resident_id: null, resident_name_snapshot: "Resident One" },
+    { resident_id: RESIDENT_TWO_ID, resident_name_snapshot: "Resident Two" },
   ]);
 
   await client.query(

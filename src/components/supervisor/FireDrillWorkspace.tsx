@@ -15,6 +15,7 @@ import {
 	validateStaffNames,
 	type FireDrillReportRecord,
 	type ParticipantDraft,
+	type ParticipantSource,
 } from './fireDrillModel';
 import {
 	collectLegacyPages,
@@ -52,6 +53,12 @@ type EditorForm = {
 
 const inputClass =
 	'w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100';
+
+const PARTICIPANT_SOURCE_LABELS: Record<ParticipantSource, string> = {
+	roster: 'Roster resident',
+	manual: 'Manual participant',
+	external: 'External participant',
+};
 
 export default function FireDrillWorkspace() {
 	const currentYear = new Date().getFullYear();
@@ -167,26 +174,40 @@ export default function FireDrillWorkspace() {
 		closeEditorAfterSave();
 	}
 
+	function appendParticipant(participant: ParticipantDraft) {
+		if (!editorForm) return;
+		setEditorForm({
+			...editorForm,
+			participants: [...editorForm.participants, participant],
+		});
+	}
+
 	function addResident() {
 		if (!editorForm || !residentToAdd) return;
 		const resident = residents.find((candidate) => candidate.id === residentToAdd);
 		if (!resident || editorForm.participants.some((participant) => participant.residentId === resident.id)) return;
-		setEditorForm({
-			...editorForm,
-			participants: [
-				...editorForm.participants,
-				{
-					key: newDraftKey(),
-					residentId: resident.id,
-					residentNameSnapshot: resident.name,
-					participantSource: 'roster',
-					durationMinutes: '',
-					durationSeconds: '',
-					comment: '',
-				},
-			],
+		appendParticipant({
+			key: newDraftKey(),
+			residentId: resident.id,
+			residentNameSnapshot: resident.name,
+			participantSource: 'roster',
+			durationMinutes: '',
+			durationSeconds: '',
+			comment: '',
 		});
 		setResidentToAdd('');
+	}
+
+	function addNamedParticipant(participantSource: Exclude<ParticipantSource, 'roster'>) {
+		appendParticipant({
+			key: newDraftKey(),
+			residentId: null,
+			residentNameSnapshot: '',
+			participantSource,
+			durationMinutes: '',
+			durationSeconds: '',
+			comment: '',
+		});
 	}
 
 	function updateParticipant(index: number, changes: Partial<ParticipantDraft>) {
@@ -196,6 +217,38 @@ export default function FireDrillWorkspace() {
 			participants: editorForm.participants.map((participant, participantIndex) =>
 				participantIndex === index ? {...participant, ...changes} : participant
 			),
+		});
+	}
+
+	function updateParticipantSource(index: number, participantSource: ParticipantSource) {
+		if (!editorForm) return;
+		const current = editorForm.participants[index];
+		if (!current) return;
+		if (participantSource === 'roster') {
+			const resident = current.residentId
+				? residents.find((candidate) => candidate.id === current.residentId)
+				: null;
+			updateParticipant(index, {
+				participantSource,
+				residentId: resident?.id ?? null,
+				residentNameSnapshot: resident?.name ?? '',
+			});
+			return;
+		}
+
+		updateParticipant(index, {
+			participantSource,
+			residentId: null,
+		});
+	}
+
+	function updateParticipantResident(index: number, residentId: string) {
+		if (!editorForm) return;
+		const resident = residents.find((candidate) => candidate.id === residentId);
+		updateParticipant(index, {
+			participantSource: 'roster',
+			residentId: resident?.id ?? null,
+			residentNameSnapshot: resident?.name ?? '',
 		});
 	}
 
@@ -393,7 +446,11 @@ export default function FireDrillWorkspace() {
 					onFormChange={setEditorForm}
 					onResidentToAddChange={setResidentToAdd}
 					onAddResident={addResident}
+					onAddManualParticipant={() => addNamedParticipant('manual')}
+					onAddExternalParticipant={() => addNamedParticipant('external')}
 					onUpdateParticipant={updateParticipant}
+					onChangeParticipantSource={updateParticipantSource}
+					onChangeParticipantResident={updateParticipantResident}
 					onSave={saveReport}
 					onClose={closeEditor}
 					onReload={() => {
@@ -470,7 +527,11 @@ function FireDrillEditor(props: {
 	onFormChange: (form: EditorForm) => void;
 	onResidentToAddChange: (id: string) => void;
 	onAddResident: () => void;
+	onAddManualParticipant: () => void;
+	onAddExternalParticipant: () => void;
 	onUpdateParticipant: (index: number, changes: Partial<ParticipantDraft>) => void;
+	onChangeParticipantSource: (index: number, participantSource: ParticipantSource) => void;
+	onChangeParticipantResident: (index: number, residentId: string) => void;
 	onSave: (event: React.FormEvent) => void;
 	onClose: () => void;
 	onReload: () => void;
@@ -480,8 +541,16 @@ function FireDrillEditor(props: {
 	onVoid: () => void;
 }) {
 	const slot = FIRE_DRILL_SLOTS.find((candidate) => candidate.sequence === props.editor.sequence)!;
-	const selectedRosterIds = new Set(props.form.participants.map((participant) => participant.residentId).filter(Boolean));
+	const selectedRosterIds = new Set(
+		props.form.participants
+			.filter((participant) => participant.participantSource === 'roster' && participant.residentId)
+			.map((participant) => participant.residentId as string)
+	);
 	const availableResidents = props.residents.filter((resident) => !selectedRosterIds.has(resident.id));
+	const residentOptionsFor = (participant: ParticipantDraft) =>
+		props.residents.filter(
+			(resident) => resident.id === participant.residentId || !selectedRosterIds.has(resident.id)
+		);
 	const minimumDate = `${props.year}-01-01`;
 	const maximumDate = `${props.year}-12-31`;
 
@@ -555,13 +624,15 @@ function FireDrillEditor(props: {
 
 					<fieldset>
 						<legend className="text-sm font-semibold text-gray-900">Resident evacuation results</legend>
-						<div className="mt-2 flex flex-col gap-2 sm:flex-row">
+						<div className="mt-2 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
 							<label className="sr-only" htmlFor="fire-drill-add-resident">Authorized house resident</label>
 							<select id="fire-drill-add-resident" className={inputClass} value={props.residentToAdd} onChange={(event) => props.onResidentToAddChange(event.target.value)}>
 								<option value="">Choose an authorized resident…</option>
 								{availableResidents.map((resident) => <option key={resident.id} value={resident.id}>{resident.name}</option>)}
 							</select>
-							<button type="button" onClick={props.onAddResident} disabled={!props.residentToAdd} className="shrink-0 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:bg-gray-300">Add resident</button>
+							<button type="button" onClick={props.onAddResident} disabled={!props.residentToAdd} className="shrink-0 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:bg-gray-300">Add roster resident</button>
+							<button type="button" onClick={props.onAddManualParticipant} className="shrink-0 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">Add manual participant</button>
+							<button type="button" onClick={props.onAddExternalParticipant} className="shrink-0 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">Add external participant</button>
 						</div>
 						{props.residents.length === 0 && <p className="mt-2 text-xs text-amber-800">No active residents are available for this house.</p>}
 						{props.form.participants.length === 0 ? (
@@ -573,19 +644,63 @@ function FireDrillEditor(props: {
 										<div className="flex flex-wrap items-start justify-between gap-2">
 											<div>
 												<h4 id={`fire-drill-participant-${participant.key}`} className="font-medium text-gray-900">{participant.residentNameSnapshot || `Resident ${index + 1}`}</h4>
-												<p className="text-xs text-gray-500">{participant.participantSource === 'roster' ? 'Authorized roster resident' : 'Saved historical resident snapshot'}</p>
+												<p className="text-xs text-gray-500">{PARTICIPANT_SOURCE_LABELS[participant.participantSource]}</p>
 											</div>
 											<div className="flex items-center gap-1">
 												<OrderButtons label={participant.residentNameSnapshot || `resident ${index + 1}`} index={index} count={props.form.participants.length} onMove={moveResident} />
 												<button type="button" onClick={() => props.onFormChange({...props.form, participants: props.form.participants.filter((_, participantIndex) => participantIndex !== index)})} className="rounded px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50">Remove</button>
 											</div>
 										</div>
-										{participant.participantSource !== 'roster' && (
-											<div className="mt-3">
-												<label htmlFor={`fire-drill-resident-name-${participant.key}`} className="mb-1 block text-xs font-medium text-gray-700">Saved resident name</label>
-												<input id={`fire-drill-resident-name-${participant.key}`} maxLength={255} required className={inputClass} value={participant.residentNameSnapshot} onChange={(event) => props.onUpdateParticipant(index, {residentNameSnapshot: event.target.value})} />
+										<div className="mt-3 grid gap-3 lg:grid-cols-3">
+											<div>
+												<label htmlFor={`fire-drill-source-${participant.key}`} className="mb-1 block text-xs font-medium text-gray-700">Participant source</label>
+												<select
+													id={`fire-drill-source-${participant.key}`}
+													className={inputClass}
+													value={participant.participantSource}
+													onChange={(event) => props.onChangeParticipantSource(index, event.target.value as ParticipantSource)}
+												>
+													<option value="roster">Roster resident</option>
+													<option value="manual">Manual participant</option>
+													<option value="external">External participant</option>
+												</select>
 											</div>
-										)}
+											{participant.participantSource === 'roster' ? (
+												<div className="lg:col-span-2">
+													<label htmlFor={`fire-drill-resident-${participant.key}`} className="mb-1 block text-xs font-medium text-gray-700">Authorized resident</label>
+													<select
+														id={`fire-drill-resident-${participant.key}`}
+														className={inputClass}
+														value={participant.residentId ?? ''}
+														onChange={(event) => props.onChangeParticipantResident(index, event.target.value)}
+													>
+														<option value="">Choose an authorized resident…</option>
+														{residentOptionsFor(participant).map((resident) => <option key={resident.id} value={resident.id}>{resident.name}</option>)}
+													</select>
+													<p className="mt-1 text-xs text-gray-500">Selecting a resident keeps this result linked to the roster.</p>
+												</div>
+											) : (
+												<div className="lg:col-span-2">
+													<label htmlFor={`fire-drill-resident-name-${participant.key}`} className="mb-1 block text-xs font-medium text-gray-700">
+														{participant.participantSource === 'manual' ? 'Manual participant name' : 'External participant name'}
+													</label>
+													<input
+														id={`fire-drill-resident-name-${participant.key}`}
+														maxLength={255}
+														required
+														className={inputClass}
+														value={participant.residentNameSnapshot}
+														onChange={(event) => props.onUpdateParticipant(index, {residentNameSnapshot: event.target.value})}
+														placeholder={participant.participantSource === 'manual' ? 'Name of the person in the house' : 'Name of the outside participant'}
+													/>
+													<p className="mt-1 text-xs text-gray-500">
+														{participant.participantSource === 'manual'
+															? 'Use a free-text name when the person is not on the house roster.'
+															: 'Use a free-text name for a visitor, contractor, or other outside participant.'}
+													</p>
+												</div>
+											)}
+										</div>
 										<div className="mt-3 grid gap-3 sm:grid-cols-2">
 											<div>
 												<label htmlFor={`fire-drill-minutes-${participant.key}`} className="mb-1 block text-xs font-medium text-gray-700">Minutes to gathering place</label>

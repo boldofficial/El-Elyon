@@ -55,6 +55,36 @@ test('participant validation accepts zero minutes and rejects duplicates and inv
 	assert.match(invalidSeconds.errors.join(' '), /0 through 59/i);
 });
 
+test('manual and external participants can be named without roster ids', () => {
+	const result = validateParticipantDrafts([
+		draft({
+			key: 'manual',
+			residentId: null,
+			participantSource: 'manual',
+			residentNameSnapshot: 'Contractor One',
+		}),
+		draft({
+			key: 'external',
+			residentId: null,
+			participantSource: 'external',
+			residentNameSnapshot: 'Visitor One',
+		}),
+	]);
+
+	assert.deepEqual(result.errors, []);
+	assert.deepEqual(
+		result.participants.map((participant) => [
+			participant.participantSource,
+			participant.residentId,
+			participant.residentNameSnapshot,
+		]),
+		[
+			['manual', null, 'Contractor One'],
+			['external', null, 'Visitor One'],
+		]
+	);
+});
+
 test('staff validation trims names and rejects case-insensitive duplicates', () => {
 	assert.deepEqual(validateStaffNames([' Morgan ', 'Taylor']).staffNames, ['Morgan', 'Taylor']);
 	assert.match(validateStaffNames(['Morgan', 'morgan']).errors.join(' '), /already added/i);

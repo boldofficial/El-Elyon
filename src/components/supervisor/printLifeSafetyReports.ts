@@ -3,6 +3,7 @@ import {
 	printDocument,
 	type PrintDocumentOptions
 } from '../shared/printDocument';
+import {MAX_FIRE_DRILL_DURATION_MINUTES} from '@/lib/life-safety-reporting';
 import type {LifeSafetyEquipmentType} from '@/lib/life-safety-reporting';
 
 const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
@@ -287,6 +288,7 @@ function validateDuration(participant: PrintableFireDrillParticipant): void {
 	if (
 		!Number.isInteger(durationMinutes) ||
 		(durationMinutes as number) < 0 ||
+		(durationMinutes as number) > MAX_FIRE_DRILL_DURATION_MINUTES ||
 		!Number.isInteger(durationSeconds) ||
 		(durationSeconds as number) < 0 ||
 		(durationSeconds as number) > 59
