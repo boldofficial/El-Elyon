@@ -1074,6 +1074,9 @@ export const inspectorAccess = pgTable(
 	'inspector_access',
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
+		locationId: uuid('location_id').references(() => locations.id, {
+			onDelete: 'set null'
+		}),
 		location: varchar('location', {length: 255}).notNull(),
 		label: varchar('label', {length: 255}), // e.g. inspector name / purpose
 		otpHash: varchar('otp_hash', {length: 255}).notNull(),
@@ -1087,6 +1090,9 @@ export const inspectorAccess = pgTable(
 	},
 	(table) => ({
 		otpHashIdx: index('inspector_access_otp_hash_idx').on(table.otpHash),
+		locationIdIdx: index('inspector_access_location_id_idx').on(
+			table.locationId
+		),
 		locationIdx: index('inspector_access_location_idx').on(table.location),
 		expiresAtIdx: index('inspector_access_expires_at_idx').on(table.expiresAt)
 	})

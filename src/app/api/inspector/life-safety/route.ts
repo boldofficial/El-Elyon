@@ -14,7 +14,7 @@ export async function GET(request: Request) {
 	try {
 		// Scope is derived exclusively from the validated live session. Client
 		// query parameters, headers, and bodies are intentionally ignored.
-		const data = await getInspectorLifeSafetyData(session.location);
+		const data = await getInspectorLifeSafetyData(session.locationId);
 		return NextResponse.json(data, {headers: privateNoStore});
 	} catch (error) {
 		if (error instanceof InspectorLifeSafetyScopeError) {

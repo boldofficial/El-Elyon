@@ -2,6 +2,29 @@
 -- This migration is deliberately additive: the legacy smoke_detector_checks and
 -- fire_drills tables are neither altered nor used as a backfill source.
 
+ALTER TABLE "inspector_access"
+	ADD COLUMN IF NOT EXISTS "location_id" uuid;
+
+ALTER TABLE "inspector_access"
+	ADD CONSTRAINT "inspector_access_location_fk"
+	FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS "inspector_access_location_id_idx"
+	ON "inspector_access" ("location_id");
+
+WITH unique_active_locations AS (
+	SELECT "name", min("id") AS "location_id"
+	FROM "locations"
+	WHERE "status" = 'active'
+	GROUP BY "name"
+	HAVING count(*) = 1
+)
+UPDATE "inspector_access" ia
+SET "location_id" = ual."location_id"
+FROM unique_active_locations ual
+WHERE ia."location" = ual."name"
+	AND ia."location_id" IS NULL;
+
 CREATE TABLE IF NOT EXISTS "life_safety_inspection_entries" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"location_id" uuid NOT NULL,

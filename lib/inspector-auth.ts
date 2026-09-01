@@ -8,8 +8,8 @@
 
 import crypto from 'crypto';
 import {db} from '@/db/index';
-import {inspectorAccess} from '@/db/schema';
-import {eq} from 'drizzle-orm';
+import {inspectorAccess, locations} from '@/db/schema';
+import {and, eq} from 'drizzle-orm';
 
 export const INSPECTOR_COOKIE = 'inspector_session';
 
@@ -77,6 +77,7 @@ function verifySignature(token: string): string | null {
 
 export interface InspectorSession {
 	accessId: string;
+	locationId: string;
 	location: string;
 	label: string | null;
 	expiresAt: Date;
@@ -103,10 +104,17 @@ export async function getInspectorSession(
 	if (!access) return null;
 	if (access.revokedAt) return null;
 	if (access.expiresAt.getTime() <= Date.now()) return null;
+	if (!access.locationId) return null;
+
+	const location = await db.query.locations.findFirst({
+		where: and(eq(locations.id, access.locationId), eq(locations.status, 'active')),
+	});
+	if (!location) return null;
 
 	return {
 		accessId: access.id,
-		location: access.location,
+		locationId: access.locationId,
+		location: location.name,
 		label: access.label,
 		expiresAt: access.expiresAt,
 	};

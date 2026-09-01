@@ -17,7 +17,7 @@ import {eq, and, asc, desc, inArray, isNull} from 'drizzle-orm';
 import {hashOtp} from '@/lib/inspector-auth';
 import {
 	projectInspectorLifeSafetyData,
-	requireExactlyOneActiveInspectorLocation,
+	InspectorLifeSafetyScopeError,
 } from '@/lib/inspector-life-safety-projection';
 
 // Find a live (non-revoked, non-expired) grant matching a submitted OTP.
@@ -148,16 +148,15 @@ export async function getInspectorAllowedFileIds(
 }
 
 // Minimal life-safety projection for a live inspector session. The session's
-// location name is the only scope input: route query parameters never enter
-// this boundary. Duplicate active location names fail closed.
-export async function getInspectorLifeSafetyData(sessionLocation: string) {
-	const matchingLocations = await db
-		.select({id: locations.id, name: locations.name})
-		.from(locations)
-		.where(and(eq(locations.name, sessionLocation), eq(locations.status, 'active')))
-		.orderBy(asc(locations.id))
-		.limit(2);
-	const location = requireExactlyOneActiveInspectorLocation(matchingLocations, sessionLocation);
+// immutable location ID is the only scope input: route query parameters never
+// enter this boundary.
+export async function getInspectorLifeSafetyData(locationId: string) {
+	const location = await db.query.locations.findFirst({
+		where: and(eq(locations.id, locationId), eq(locations.status, 'active')),
+	});
+	if (!location) {
+		throw new InspectorLifeSafetyScopeError();
+	}
 
 	const [inspections, reports, legacySmokeChecks, legacyFireDrills] = await Promise.all([
 		db

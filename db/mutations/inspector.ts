@@ -1,6 +1,6 @@
 import {db} from '../index';
-import {inspectorAccess} from '../schema';
-import {eq} from 'drizzle-orm';
+import {inspectorAccess, locations} from '../schema';
+import {and, asc, eq} from 'drizzle-orm';
 import {generateOtp, hashOtp} from '@/lib/inspector-auth';
 import {logAudit} from '@/lib/db-helpers';
 
@@ -15,10 +15,22 @@ export async function createInspectorAccess(args: {
 }) {
 	const otp = generateOtp();
 
+	const matches = await db
+		.select({id: locations.id, name: locations.name})
+		.from(locations)
+		.where(and(eq(locations.name, args.location), eq(locations.status, 'active')))
+		.orderBy(asc(locations.id))
+		.limit(2);
+	if (matches.length !== 1) {
+		throw new Error('Location not found');
+	}
+	const location = matches[0]!;
+
 	const [record] = await db
 		.insert(inspectorAccess)
 		.values({
-			location: args.location,
+			locationId: location.id,
+			location: location.name,
 			label: args.label,
 			otpHash: hashOtp(otp),
 			expiresAt: args.expiresAt,
@@ -33,9 +45,9 @@ export async function createInspectorAccess(args: {
 	await logAudit({
 		clerkUserId: args.createdBy,
 		event: 'inspector_access.created',
-		details: `Created inspector access ${record.id} for ${args.location}, expires ${args.expiresAt.toISOString()}`,
+		details: `Created inspector access ${record.id} for ${location.name}, expires ${args.expiresAt.toISOString()}`,
 		deviceId: 'system',
-		location: args.location,
+		location: location.name,
 	});
 
 	return {record, otp};
@@ -47,6 +59,13 @@ export async function revokeInspectorAccess(id: string, revokedBy: string) {
 	});
 	if (!existing) throw new Error('Inspector access not found');
 
+	const currentLocation = existing.locationId
+		? await db.query.locations.findFirst({
+				where: eq(locations.id, existing.locationId),
+			})
+		: null;
+	const locationName = currentLocation?.name || existing.location;
+
 	const [updated] = await db
 		.update(inspectorAccess)
 		.set({revokedAt: new Date(), revokedBy})
@@ -56,9 +75,9 @@ export async function revokeInspectorAccess(id: string, revokedBy: string) {
 	await logAudit({
 		clerkUserId: revokedBy,
 		event: 'inspector_access.revoked',
-		details: `Revoked inspector access ${id} for ${existing.location}`,
+		details: `Revoked inspector access ${id} for ${locationName}`,
 		deviceId: 'system',
-		location: existing.location,
+		location: locationName,
 	});
 
 	return updated;

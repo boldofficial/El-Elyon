@@ -5,10 +5,13 @@
 // access dies when the grant expires or an admin revokes it.
 
 import {NextResponse} from 'next/server';
+import {db} from '@/db/index';
 import {findActiveInspectorAccessByOtp} from '@/db/queries/inspector';
 import {touchInspectorAccess} from '@/db/mutations/inspector';
+import {locations} from '@/db/schema';
 import {sessionCookie} from '@/lib/inspector-auth';
 import {logAudit} from '@/lib/db-helpers';
+import {and, eq} from 'drizzle-orm';
 
 export async function POST(req: Request) {
 	try {
@@ -18,7 +21,17 @@ export async function POST(req: Request) {
 		}
 
 		const access = await findActiveInspectorAccessByOtp(otp.trim());
-		if (!access) {
+		if (!access || !access.locationId) {
+			return NextResponse.json(
+				{error: 'Invalid or expired access code'},
+				{status: 401}
+			);
+		}
+
+		const location = await db.query.locations.findFirst({
+			where: and(eq(locations.id, access.locationId), eq(locations.status, 'active')),
+		});
+		if (!location) {
 			return NextResponse.json(
 				{error: 'Invalid or expired access code'},
 				{status: 401}
@@ -31,11 +44,12 @@ export async function POST(req: Request) {
 			event: 'inspector.login',
 			details: `Inspector session started for access ${access.id}`,
 			deviceId: 'inspector',
-			location: access.location,
+			location: location.name,
 		});
 
 		const res = NextResponse.json({
-			location: access.location,
+			locationId: location.id,
+			location: location.name,
 			label: access.label,
 			expiresAt: access.expiresAt,
 		});
