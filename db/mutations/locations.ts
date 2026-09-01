@@ -1,7 +1,7 @@
 // src/db/mutations/locations.ts
 
 import {db} from '../index';
-import {locations} from '../schema';
+import {locationLegacyNames, locations} from '../schema';
 import {eq} from 'drizzle-orm';
 
 // ============================
@@ -18,16 +18,35 @@ export async function updateLocation(
 		status?: string;
 	}
 ) {
-	const [updated] = await db
-		.update(locations)
-		.set({
-			...data,
-			updatedAt: new Date(),
-		})
-		.where(eq(locations.id, locationId))
-		.returning();
+	return db.transaction(async (tx) => {
+		const [current] = await tx
+			.select({name: locations.name})
+			.from(locations)
+			.where(eq(locations.id, locationId))
+			.limit(1);
+		if (!current) return undefined;
 
-	return updated;
+		const [updated] = await tx
+			.update(locations)
+			.set({
+				...data,
+				updatedAt: new Date(),
+			})
+			.where(eq(locations.id, locationId))
+			.returning();
+
+		if (!updated) return undefined;
+
+		await tx
+			.insert(locationLegacyNames)
+			.values([
+				{locationId, name: current.name, createdAt: new Date()},
+				{locationId, name: updated.name, createdAt: new Date()},
+			])
+			.onConflictDoNothing();
+
+		return updated;
+	});
 }
 
 export async function createLocation(data: {
@@ -38,15 +57,28 @@ export async function createLocation(data: {
 	status?: string;
 	createdBy: string;
 }) {
-	const [location] = await db
-		.insert(locations)
-		.values({
-			...data,
-			createdAt: new Date(),
-		})
-		.returning();
+	return db.transaction(async (tx) => {
+		const [location] = await tx
+			.insert(locations)
+			.values({
+				...data,
+				createdAt: new Date(),
+			})
+			.returning();
 
-	return location;
+		if (!location) return undefined;
+
+		await tx
+			.insert(locationLegacyNames)
+			.values({
+				locationId: location.id,
+				name: location.name,
+				createdAt: new Date(),
+			})
+			.onConflictDoNothing();
+
+		return location;
+	});
 }
 
 export async function deleteLocation(locationId: string) {

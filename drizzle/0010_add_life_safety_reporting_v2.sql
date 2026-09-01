@@ -2,6 +2,28 @@
 -- This migration is deliberately additive: the legacy smoke_detector_checks and
 -- fire_drills tables are neither altered nor used as a backfill source.
 
+CREATE TABLE IF NOT EXISTS "location_legacy_names" (
+	"location_id" uuid NOT NULL,
+	"name" varchar(255) NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "location_legacy_names_location_fk"
+		FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS "location_legacy_names_location_id_idx"
+	ON "location_legacy_names" ("location_id");
+
+CREATE INDEX IF NOT EXISTS "location_legacy_names_name_idx"
+	ON "location_legacy_names" ("name");
+
+CREATE UNIQUE INDEX IF NOT EXISTS "location_legacy_names_location_id_name_uidx"
+	ON "location_legacy_names" ("location_id", "name");
+
+INSERT INTO "location_legacy_names" ("location_id", "name", "created_at")
+	SELECT "id", "name", now()
+	FROM "locations"
+	ON CONFLICT ("location_id", "name") DO NOTHING;
+
 ALTER TABLE "inspector_access"
 	ADD COLUMN IF NOT EXISTS "location_id" uuid;
 

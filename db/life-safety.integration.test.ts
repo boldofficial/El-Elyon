@@ -50,6 +50,7 @@ test(
       );
       await client.query(migration);
       assert.deepEqual(await legacyFingerprint(client), legacyBefore);
+      await assertLocationIdentityBackfill(client);
 
       await exerciseInspectionConstraints(client);
       await exerciseFireDrillConstraints(client);
@@ -87,7 +88,12 @@ async function createPrerequisites(client: PoolClient): Promise<void> {
   await client.query(`
 		CREATE TABLE "locations" (
 			"id" uuid PRIMARY KEY,
-			"name" varchar(255) NOT NULL
+			"name" varchar(255) NOT NULL,
+			"status" varchar(50) NOT NULL DEFAULT 'active'
+		);
+		CREATE TABLE "inspector_access" (
+			"id" uuid PRIMARY KEY,
+			"location" varchar(255) NOT NULL
 		);
 		CREATE TABLE "residents" (
 			"id" uuid PRIMARY KEY,
@@ -118,6 +124,10 @@ async function seedLegacyFixtures(client: PoolClient): Promise<void> {
     [LOCATION_ID],
   );
   await client.query(
+    `INSERT INTO "inspector_access" ("id", "location")
+     VALUES ('55555555-5555-4555-8555-555555555555', 'House One')`,
+  );
+  await client.query(
     `INSERT INTO "residents" ("id", "name", "location") VALUES ($1, 'Resident One', 'House One')`,
     [RESIDENT_ID],
   );
@@ -135,6 +145,19 @@ async function seedLegacyFixtures(client: PoolClient): Promise<void> {
 		VALUES
 			('44444444-4444-4444-8444-444444444444', 'House One', 2025, 1, 'Legacy Resident', 'Do not group');
 	`);
+}
+
+async function assertLocationIdentityBackfill(client: PoolClient): Promise<void> {
+  const aliases = await client.query(
+    `SELECT "location_id", "name" FROM "location_legacy_names" ORDER BY "name"`,
+  );
+  assert.deepEqual(aliases.rows, [{location_id: LOCATION_ID, name: "House One"}]);
+
+  const grant = await client.query(
+    `SELECT "location_id" FROM "inspector_access"
+     WHERE "id" = '55555555-5555-4555-8555-555555555555'`,
+  );
+  assert.equal(grant.rows[0]?.location_id, LOCATION_ID);
 }
 
 async function legacyFingerprint(client: PoolClient): Promise<unknown> {

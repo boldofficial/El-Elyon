@@ -623,6 +623,26 @@ export const locations = pgTable(
 	})
 );
 
+export const locationLegacyNames = pgTable(
+	'location_legacy_names',
+	{
+		locationId: uuid('location_id')
+			.notNull()
+			.references(() => locations.id, {onDelete: 'cascade'}),
+		name: varchar('name', {length: 255}).notNull(),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(table) => ({
+		locationIdx: index('location_legacy_names_location_id_idx').on(
+			table.locationId
+		),
+		nameIdx: index('location_legacy_names_name_idx').on(table.name),
+		locationNameUidx: uniqueIndex(
+			'location_legacy_names_location_id_name_uidx'
+		).on(table.locationId, table.name)
+	})
+);
+
 // HR Files Table
 export const hrFiles = pgTable(
 	'hr_files',

@@ -3,6 +3,7 @@ import {
 	fireDrillParticipants,
 	fireDrillReports,
 	fireDrills,
+	locationLegacyNames,
 	lifeSafetyInspectionEntries,
 	locations,
 	residents,
@@ -10,6 +11,11 @@ import {
 } from '@/db/schema';
 import {requireCareAccess} from '@/lib/db-helpers';
 import {and, asc, eq, gt, gte, inArray, isNull, lte} from 'drizzle-orm';
+import {groupFireDrillJoinRows} from './fire-drill-aggregate';
+import {
+	aliasesAreUnambiguous,
+	matchUniqueAssignedLocations,
+} from './life-safety-scope';
 
 export class LifeSafetyNotFoundError extends Error {
 	constructor(message = 'Life-safety record not found') {
@@ -31,6 +37,11 @@ export type LifeSafetyAccessContext = {
 	locationNames: string[];
 };
 
+type AuthorizedLocation = {
+	id: string;
+	name: string;
+};
+
 export async function getLifeSafetyAccessContext(
 	clerkUserId: string
 ): Promise<LifeSafetyAccessContext> {
@@ -42,25 +53,103 @@ export async function getLifeSafetyAccessContext(
 	};
 }
 
+export async function resolveActiveLocationById(
+	locationId: string
+): Promise<AuthorizedLocation | null> {
+	const [location] = await db
+		.select({id: locations.id, name: locations.name})
+		.from(locations)
+		.where(and(eq(locations.id, locationId), eq(locations.status, 'active')))
+		.limit(1);
+	return location || null;
+}
+
+export async function resolveActiveLocationByName(
+	locationName: string
+): Promise<AuthorizedLocation | null> {
+	const rows = await db
+		.select({id: locations.id, name: locations.name})
+		.from(locations)
+		.where(and(eq(locations.name, locationName), eq(locations.status, 'active')))
+		.orderBy(asc(locations.id))
+		.limit(2);
+	return rows.length === 1 ? rows[0]! : null;
+}
+
+export async function resolveAuthorizedActiveLocations(
+	context: LifeSafetyAccessContext
+): Promise<AuthorizedLocation[] | null> {
+	if (context.isAdmin) {
+		return db
+			.select({id: locations.id, name: locations.name})
+			.from(locations)
+			.where(eq(locations.status, 'active'))
+			.orderBy(asc(locations.name), asc(locations.id));
+	}
+
+	const assignedNames = context.locationNames.map((name) => name.trim()).filter(Boolean);
+	if (assignedNames.length !== context.locationNames.length) return null;
+	if (assignedNames.length === 0) return [];
+
+	const rows = await db
+		.select({id: locations.id, name: locations.name})
+		.from(locations)
+		.where(and(eq(locations.status, 'active'), inArray(locations.name, assignedNames)))
+		.orderBy(asc(locations.name), asc(locations.id));
+	return matchUniqueAssignedLocations(context.locationNames, rows);
+}
+
+export async function listLocationAliases(locationId: string): Promise<string[] | null> {
+	return listLocationAliasesForLocationIds([locationId]);
+}
+
+export async function listLocationAliasesForLocationIds(
+	locationIds: string[]
+): Promise<string[] | null> {
+	const uniqueLocationIds = Array.from(
+		new Set(locationIds.map((locationId) => locationId.trim()).filter(Boolean))
+	);
+	if (uniqueLocationIds.length === 0) return [];
+
+	const scopedRows = await db
+		.select({name: locationLegacyNames.name})
+		.from(locationLegacyNames)
+		.where(inArray(locationLegacyNames.locationId, uniqueLocationIds))
+		.orderBy(asc(locationLegacyNames.createdAt), asc(locationLegacyNames.name));
+
+	const aliasNames = Array.from(new Set(scopedRows.map((row) => row.name)));
+	if (aliasNames.length === 0) return [];
+
+	const collisions = await db
+		.select({
+			locationId: locationLegacyNames.locationId,
+			name: locationLegacyNames.name,
+		})
+		.from(locationLegacyNames)
+		.where(inArray(locationLegacyNames.name, aliasNames))
+		.orderBy(asc(locationLegacyNames.name), asc(locationLegacyNames.locationId));
+
+	if (!aliasesAreUnambiguous(collisions)) return null;
+
+	return aliasNames;
+}
+
 export async function resolveAuthorizedLifeSafetyLocation(
 	context: LifeSafetyAccessContext,
 	locationId: string
 ) {
-	if (!context.isAdmin && context.locationNames.length === 0) {
+	const authorizedLocations = await resolveAuthorizedActiveLocations(context);
+	if (!authorizedLocations || authorizedLocations.length === 0) {
 		throw new LifeSafetyNotFoundError();
 	}
 
-	const conditions = [eq(locations.id, locationId)];
-	if (!context.isAdmin) {
-		conditions.push(inArray(locations.name, context.locationNames));
+	if (context.isAdmin) {
+		const location = await resolveActiveLocationById(locationId);
+		if (!location) throw new LifeSafetyNotFoundError();
+		return location;
 	}
 
-	const [location] = await db
-		.select({id: locations.id, name: locations.name})
-		.from(locations)
-		.where(and(...conditions))
-		.limit(1);
-
+	const location = authorizedLocations.find((entry) => entry.id === locationId);
 	if (!location) throw new LifeSafetyNotFoundError();
 	return location;
 }
@@ -68,36 +157,31 @@ export async function resolveAuthorizedLifeSafetyLocation(
 export async function resolveAuthorizedLegacyLocation(
 	context: LifeSafetyAccessContext,
 	locationName: string
-): Promise<string> {
-	if (!context.isAdmin && context.locationNames.length === 0) {
+): Promise<AuthorizedLocation> {
+	const location = await resolveActiveLocationByName(locationName);
+	if (!location) {
 		throw new LifeSafetyNotFoundError();
 	}
 
-	const conditions = [eq(locations.name, locationName)];
-	if (!context.isAdmin) {
-		conditions.push(inArray(locations.name, context.locationNames));
+	if (context.isAdmin) {
+		return location;
 	}
-	const [location] = await db
-		.select({name: locations.name})
-		.from(locations)
-		.where(and(...conditions))
-		.limit(1);
-	if (!location) throw new LifeSafetyNotFoundError();
-	return location.name;
+
+	const authorizedLocations = await resolveAuthorizedActiveLocations(context);
+	if (!authorizedLocations || authorizedLocations.length === 0) {
+		throw new LifeSafetyNotFoundError();
+	}
+	if (!authorizedLocations.some((entry) => entry.id === location.id)) {
+		throw new LifeSafetyNotFoundError();
+	}
+	return location;
 }
 
 export async function listAuthorizedLifeSafetyLocations(args: {clerkUserId: string}) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
-	if (!context.isAdmin && context.locationNames.length === 0) return [];
-
-	const conditions = [eq(locations.status, 'active')];
-	if (!context.isAdmin) conditions.push(inArray(locations.name, context.locationNames));
-
-	return db
-		.select({id: locations.id, name: locations.name})
-		.from(locations)
-		.where(and(...conditions))
-		.orderBy(asc(locations.name), asc(locations.id));
+	const authorizedLocations = await resolveAuthorizedActiveLocations(context);
+	if (!authorizedLocations) return [];
+	return authorizedLocations;
 }
 
 export async function listLifeSafetyInspections(args: {
@@ -130,15 +214,11 @@ export async function getLifeSafetyInspection(args: {
 	id: string;
 }) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
-	if (!context.isAdmin && context.locationNames.length === 0) {
+	const authorizedLocations = await resolveAuthorizedActiveLocations(context);
+	if (!authorizedLocations || authorizedLocations.length === 0) {
 		throw new LifeSafetyNotFoundError();
 	}
-	const allowedLocationIds = context.isAdmin
-		? db.select({id: locations.id}).from(locations)
-		: db
-				.select({id: locations.id})
-				.from(locations)
-				.where(inArray(locations.name, context.locationNames));
+	const allowedLocationIds = authorizedLocations.map((location) => location.id);
 	const [entry] = await db
 		.select()
 		.from(lifeSafetyInspectionEntries)
@@ -166,12 +246,20 @@ export async function listFireDrillReports(args: {
 		eq(fireDrillReports.reportYear, args.year),
 	];
 	if (!args.includeVoided) conditions.push(isNull(fireDrillReports.voidedAt));
-	const reports = await db
-		.select()
+	const rows = await db
+		.select({report: fireDrillReports, participant: fireDrillParticipants})
 		.from(fireDrillReports)
+		.leftJoin(
+			fireDrillParticipants,
+			eq(fireDrillParticipants.fireDrillReportId, fireDrillReports.id)
+		)
 		.where(and(...conditions))
-		.orderBy(asc(fireDrillReports.sequence), asc(fireDrillReports.createdAt));
-	return attachParticipants(reports);
+		.orderBy(
+			asc(fireDrillReports.sequence),
+			asc(fireDrillReports.createdAt),
+			asc(fireDrillParticipants.position)
+		);
+	return groupFireDrillJoinRows(rows);
 }
 
 export async function getFireDrillReport(args: {
@@ -179,27 +267,27 @@ export async function getFireDrillReport(args: {
 	id: string;
 }) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
-	if (!context.isAdmin && context.locationNames.length === 0) {
+	const authorizedLocations = await resolveAuthorizedActiveLocations(context);
+	if (!authorizedLocations || authorizedLocations.length === 0) {
 		throw new LifeSafetyNotFoundError();
 	}
-	const allowedLocationIds = context.isAdmin
-		? db.select({id: locations.id}).from(locations)
-		: db
-				.select({id: locations.id})
-				.from(locations)
-				.where(inArray(locations.name, context.locationNames));
-	const [report] = await db
-		.select()
+	const allowedLocationIds = authorizedLocations.map((location) => location.id);
+	const rows = await db
+		.select({report: fireDrillReports, participant: fireDrillParticipants})
 		.from(fireDrillReports)
+		.leftJoin(
+			fireDrillParticipants,
+			eq(fireDrillParticipants.fireDrillReportId, fireDrillReports.id)
+		)
 		.where(
 			and(
 				eq(fireDrillReports.id, args.id),
 				inArray(fireDrillReports.locationId, allowedLocationIds)
 			)
 		)
-		.limit(1);
-	if (!report) throw new LifeSafetyNotFoundError();
-	const [aggregate] = await attachParticipants([report]);
+		.orderBy(asc(fireDrillParticipants.position));
+	const [aggregate] = groupFireDrillJoinRows(rows);
+	if (!aggregate) throw new LifeSafetyNotFoundError();
 	return aggregate;
 }
 
@@ -226,7 +314,14 @@ export async function listLegacySmokeDetectorChecks(args: {
 }) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
 	const location = await resolveAuthorizedLegacyLocation(context, args.location);
-	const conditions = [eq(smokeDetectorChecks.location, location)];
+	const legacyLocationNames = await listLocationAliases(location.id);
+	if (legacyLocationNames === null) throw new LifeSafetyNotFoundError();
+	const conditions = [
+		inArray(
+			smokeDetectorChecks.location,
+			legacyLocationNames.length > 0 ? legacyLocationNames : [location.name]
+		),
+	];
 	if (args.cursor) conditions.push(gt(smokeDetectorChecks.id, args.cursor));
 	if (args.year) {
 		const startMonth = args.month ? args.month - 1 : 0;
@@ -248,12 +343,20 @@ export async function getLegacySmokeDetectorCheck(args: {
 	id: string;
 }) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
-	if (!context.isAdmin && context.locationNames.length === 0) {
+	const authorizedLocations = await resolveAuthorizedActiveLocations(context);
+	if (!authorizedLocations || authorizedLocations.length === 0) {
 		throw new LifeSafetyNotFoundError();
 	}
-	const locationScope = context.isAdmin
-		? inArray(smokeDetectorChecks.location, db.select({name: locations.name}).from(locations))
-		: inArray(smokeDetectorChecks.location, context.locationNames);
+	const legacyLocationNames = await listLocationAliasesForLocationIds(
+		authorizedLocations.map((location) => location.id)
+	);
+	if (legacyLocationNames === null) throw new LifeSafetyNotFoundError();
+	const locationScope = inArray(
+		smokeDetectorChecks.location,
+		legacyLocationNames.length > 0
+			? legacyLocationNames
+			: authorizedLocations.map((location) => location.name)
+	);
 	const [row] = await db
 		.select()
 		.from(smokeDetectorChecks)
@@ -273,7 +376,14 @@ export async function listLegacyFireDrills(args: {
 }) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
 	const location = await resolveAuthorizedLegacyLocation(context, args.location);
-	const conditions = [eq(fireDrills.location, location)];
+	const legacyLocationNames = await listLocationAliases(location.id);
+	if (legacyLocationNames === null) throw new LifeSafetyNotFoundError();
+	const conditions = [
+		inArray(
+			fireDrills.location,
+			legacyLocationNames.length > 0 ? legacyLocationNames : [location.name]
+		),
+	];
 	if (args.year) conditions.push(eq(fireDrills.year, args.year));
 	if (args.sequence) conditions.push(eq(fireDrills.sequence, args.sequence));
 	if (args.cursor) conditions.push(gt(fireDrills.id, args.cursor));
@@ -291,12 +401,20 @@ export async function getLegacyFireDrill(args: {
 	id: string;
 }) {
 	const context = await getLifeSafetyAccessContext(args.clerkUserId);
-	if (!context.isAdmin && context.locationNames.length === 0) {
+	const authorizedLocations = await resolveAuthorizedActiveLocations(context);
+	if (!authorizedLocations || authorizedLocations.length === 0) {
 		throw new LifeSafetyNotFoundError();
 	}
-	const locationScope = context.isAdmin
-		? inArray(fireDrills.location, db.select({name: locations.name}).from(locations))
-		: inArray(fireDrills.location, context.locationNames);
+	const legacyLocationNames = await listLocationAliasesForLocationIds(
+		authorizedLocations.map((location) => location.id)
+	);
+	if (legacyLocationNames === null) throw new LifeSafetyNotFoundError();
+	const locationScope = inArray(
+		fireDrills.location,
+		legacyLocationNames.length > 0
+			? legacyLocationNames
+			: authorizedLocations.map((location) => location.name)
+	);
 	const [row] = await db
 		.select()
 		.from(fireDrills)
@@ -304,19 +422,6 @@ export async function getLegacyFireDrill(args: {
 		.limit(1);
 	if (!row) throw new LifeSafetyNotFoundError();
 	return row;
-}
-
-async function attachParticipants<T extends {id: string}>(reports: T[]) {
-	if (reports.length === 0) return [] as Array<T & {participants: never[]}>;
-	const participants = await db
-		.select()
-		.from(fireDrillParticipants)
-		.where(inArray(fireDrillParticipants.fireDrillReportId, reports.map((report) => report.id)))
-		.orderBy(asc(fireDrillParticipants.position));
-	return reports.map((report) => ({
-		...report,
-		participants: participants.filter((participant) => participant.fireDrillReportId === report.id),
-	}));
 }
 
 function page<T extends {id: string}>(rows: T[], limit: number) {

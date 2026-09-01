@@ -15,6 +15,8 @@ import {
 } from '../schema';
 import {eq, and, asc, desc, inArray, isNull} from 'drizzle-orm';
 import {hashOtp} from '@/lib/inspector-auth';
+import {listLocationAliases} from './life-safety';
+import {groupFireDrillJoinRows} from './fire-drill-aggregate';
 import {
 	projectInspectorLifeSafetyData,
 	InspectorLifeSafetyScopeError,
@@ -157,8 +159,13 @@ export async function getInspectorLifeSafetyData(locationId: string) {
 	if (!location) {
 		throw new InspectorLifeSafetyScopeError();
 	}
+	const legacyNames = await listLocationAliases(location.id);
+	if (legacyNames === null) {
+		throw new InspectorLifeSafetyScopeError();
+	}
+	const legacyLocationNames = legacyNames.length > 0 ? legacyNames : [location.name];
 
-	const [inspections, reports, legacySmokeChecks, legacyFireDrills] = await Promise.all([
+	const [inspections, reportRows, legacySmokeChecks, legacyFireDrills] = await Promise.all([
 		db
 			.select({
 				reportYear: lifeSafetyInspectionEntries.reportYear,
@@ -181,19 +188,37 @@ export async function getInspectorLifeSafetyData(locationId: string) {
 			),
 		db
 			.select({
-				id: fireDrillReports.id,
-				reportYear: fireDrillReports.reportYear,
-				sequence: fireDrillReports.sequence,
-				drillDate: fireDrillReports.drillDate,
-				drillTime: fireDrillReports.drillTime,
-				staffNames: fireDrillReports.staffNames,
+				report: {
+					id: fireDrillReports.id,
+					reportYear: fireDrillReports.reportYear,
+					sequence: fireDrillReports.sequence,
+					drillDate: fireDrillReports.drillDate,
+					drillTime: fireDrillReports.drillTime,
+					staffNames: fireDrillReports.staffNames,
+				},
+				participant: {
+					fireDrillReportId: fireDrillParticipants.fireDrillReportId,
+					residentNameSnapshot: fireDrillParticipants.residentNameSnapshot,
+					durationMinutes: fireDrillParticipants.durationMinutes,
+					durationSeconds: fireDrillParticipants.durationSeconds,
+					comment: fireDrillParticipants.comment,
+					position: fireDrillParticipants.position,
+				},
 			})
 			.from(fireDrillReports)
+			.leftJoin(
+				fireDrillParticipants,
+				eq(fireDrillParticipants.fireDrillReportId, fireDrillReports.id)
+			)
 			.where(and(
 				eq(fireDrillReports.locationId, location.id),
 				isNull(fireDrillReports.voidedAt)
 			))
-			.orderBy(desc(fireDrillReports.reportYear), asc(fireDrillReports.sequence)),
+			.orderBy(
+				desc(fireDrillReports.reportYear),
+				asc(fireDrillReports.sequence),
+				asc(fireDrillParticipants.position)
+			),
 		db
 			.select({
 				date: smokeDetectorChecks.date,
@@ -203,7 +228,7 @@ export async function getInspectorLifeSafetyData(locationId: string) {
 				notes: smokeDetectorChecks.notes,
 			})
 			.from(smokeDetectorChecks)
-			.where(eq(smokeDetectorChecks.location, location.name))
+			.where(inArray(smokeDetectorChecks.location, legacyLocationNames))
 			.orderBy(desc(smokeDetectorChecks.date)),
 		db
 			.select({
@@ -216,24 +241,13 @@ export async function getInspectorLifeSafetyData(locationId: string) {
 				comment: fireDrills.comment,
 			})
 			.from(fireDrills)
-			.where(eq(fireDrills.location, location.name))
+			.where(inArray(fireDrills.location, legacyLocationNames))
 			.orderBy(desc(fireDrills.year), asc(fireDrills.sequence), desc(fireDrills.date)),
 	]);
 
-	const participants = reports.length === 0
-		? []
-		: await db
-				.select({
-					fireDrillReportId: fireDrillParticipants.fireDrillReportId,
-					residentNameSnapshot: fireDrillParticipants.residentNameSnapshot,
-					durationMinutes: fireDrillParticipants.durationMinutes,
-					durationSeconds: fireDrillParticipants.durationSeconds,
-					comment: fireDrillParticipants.comment,
-					position: fireDrillParticipants.position,
-				})
-				.from(fireDrillParticipants)
-				.where(inArray(fireDrillParticipants.fireDrillReportId, reports.map((report) => report.id)))
-				.orderBy(asc(fireDrillParticipants.position));
+	const aggregates = groupFireDrillJoinRows(reportRows);
+	const reports = aggregates.map(({participants: _participants, ...report}) => report);
+	const participants = aggregates.flatMap((report) => report.participants);
 
 	return projectInspectorLifeSafetyData({
 		location,
