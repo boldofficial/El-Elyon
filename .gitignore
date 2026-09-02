@@ -44,5 +44,10 @@ sync-error.log
 *.tsbuildinfo
 next-env.d.ts
 
-# Drizzle ORM auto-generated files
-drizzle/meta/
+# Drizzle ORM migration ledger -- MUST be committed, not ignored.
+# `drizzle/meta/_journal.json` is the ordered record of which migrations exist,
+# and the snapshots are what `drizzle-kit generate` diffs against. Ignoring them
+# is why this repo had no journal and migrations had to be pasted in by hand:
+# without the journal, `drizzle-kit migrate` cannot run at all, and without a
+# snapshot, `drizzle-kit generate` emits a full CREATE of every table.
+# See docs/deployment/2026-09-01-water-temperature-rollout.md.

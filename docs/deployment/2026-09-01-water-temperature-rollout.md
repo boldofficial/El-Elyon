@@ -64,11 +64,38 @@ Deploy in this order, and do not compress steps 1 and 3.
    COMMIT;
    ```
 
-   > **Operational hazard:** this repo has no `drizzle/meta/_journal.json`, so
-   > there is no record of which migrations any given database has received, and
-   > `drizzle-kit migrate` cannot drive them. They are applied by hand, and
-   > `0008` is a pre-existing gap in the sequence (not a missing file). Verify
-   > applied state by inspecting tables, as above, rather than assuming.
+   > `0008` is a pre-existing gap in the migration sequence, not a missing file.
+
+### Tool-driven migrations (preferred)
+
+`drizzle/meta/_journal.json` and a baseline snapshot now exist, so
+`npm run db:migrate` can drive migrations instead of hand-pasting SQL.
+
+**A database migrated by hand must be baselined exactly once first.** It has no
+`drizzle.__drizzle_migrations` table, so it looks completely un-migrated to
+drizzle — and `db:migrate` would attempt `0000_initial_database_schema.sql`, a
+full `CREATE TABLE` script, against a populated database.
+
+```bash
+npm run db:baseline -- --list                              # tags in journal order
+npm run db:baseline -- --through 0010_add_life_safety_reporting_v2
+```
+
+Apply that emitted SQL to the target, then run `npm run db:migrate`. Choose
+`--through` by **inspecting the database** with the probe above — baselining a
+migration that was never actually applied causes drizzle to skip it forever.
+
+How the skip decision works (drizzle-orm 0.44.x): drizzle reads the single most
+recent `created_at` from `drizzle.__drizzle_migrations` and applies every journal
+entry with a greater `when`. The `hash` column is recorded but never compared,
+so a CRLF/LF checkout difference cannot trigger a spurious re-run.
+
+**Caveat on `db:generate`.** The baseline snapshot (`meta/0012_snapshot.json`)
+was derived from `db/schema.ts`, not from production. If the hand-applied
+migrations ever drifted from `schema.ts`, the first generated migration will
+encode that drift. `db:generate` is verified to be a no-op against the current
+schema today — but **read every generated migration before applying it**, and do
+not use `db:push` against production.
 2. **Verify the schema is live** before shipping code that writes to it:
    ```bash
    npm run water-temperature:cutover-report

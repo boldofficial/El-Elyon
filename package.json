@@ -15,6 +15,7 @@
 		"water-temperature:post-deploy-check": "tsx scripts/water-temperature-rollout-check.ts post-deploy",
 		"db:generate": "drizzle-kit generate --name",
 		"db:migrate": "drizzle-kit migrate",
+		"db:baseline": "node scripts/drizzle-baseline.mjs",
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio"
 	},
