@@ -7,6 +7,7 @@ import {
 	boolean,
 	jsonb,
 	index,
+	uniqueIndex,
 	uuid,
 } from 'drizzle-orm/pg-core';
 import {relations} from 'drizzle-orm';
@@ -415,6 +416,31 @@ export const ispAcknowledgments = pgTable(
 			table.residentId,
 			table.clerkUserId
 		),
+	})
+);
+
+// ISP File Acknowledgments Table
+// Read receipts for uploaded ISP *files* (the ispFiles system). Distinct from
+// ispAcknowledgments, which is tied to the legacy `isp` content records.
+export const ispFileAcknowledgments = pgTable(
+	'isp_file_acknowledgments',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		ispFileId: uuid('isp_file_id')
+			.notNull()
+			.references(() => ispFiles.id, {onDelete: 'cascade'}),
+		residentId: uuid('resident_id')
+			.notNull()
+			.references(() => residents.id, {onDelete: 'cascade'}),
+		clerkUserId: varchar('clerk_user_id', {length: 255}).notNull(),
+		acknowledgedAt: timestamp('acknowledged_at').notNull().defaultNow(),
+	},
+	(table) => ({
+		fileUserIdx: uniqueIndex('isp_file_ack_file_user_idx').on(
+			table.ispFileId,
+			table.clerkUserId
+		),
+		userIdx: index('isp_file_ack_user_idx').on(table.clerkUserId),
 	})
 );
 
@@ -901,7 +927,22 @@ export const ispFilesRelations = relations(ispFiles, ({one, many}) => ({
 		references: [residents.id],
 	}),
 	accessLogs: many(ispAccessLogs),
+	acknowledgments: many(ispFileAcknowledgments),
 }));
+
+export const ispFileAcknowledgmentsRelations = relations(
+	ispFileAcknowledgments,
+	({one}) => ({
+		ispFile: one(ispFiles, {
+			fields: [ispFileAcknowledgments.ispFileId],
+			references: [ispFiles.id],
+		}),
+		resident: one(residents, {
+			fields: [ispFileAcknowledgments.residentId],
+			references: [residents.id],
+		}),
+	})
+);
 
 export const ispAccessLogsRelations = relations(ispAccessLogs, ({one}) => ({
 	ispFile: one(ispFiles, {
