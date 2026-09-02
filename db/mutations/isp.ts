@@ -1,6 +1,6 @@
 import {db} from '../index';
-import {isp, ispFiles, residents} from '../schema';
-import {eq, and, InferInsertModel, InferSelectModel, isNull, or} from 'drizzle-orm';
+import {isp, ispFiles, ispFileAcknowledgments, complianceAlerts, residents} from '../schema';
+import {eq, and, sql, InferInsertModel, InferSelectModel, isNull, or} from 'drizzle-orm';
 import {requireCareAccess, logAudit} from '@/lib/db-helpers';
 
 type IspInsert = InferInsertModel<typeof isp>;
@@ -152,6 +152,19 @@ export async function activateISPFile(ispFileId: string, activatedByClerkUserId:
     throw new Error('Failed to activate ISP file');
   }
 
+  // A newly activated ISP resets the 6-month clock, so clear any active ISP
+  // deadline reminder for this resident immediately ("until it is updated").
+  await db
+    .update(complianceAlerts)
+    .set({active: false, status: 'resolved'})
+    .where(
+      and(
+        eq(complianceAlerts.type, 'isp'),
+        eq(complianceAlerts.active, true),
+        sql`${complianceAlerts.metadata}->>'residentId' = ${ispFileToActivate.residentId}`
+      )
+    );
+
   await logAudit({
     clerkUserId: activatedByClerkUserId,
     event: 'isp_file.activated',
@@ -161,6 +174,38 @@ export async function activateISPFile(ispFileId: string, activatedByClerkUserId:
   });
 
   return activatedISP;
+}
+
+// Mutation: Acknowledge an ISP File (read receipt)
+// Idempotent — a repeat acknowledgment is ignored via the unique (file,user) index.
+export async function acknowledgeISPFile(clerkUserId: string, ispFileId: string) {
+  const file = await db.query.ispFiles.findFirst({
+    where: eq(ispFiles.id, ispFileId),
+  });
+
+  if (!file) {
+    throw new Error('ISP file not found');
+  }
+
+  await db
+    .insert(ispFileAcknowledgments)
+    .values({
+      ispFileId,
+      residentId: file.residentId,
+      clerkUserId,
+      acknowledgedAt: new Date(),
+    })
+    .onConflictDoNothing();
+
+  await logAudit({
+    clerkUserId,
+    event: 'isp_file.acknowledged',
+    details: `Acknowledged ISP file ${ispFileId} for resident ${file.residentId}, version ${file.versionLabel}`,
+    deviceId: 'system',
+    location: '',
+  });
+
+  return {success: true};
 }
 
 // Mutation: Delete ISP File

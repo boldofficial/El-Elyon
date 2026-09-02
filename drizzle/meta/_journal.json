@@ -61,33 +61,40 @@
     {
       "idx": 8,
       "version": "7",
+      "when": 1787109942000,
+      "tag": "0008_add_isp_file_acknowledgments",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
       "when": 1787112288000,
       "tag": "0009_add_inspector_access",
       "breakpoints": true
     },
     {
-      "idx": 9,
+      "idx": 10,
       "version": "7",
       "when": 1788149032000,
       "tag": "0010_add_life_safety_reporting_v2",
       "breakpoints": true
     },
     {
-      "idx": 10,
+      "idx": 11,
       "version": "7",
       "when": 1788278566000,
       "tag": "0011_add_daily_water_temperature_checks",
       "breakpoints": true
     },
     {
-      "idx": 11,
+      "idx": 12,
       "version": "7",
       "when": 1788285084000,
       "tag": "0012_fix_water_temperature_action_required_check",
       "breakpoints": true
     },
     {
-      "idx": 12,
+      "idx": 13,
       "version": "7",
       "when": 1788321277060,
       "tag": "0013_seed_config_operational_time_zone",

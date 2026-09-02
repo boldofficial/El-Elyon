@@ -41,9 +41,9 @@ export default function CareProfileWorkspace() {
 				setEditFirstName(nameParts[0] || '');
 				setEditLastName(nameParts.slice(1).join(' ') || '');
 
-				const ackRes = await fetch('/api/care/pending-acknowledgments');
-				const acks = await ackRes.json();
-				setPendingAcknowledgments(acks);
+				const ackRes = await fetch('/api/care/dashboard-notifications');
+				const data = await ackRes.json();
+				setPendingAcknowledgments(data.pendingIspAcks || []);
 			} catch (error) {
 				console.error('Error fetching profile data:', error);
 			}
@@ -52,22 +52,22 @@ export default function CareProfileWorkspace() {
 		fetchData();
 	}, []);
 
-	const handleAcknowledge = async (residentId: string, ispId: string) => {
-		setProcessingAck(ispId);
+	const handleAcknowledge = async (ispFileId: string) => {
+		setProcessingAck(ispFileId);
 		try {
-			const res = await fetch('/api/care/acknowledge-isp', {
+			const res = await fetch('/api/care/isp-files/acknowledge', {
 				method: 'POST',
 				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify({residentId, ispId}),
+				body: JSON.stringify({ispFileId}),
 			});
 
 			if (!res.ok) throw new Error('Failed to acknowledge ISP');
 
 			toast.success('ISP acknowledged successfully');
 
-			const ackRes = await fetch('/api/care/pending-acknowledgments');
-			const acks = await ackRes.json();
-			setPendingAcknowledgments(acks);
+			setPendingAcknowledgments((prev) =>
+				prev.filter((a) => a.ispFileId !== ispFileId)
+			);
 		} catch (error) {
 			toast.error('Failed to acknowledge ISP');
 			console.error('Error acknowledging ISP:', error);
@@ -466,33 +466,34 @@ export default function CareProfileWorkspace() {
 				) : (
 					<div className="divide-y divide-gray-200">
 						{pendingAcknowledgments.map((item: any) => (
-							<div key={item.ispId} className="p-6">
+							<div key={item.ispFileId} className="p-6">
 								<div className="flex items-center justify-between">
 									<div className="flex-1">
 										<div className="flex items-center space-x-3 mb-2">
 											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-												Resident {item.residentNeutralId}
+												{item.residentName}
 											</span>
 											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-												ISP Version {item.ispVersion}
+												{item.versionLabel}
 											</span>
 										</div>
 
-										<p className="text-sm text-gray-600 mb-1">
-											Location: {item.location}
-										</p>
+										{item.location && (
+											<p className="text-sm text-gray-600 mb-1">
+												Location: {item.location}
+											</p>
+										)}
 										<p className="text-sm text-gray-600">
-											Due: {new Date(item.dueAt).toLocaleDateString()}
+											Effective:{' '}
+											{new Date(item.effectiveDate).toLocaleDateString()}
 										</p>
 									</div>
 
 									<button
-										onClick={() =>
-											handleAcknowledge(item.residentId, item.ispId)
-										}
-										disabled={processingAck === item.ispId}
+										onClick={() => handleAcknowledge(item.ispFileId)}
+										disabled={processingAck === item.ispFileId}
 										className="px-4 py-2 bg-yellow-600 text-white rounded-md hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-										{processingAck === item.ispId
+										{processingAck === item.ispFileId
 											? 'Acknowledging...'
 											: 'Acknowledge'}
 									</button>

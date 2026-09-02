@@ -6,6 +6,7 @@ import {toast} from 'sonner';
 import {SHIFT_SLOTS, type ShiftSlot} from '@/lib/water-temperature';
 import type {WaterTemperatureStatus} from '@/db/queries/water-temperature';
 import {resolveClockOutDecision} from './waterTemperatureEntryModel';
+import DashboardNotifications from './DashboardNotifications';
 
 interface CareShiftWorkspaceProps {
 	onShiftChange?: () => void;
@@ -553,6 +554,9 @@ export default function CareShiftWorkspace({
 					)}
 				</div>
 			</div>
+
+			{/* Notifications: pending ISP acknowledgments & unread memos */}
+			<DashboardNotifications />
 
 			{/* Shift Guidelines */}
 			<div className="bg-blue-50 rounded-lg border border-blue-200 p-6">

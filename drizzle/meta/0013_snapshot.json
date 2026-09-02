@@ -1,6 +1,6 @@
 {
-  "id": "fd69289d-08aa-40a7-bcf0-bc266c0d99c1",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "ab45a91c-c7d0-4ef7-ba61-636978a8196a",
+  "prevId": "fd69289d-08aa-40a7-bcf0-bc266c0d99c1",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -3117,6 +3117,115 @@
             "id"
           ],
           "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.isp_file_acknowledgments": {
+      "name": "isp_file_acknowledgments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "isp_file_id": {
+          "name": "isp_file_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resident_id": {
+          "name": "resident_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "clerk_user_id": {
+          "name": "clerk_user_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "acknowledged_at": {
+          "name": "acknowledged_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "isp_file_ack_file_user_idx": {
+          "name": "isp_file_ack_file_user_idx",
+          "columns": [
+            {
+              "expression": "isp_file_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "clerk_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "isp_file_ack_user_idx": {
+          "name": "isp_file_ack_user_idx",
+          "columns": [
+            {
+              "expression": "clerk_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "isp_file_acknowledgments_isp_file_id_isp_files_id_fk": {
+          "name": "isp_file_acknowledgments_isp_file_id_isp_files_id_fk",
+          "tableFrom": "isp_file_acknowledgments",
+          "tableTo": "isp_files",
+          "columnsFrom": [
+            "isp_file_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "isp_file_acknowledgments_resident_id_residents_id_fk": {
+          "name": "isp_file_acknowledgments_resident_id_residents_id_fk",
+          "tableFrom": "isp_file_acknowledgments",
+          "tableTo": "residents",
+          "columnsFrom": [
+            "resident_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
