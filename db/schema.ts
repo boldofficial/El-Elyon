@@ -842,6 +842,31 @@ export const fireDrills = pgTable(
 	})
 );
 
+// Inspector Access Table
+// One-time-password grants that let a state inspector view a location's
+// compliance data through a read-only dashboard, without a Clerk account.
+export const inspectorAccess = pgTable(
+	'inspector_access',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		location: varchar('location', {length: 255}).notNull(),
+		label: varchar('label', {length: 255}), // e.g. inspector name / purpose
+		otpHash: varchar('otp_hash', {length: 255}).notNull(),
+		expiresAt: timestamp('expires_at').notNull(),
+		createdBy: varchar('created_by', {length: 255}).notNull(),
+		createdByName: varchar('created_by_name', {length: 255}),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		revokedAt: timestamp('revoked_at'),
+		revokedBy: varchar('revoked_by', {length: 255}),
+		lastAccessedAt: timestamp('last_accessed_at'),
+	},
+	(table) => ({
+		otpHashIdx: index('inspector_access_otp_hash_idx').on(table.otpHash),
+		locationIdx: index('inspector_access_location_idx').on(table.location),
+		expiresAtIdx: index('inspector_access_expires_at_idx').on(table.expiresAt),
+	})
+);
+
 // Incident Reports Table
 export const incidentReports = pgTable(
 	'incident_reports',

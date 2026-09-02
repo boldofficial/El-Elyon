@@ -59,6 +59,11 @@ const NAV_SECTIONS = [
 		icon: '📋',
 	},
 	{
+		key: 'inspector-access',
+		label: 'State Inspector Access',
+		icon: '🛂',
+	},
+	{
 		key: 'data-cleanup',
 		label: 'Data Cleanup',
 		icon: '🧹',
