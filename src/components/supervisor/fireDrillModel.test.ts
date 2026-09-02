@@ -55,19 +55,19 @@ test('participant validation accepts zero minutes and rejects duplicates and inv
 	assert.match(invalidSeconds.errors.join(' '), /0 through 59/i);
 });
 
-test('manual and external participants can be named without roster ids', () => {
+test('residents not on the roster can be named without roster ids', () => {
 	const result = validateParticipantDrafts([
 		draft({
-			key: 'manual',
+			key: 'manual-one',
 			residentId: null,
 			participantSource: 'manual',
-			residentNameSnapshot: 'Contractor One',
+			residentNameSnapshot: 'New Admission',
 		}),
 		draft({
-			key: 'external',
+			key: 'manual-two',
 			residentId: null,
-			participantSource: 'external',
-			residentNameSnapshot: 'Visitor One',
+			participantSource: 'manual',
+			residentNameSnapshot: 'Former Resident',
 		}),
 	]);
 
@@ -79,8 +79,8 @@ test('manual and external participants can be named without roster ids', () => {
 			participant.residentNameSnapshot,
 		]),
 		[
-			['manual', null, 'Contractor One'],
-			['external', null, 'Visitor One'],
+			['manual', null, 'New Admission'],
+			['manual', null, 'Former Resident'],
 		]
 	);
 });

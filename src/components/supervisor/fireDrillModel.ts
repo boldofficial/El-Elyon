@@ -5,7 +5,7 @@ export const FIRE_DRILL_SLOTS = [
 	{sequence: 2 as const, label: 'Annual Fire Drill'},
 ] as const;
 
-export type ParticipantSource = 'roster' | 'manual' | 'external';
+export type ParticipantSource = 'roster' | 'manual';
 
 export interface FireDrillParticipantRecord {
 	id?: string;

@@ -180,9 +180,15 @@ test("participant provenance agrees with the optional roster reference", () => {
     ).success,
     false,
   );
+});
+
+test("external is not an accepted participant source", () => {
+  // Fire drills record resident evacuation results only. Asserted with a null
+  // residentId so this fails on the source enum itself, not on the
+  // roster-reference refinement that would reject any source paired with an id.
   assert.equal(
     fireDrillParticipantInputSchema.safeParse(
-      participant({ participantSource: "external" }),
+      participant({ residentId: null, participantSource: "external" }),
     ).success,
     false,
   );
