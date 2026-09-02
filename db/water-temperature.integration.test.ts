@@ -31,6 +31,28 @@ const PRODUCTION_DATABASE_URL = process.env.DATABASE_URL;
 const LOCATION_ID = "11111111-1111-4111-8111-111111111111";
 const SHIFT_ID = "22222222-2222-4222-8222-222222222222";
 
+// These are the ONLY executable proofs that this feature's multi-table writes
+// are atomic. `drizzle-orm/neon-http` cannot run `db.transaction()` at all, so
+// every such write is a single-statement CTE or a compare-and-swap -- claims
+// that code review cannot verify and only a real PostgreSQL round-trip can.
+//
+// Skipping is therefore a *gap*, not a pass. Locally that is tolerable; in CI
+// it would let a green build certify guarantees nothing ever checked. Set
+// WATER_TEMPERATURE_DB_REQUIRED=1 (or CI=true) to turn a missing test database
+// into a hard failure instead of a silent skip.
+const DB_PROOFS_REQUIRED =
+  process.env.WATER_TEMPERATURE_DB_REQUIRED === "1" ||
+  process.env.CI === "true";
+
+if (!TEST_DATABASE_URL && DB_PROOFS_REQUIRED) {
+  throw new Error(
+    "WATER_TEMPERATURE_TEST_DATABASE_URL is required when " +
+      "WATER_TEMPERATURE_DB_REQUIRED=1 or CI=true. The water-temperature " +
+      "atomicity/concurrency proofs cannot be skipped in this context -- " +
+      "point it at an isolated PostgreSQL database."
+  );
+}
+
 const skipReason = TEST_DATABASE_URL
   ? false
   : "Set WATER_TEMPERATURE_TEST_DATABASE_URL to an isolated PostgreSQL database";

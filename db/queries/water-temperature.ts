@@ -11,7 +11,7 @@ import {
 	resolveActiveLocationById,
 	resolveAuthorizedActiveLocations,
 } from '@/db/queries/life-safety';
-import {requireCareAccess} from '@/lib/db-helpers';
+import {AccessDeniedError, requireCareAccess} from '@/lib/db-helpers';
 import {
 	classifyFixtureReading,
 	tenthsToFahrenheit,
@@ -39,7 +39,14 @@ export class WaterTemperatureNotFoundError extends Error {
 	}
 }
 
-export class WaterTemperatureAccessDeniedError extends Error {
+/**
+ * Water-temperature-specific authorization failure. Extends the shared
+ * `AccessDeniedError` (lib/db-helpers.ts) so route handlers map every
+ * authorization failure -- this one and the `require*Access` helpers' --
+ * with a single typed `instanceof AccessDeniedError` check instead of
+ * substring-matching human-readable error text.
+ */
+export class WaterTemperatureAccessDeniedError extends AccessDeniedError {
 	constructor(message = 'Access denied') {
 		super(message);
 		this.name = 'WaterTemperatureAccessDeniedError';

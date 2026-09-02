@@ -6,6 +6,26 @@ import {eq} from 'drizzle-orm';
 import {type AdminPrivilege} from '@/lib/admin-privileges';
 import {hasAdminPrivilege} from '@/db/queries/admin-privileges';
 
+/**
+ * Typed authorization failure raised by every `require*Access` helper below.
+ *
+ * Route handlers must map authorization to 403 with `instanceof AccessDeniedError`
+ * rather than substring-matching a human-readable message. A heuristic such as
+ * `error.message.includes('access')` also matches unrelated internal failures
+ * ("cannot access database connection"), which silently reports a real outage as
+ * an authorization result instead of a 500.
+ *
+ * It extends `Error` and keeps the historical message text, so pre-existing
+ * consumers that only check `instanceof Error` or match on the message continue
+ * to behave exactly as before.
+ */
+export class AccessDeniedError extends Error {
+	constructor(message: string) {
+		super(message);
+		this.name = 'AccessDeniedError';
+	}
+}
+
 // Helper: Get user role doc (Drizzle version)
 export async function getUserRoleDoc(clerkUserId: string) {
 	const roleDoc = await db.query.roles.findFirst({
@@ -63,7 +83,7 @@ export async function requireCareAccess(clerkUserId: string) {
 			deviceId: 'system',
 			location: '',
 		});
-		throw new Error('Care access required');
+		throw new AccessDeniedError('Care access required');
 	}
 	return userRole;
 }
@@ -81,7 +101,7 @@ export async function requireSupervisorAccess(clerkUserId: string) {
 			deviceId: 'system',
 			location: '',
 		});
-		throw new Error('Supervisor access required');
+		throw new AccessDeniedError('Supervisor access required');
 	}
 	return userRole;
 }
@@ -99,7 +119,7 @@ export async function requireAdminAccess(clerkUserId: string) {
 			deviceId: 'system',
 			location: '',
 		});
-		throw new Error('Admin access required');
+		throw new AccessDeniedError('Admin access required');
 	}
 	return userRole;
 }
@@ -122,7 +142,7 @@ export async function requireAdminOrPrivilege(
 		deviceId: 'system',
 		location: '',
 	});
-	throw new Error('Admin privilege required');
+	throw new AccessDeniedError('Admin privilege required');
 }
 
 export async function requireAdminOrAnyPrivilege(
@@ -147,7 +167,7 @@ export async function requireAdminOrAnyPrivilege(
 		deviceId: 'system',
 		location: '',
 	});
-	throw new Error('Admin privilege required');
+	throw new AccessDeniedError('Admin privilege required');
 }
 
 export async function requireAdminOrSupervisorAccess(clerkUserId: string) {
@@ -162,7 +182,7 @@ export async function requireAdminOrSupervisorAccess(clerkUserId: string) {
 			deviceId: 'system',
 			location: '',
 		});
-		throw new Error('Admin or Supervisor access required');
+		throw new AccessDeniedError('Admin or Supervisor access required');
 	}
 	return userRole;
 }

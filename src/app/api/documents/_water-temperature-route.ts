@@ -3,6 +3,7 @@ import {
 	WaterTemperatureNotFoundError,
 	WaterTemperatureShiftRequiredError,
 } from '@/db/queries/water-temperature';
+import {AccessDeniedError} from '@/lib/db-helpers';
 import {createValidationErrorResponse} from '@/lib/validation-schemas';
 import {NextResponse} from 'next/server';
 import {ZodError, type ZodType} from 'zod';
@@ -73,10 +74,12 @@ export function waterTemperatureErrorResponse(error: unknown) {
 	if (error instanceof WaterTemperatureNotFoundError) {
 		return waterTemperatureJson({error: 'Not found'}, {status: 404});
 	}
-	if (error instanceof Error && error.message.toLowerCase().includes('access')) {
-		return waterTemperatureJson({error: 'Access denied'}, {status: 403});
-	}
-	if (error instanceof Error && error.message.toLowerCase().includes('care access required')) {
+	// Typed, not substring-matched. `AccessDeniedError` covers both the shared
+	// `require*Access` helpers and `WaterTemperatureAccessDeniedError`, which
+	// extends it. A heuristic on error text (`message.includes('access')`) would
+	// also catch unrelated internal failures such as "cannot access database
+	// connection" and report a real outage as 403 Access denied instead of 500.
+	if (error instanceof AccessDeniedError) {
 		return waterTemperatureJson({error: 'Access denied'}, {status: 403});
 	}
 	console.error(
