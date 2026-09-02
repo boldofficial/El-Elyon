@@ -317,11 +317,15 @@ export async function createEmployee(
 	// ✅ Fallback: If webhook failed, create manually
 	console.log("⚠️  Webhook didn't create employee, creating manually...");
 
-	// Use transaction to ensure employee and role are created together
-	const {withTransaction} = await import('../index');
-	
-	const {newEmployee, newRole} = await withTransaction(async (tx) => {
-		const [employee] = await tx
+	// Create the employee and their role together. db.batch() sends both inserts
+	// in one request, which Neon runs as a single atomic transaction, so we can
+	// never end up with an employee that has no role. (db.transaction() throws on
+	// the neon-http driver - see the note in db/index.ts.)
+	//
+	// These two inserts are independent: the role row is keyed on clerkUserId,
+	// which we already have, not on the employee id the first insert returns.
+	const [[newEmployee]] = await db.batch([
+		db
 			.insert(employees)
 			.values({
 				name: args.name,
@@ -335,14 +339,9 @@ export async function createEmployee(
 				createdBy: adminClerkUserId,
 				employmentStatus: isFirstAdmin ? 'active' : 'pending',
 			})
-			.returning();
+			.returning(),
 
-		if (!employee) {
-			throw new Error('Failed to create employee record');
-		}
-
-		// Create role record
-		const [role] = await tx
+		db
 			.insert(roles)
 			.values({
 				clerkUserId,
@@ -351,12 +350,14 @@ export async function createEmployee(
 				assignedAt: new Date(),
 				assignedBy: adminClerkUserId,
 			})
-			.returning();
+			.returning(),
+	]);
 
-		return {newEmployee: employee, newRole: role};
-	});
+	if (!newEmployee) {
+		throw new Error('Failed to create employee record');
+	}
 
-	// Log audit (outside transaction since it's non-critical)
+	// Log audit (outside the batch since it's non-critical)
 	await logAudit({
 		clerkUserId: adminClerkUserId,
 		event: 'create_employee',

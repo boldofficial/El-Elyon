@@ -4,16 +4,9 @@ import {
 	residents,
 	guardians,
 	complianceAlerts,
-	fireEvac,
 	guardianChecklistLinks,
-	isp,
-	ispFiles,
-	ispAccessLogs,
-	ispAcknowledgments,
-	residentLogs,
-	incidentReports,
 } from '../schema';
-import {eq, sql, inArray} from 'drizzle-orm';
+import {eq, sql} from 'drizzle-orm';
 import {InferSelectModel} from 'drizzle-orm';
 import {requireCareAccess, requireAdminAccess} from '@/lib/db-helpers';
 import {logAudit} from './audit';
@@ -40,83 +33,60 @@ export async function updateResident(
 }
 
 /**
- * Complete cascade delete for resident
- * This removes all related records across the system
+ * Deletes a resident and everything that belongs to them.
+ *
+ * Most child rows are removed by the database itself: resident_logs,
+ * incident_reports, isp, isp_files, isp_access_logs, isp_acknowledgments,
+ * fire_evac, guardian_checklist_links, resident_documents and
+ * resident_log_activities all declare ON DELETE CASCADE on residents.id
+ * (see drizzle/0000_initial_database_schema.sql). Deleting them by hand here
+ * duplicated that logic and was the only reason this needed a transaction.
+ *
+ * Two things are NOT covered by a foreign key, because neither is one:
+ *   1. compliance_alerts references the resident inside a JSONB metadata blob.
+ *   2. guardians.resident_ids is a JSONB array of ids.
+ *
+ * Both are handled below, then the resident row is deleted and the cascade
+ * does the rest. All three statements go out in a single db.batch(), which
+ * Neon runs as one atomic transaction.
+ *
+ * The guardians update uses the JSONB minus operator rather than
+ * read-modify-write in TypeScript. That matters: reading every guardian,
+ * filtering the array in JS and writing it back loses concurrent updates at
+ * READ COMMITTED - two simultaneous deletions could each reinstate the other's
+ * removed id. `resident_ids - $1` has no such window.
  */
 export async function deleteResident(residentId: string) {
-	await db.transaction(async (tx) => {
-		const resident = await tx.query.residents.findFirst({
-			where: eq(residents.id, residentId),
-		});
-
-		if (!resident) {
-			throw new Error('Resident not found');
-		}
-
-		// 1. Delete all resident_logs
-		await tx
-			.delete(residentLogs)
-			.where(eq(residentLogs.residentId, residentId));
-
-		// 2. Delete all incident_reports
-		await tx
-			.delete(incidentReports)
-			.where(eq(incidentReports.residentId, residentId));
-
-		// 3. Delete all audit_logs related to this resident
-		// Note: We can't directly cascade audit_logs, but we can filter by details
-		// This is optional - you may want to keep audit logs for compliance
-
-		// 4. Delete all compliance_alerts by checking metadata.residentId
-		await tx
+	const [, , deleted] = await db.batch([
+		// 1. Compliance alerts point at the resident via metadata JSONB, not an FK.
+		db
 			.delete(complianceAlerts)
 			.where(
 				sql`(${complianceAlerts.metadata} ->> 'residentId')::text = ${residentId}`
-			);
+			),
 
-		// 5. Delete all isp_acknowledgments
-		await tx
-			.delete(ispAcknowledgments)
-			.where(eq(ispAcknowledgments.residentId, residentId));
+		// 2. Remove the id from every guardian's resident_ids array, atomically.
+		db
+			.update(guardians)
+			.set({
+				residentIds: sql`${guardians.residentIds} - ${residentId}::text`,
+			})
+			.where(
+				sql`${guardians.residentIds} @> ${JSON.stringify([residentId])}::jsonb`
+			),
 
-		// 6. Delete all isp_access_logs
-		await tx
-			.delete(ispAccessLogs)
-			.where(eq(ispAccessLogs.residentId, residentId));
+		// 3. Delete the resident; ON DELETE CASCADE clears the child tables.
+		db
+			.delete(residents)
+			.where(eq(residents.id, residentId))
+			.returning({id: residents.id}),
+	]);
 
-		// 7. Delete all isp_files
-		await tx.delete(ispFiles).where(eq(ispFiles.residentId, residentId));
+	if (deleted.length === 0) {
+		throw new Error('Resident not found');
+	}
 
-		// 8. Delete all isp records
-		await tx.delete(isp).where(eq(isp.residentId, residentId));
-
-		// 9. Delete all fire_evac plans
-		await tx.delete(fireEvac).where(eq(fireEvac.residentId, residentId));
-
-		// 10. Delete all guardian_checklist_links
-		await tx
-			.delete(guardianChecklistLinks)
-			.where(eq(guardianChecklistLinks.residentId, residentId));
-
-		// 11. Remove residentId from all guardians' residentIds arrays
-		const allGuardians = await tx.query.guardians.findMany();
-
-		for (const guardian of allGuardians) {
-			if (guardian.residentIds && guardian.residentIds.includes(residentId)) {
-				const newResidentIds = guardian.residentIds.filter(
-					(id: string) => id !== residentId
-				);
-
-				await tx
-					.update(guardians)
-					.set({residentIds: newResidentIds})
-					.where(eq(guardians.id, guardian.id));
-			}
-		}
-
-		// 12. Finally, delete the resident
-		await tx.delete(residents).where(eq(residents.id, residentId));
-	});
+	return deleted[0];
 }
 
 // High-level mutations with auth checks

@@ -27,44 +27,55 @@ export async function updateGuardian(
 	return updated;
 }
 
+/**
+ * Deletes a guardian and detaches them from the residents they were linked to.
+ *
+ * Neither link is a foreign key, so neither cascades:
+ *   1. guardian_checklist_links joins on guardian_email, not guardian_id. The
+ *      email is resolved with a subquery so we do not need to read the guardian
+ *      first - this statement has to run before the guardian row is deleted.
+ *   2. residents.guardian_ids is a JSONB array, cleared with the JSONB minus
+ *      operator so concurrent deletions cannot overwrite each other (a
+ *      read-modify-write loop in TypeScript loses updates at READ COMMITTED).
+ *
+ * db.batch() sends all three statements in one request, which Neon runs as a
+ * single atomic transaction. See the note in db/index.ts on why
+ * db.transaction() is unavailable on this driver.
+ */
 export async function deleteGuardian(guardianId: string) {
-	await db.transaction(async (tx) => {
-		const guardian = await tx.query.guardians.findFirst({
-			where: eq(guardians.id, guardianId),
-		});
-
-		if (!guardian) {
-			throw new Error('Guardian not found');
-		}
-
-		// Delete all guardian_checklist_links for this guardian (by email)
-		await tx
+	const [, , deleted] = await db.batch([
+		// 1. Remove checklist links belonging to this guardian's email.
+		db
 			.delete(guardianChecklistLinks)
-			.where(eq(guardianChecklistLinks.guardianEmail, guardian.email));
+			.where(
+				sql`${guardianChecklistLinks.guardianEmail} = (
+					select ${guardians.email} from ${guardians}
+					where ${guardians.id} = ${guardianId}
+				)`
+			),
 
-		// Remove guardianId from all residents' guardianIds arrays
-		if (guardian.residentIds && guardian.residentIds.length > 0) {
-			for (const residentId of guardian.residentIds) {
-				const resident = await tx.query.residents.findFirst({
-					where: eq(residents.id, residentId),
-				});
+		// 2. Detach the guardian from every resident that references them.
+		db
+			.update(residents)
+			.set({
+				guardianIds: sql`${residents.guardianIds} - ${guardianId}::text`,
+			})
+			.where(
+				sql`${residents.guardianIds} @> ${JSON.stringify([guardianId])}::jsonb`
+			),
 
-				if (resident && resident.guardianIds) {
-					const newGuardianIds = resident.guardianIds.filter(
-						(id: string) => id !== guardianId
-					);
+		// 3. Delete the guardian itself.
+		db
+			.delete(guardians)
+			.where(eq(guardians.id, guardianId))
+			.returning({id: guardians.id}),
+	]);
 
-					await tx
-						.update(residents)
-						.set({guardianIds: newGuardianIds})
-						.where(eq(residents.id, residentId));
-				}
-			}
-		}
+	if (deleted.length === 0) {
+		throw new Error('Guardian not found');
+	}
 
-		// Finally, delete the guardian
-		await tx.delete(guardians).where(eq(guardians.id, guardianId));
-	});
+	return deleted[0];
 }
 
 // High-level mutation with auth checks
