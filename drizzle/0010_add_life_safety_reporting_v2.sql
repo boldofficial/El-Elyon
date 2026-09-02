@@ -46,8 +46,13 @@ END $$;
 CREATE INDEX IF NOT EXISTS "inspector_access_location_id_idx"
 	ON "inspector_access" ("location_id");
 
+-- (array_agg("id"))[1] rather than min("id"): PostgreSQL has no min()/max()
+-- aggregate for uuid before version 18, so min("id") fails here with 42883
+-- "function min(uuid) does not exist". HAVING count(*) = 1 already restricts
+-- each group to exactly one row, so this picks that single id -- identical
+-- result, no version dependency.
 WITH unique_active_locations AS (
-	SELECT "name", min("id") AS "location_id"
+	SELECT "name", (array_agg("id"))[1] AS "location_id"
 	FROM "locations"
 	WHERE "status" = 'active'
 	GROUP BY "name"
