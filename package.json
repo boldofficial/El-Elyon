@@ -16,6 +16,7 @@
 		"db:generate": "drizzle-kit generate --name",
 		"db:migrate": "drizzle-kit migrate",
 		"db:baseline": "node scripts/drizzle-baseline.mjs",
+		"db:run-sql": "node scripts/run-sql-file.mjs",
 		"db:push": "drizzle-kit push",
 		"db:studio": "drizzle-kit studio"
 	},
