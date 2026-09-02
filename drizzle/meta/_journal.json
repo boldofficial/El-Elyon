@@ -85,6 +85,13 @@
       "when": 1788285084000,
       "tag": "0012_fix_water_temperature_action_required_check",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788321277060,
+      "tag": "0013_seed_config_operational_time_zone",
+      "breakpoints": true
     }
   ]
 }
