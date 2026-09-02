@@ -32,6 +32,43 @@ Deploy in this order, and do not compress steps 1 and 3.
    `0012` corrects a constraint in `0011` that would have rejected the
    `action_required` state before corrective action was documented — i.e. it
    blocks the core above-115 °F workflow. **Both must land together.**
+
+   **Prerequisite:** `0011` only *alters* `shifts` and `config` and references
+   `locations`; it does not create them. Migrations `0000`–`0010` must already be
+   applied to the target database. Running `0011` against an empty database fails
+   with `ERROR: 42P01: relation "shifts" does not exist`. Confirm the target
+   first:
+
+   ```sql
+   select current_database(), current_schema(), current_setting('search_path');
+   select table_schema, table_name from information_schema.tables
+   where table_name in ('shifts','locations','config') order by 1,2;
+   ```
+
+   Zero rows means the database is empty — apply `0000`–`0010` in order first.
+   Rows in a non-`public` schema mean `search_path` must be set before running,
+   since every migration here is schema-unqualified.
+
+   **Wrap each file in an explicit transaction.** Neither `0011` nor `0012`
+   contains `BEGIN`/`COMMIT`, and neither uses `CREATE INDEX CONCURRENTLY`, so
+   both are safe to run inside one. This matters: `0011` uses
+   `ADD COLUMN IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`, but its four
+   `ADD CONSTRAINT` statements have no such guard (PostgreSQL has no
+   `ADD CONSTRAINT IF NOT EXISTS`). Applied statement-by-statement in an
+   autocommit console, a mid-file failure leaves the migration half-applied and
+   re-running it then fails on the already-created constraint.
+
+   ```sql
+   BEGIN;
+   -- paste the full contents of 0011 here
+   COMMIT;
+   ```
+
+   > **Operational hazard:** this repo has no `drizzle/meta/_journal.json`, so
+   > there is no record of which migrations any given database has received, and
+   > `drizzle-kit migrate` cannot drive them. They are applied by hand, and
+   > `0008` is a pre-existing gap in the sequence (not a missing file). Verify
+   > applied state by inspecting tables, as above, rather than assuming.
 2. **Verify the schema is live** before shipping code that writes to it:
    ```bash
    npm run water-temperature:cutover-report
