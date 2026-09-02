@@ -20,12 +20,22 @@
 -- Table has no production rows yet (feature not launched), so this is a
 -- safe, additive, immediately-validated constraint replacement.
 
+-- IF EXISTS / conditional ADD so this is re-runnable: a migration that cannot
+-- be safely retried is how 0010 ended up half-applied in production.
 ALTER TABLE "water_temperature_checks"
-	DROP CONSTRAINT "water_temperature_checks_action_required_check";
+	DROP CONSTRAINT IF EXISTS "water_temperature_checks_action_required_check";
 
-ALTER TABLE "water_temperature_checks"
-	ADD CONSTRAINT "water_temperature_checks_action_required_check"
-	CHECK (
-		"state" <> 'recheck_required'
-		OR ("action" IS NOT NULL AND length(btrim("action")) > 0)
-	);
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint
+		WHERE conname = 'water_temperature_checks_action_required_check'
+	) THEN
+		ALTER TABLE "water_temperature_checks"
+			ADD CONSTRAINT "water_temperature_checks_action_required_check"
+			CHECK (
+				"state" <> 'recheck_required'
+				OR ("action" IS NOT NULL AND length(btrim("action")) > 0)
+			);
+	END IF;
+END $$;

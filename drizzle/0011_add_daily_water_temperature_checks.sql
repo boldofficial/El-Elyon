@@ -10,9 +10,16 @@ ALTER TABLE "shifts"
 	ADD COLUMN IF NOT EXISTS "operational_date" date,
 	ADD COLUMN IF NOT EXISTS "operational_time_zone_snapshot" varchar(100);
 
-ALTER TABLE "shifts"
-	ADD CONSTRAINT "shifts_location_fk"
-	FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE RESTRICT;
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint WHERE conname = 'shifts_location_fk'
+	) THEN
+		ALTER TABLE "shifts"
+			ADD CONSTRAINT "shifts_location_fk"
+			FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE RESTRICT;
+	END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "shifts_location_id_idx"
 	ON "shifts" ("location_id");
@@ -20,23 +27,37 @@ CREATE INDEX IF NOT EXISTS "shifts_location_id_idx"
 CREATE INDEX IF NOT EXISTS "shifts_operational_date_idx"
 	ON "shifts" ("location_id", "operational_date");
 
-ALTER TABLE "shifts"
-	ADD CONSTRAINT "shifts_shift_slot_check"
-	CHECK ("shift_slot" IS NULL OR "shift_slot" IN (1, 2, 3));
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint WHERE conname = 'shifts_shift_slot_check'
+	) THEN
+		ALTER TABLE "shifts"
+			ADD CONSTRAINT "shifts_shift_slot_check"
+			CHECK ("shift_slot" IS NULL OR "shift_slot" IN (1, 2, 3));
+	END IF;
+END $$;
 
-ALTER TABLE "shifts"
-	ADD CONSTRAINT "shifts_identity_completeness_check"
-	CHECK (
-		(
-			"location_id" IS NULL AND "shift_slot" IS NULL AND
-			"operational_date" IS NULL AND "operational_time_zone_snapshot" IS NULL
-		)
-		OR
-		(
-			"location_id" IS NOT NULL AND "shift_slot" IS NOT NULL AND
-			"operational_date" IS NOT NULL AND "operational_time_zone_snapshot" IS NOT NULL
-		)
-	);
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint WHERE conname = 'shifts_identity_completeness_check'
+	) THEN
+		ALTER TABLE "shifts"
+			ADD CONSTRAINT "shifts_identity_completeness_check"
+			CHECK (
+				(
+					"location_id" IS NULL AND "shift_slot" IS NULL AND
+					"operational_date" IS NULL AND "operational_time_zone_snapshot" IS NULL
+				)
+				OR
+				(
+					"location_id" IS NOT NULL AND "shift_slot" IS NOT NULL AND
+					"operational_date" IS NOT NULL AND "operational_time_zone_snapshot" IS NOT NULL
+				)
+			);
+	END IF;
+END $$;
 
 -- Canonical organization-local timezone. Existing config rows (and any future
 -- row that omits the field) fall back to America/Chicago; IANA validity is
@@ -45,9 +66,16 @@ ALTER TABLE "config"
 	ADD COLUMN IF NOT EXISTS "operational_time_zone" varchar(100)
 		NOT NULL DEFAULT 'America/Chicago';
 
-ALTER TABLE "config"
-	ADD CONSTRAINT "config_operational_time_zone_check"
-	CHECK (length(btrim("operational_time_zone")) > 0);
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint WHERE conname = 'config_operational_time_zone_check'
+	) THEN
+		ALTER TABLE "config"
+			ADD CONSTRAINT "config_operational_time_zone_check"
+			CHECK (length(btrim("operational_time_zone")) > 0);
+	END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS "water_temperature_checks" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,

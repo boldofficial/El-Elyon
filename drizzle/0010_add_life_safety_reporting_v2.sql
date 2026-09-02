@@ -27,9 +27,21 @@ INSERT INTO "location_legacy_names" ("location_id", "name", "created_at")
 ALTER TABLE "inspector_access"
 	ADD COLUMN IF NOT EXISTS "location_id" uuid;
 
-ALTER TABLE "inspector_access"
-	ADD CONSTRAINT "inspector_access_location_fk"
-	FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE SET NULL;
+-- PostgreSQL has no ADD CONSTRAINT IF NOT EXISTS, so guard it explicitly.
+-- Without this, a migration that failed partway through (this one did, on a
+-- later statement) can never be re-run: the retry aborts here with 42710
+-- "constraint already exists" before reaching the statements that still need
+-- to apply.
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint WHERE conname = 'inspector_access_location_fk'
+	) THEN
+		ALTER TABLE "inspector_access"
+			ADD CONSTRAINT "inspector_access_location_fk"
+			FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE SET NULL;
+	END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "inspector_access_location_id_idx"
 	ON "inspector_access" ("location_id");
