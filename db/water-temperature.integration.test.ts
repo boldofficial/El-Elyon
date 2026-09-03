@@ -90,7 +90,7 @@ test(
       await client.query(migration);
       // U3 fix: 0011's action_required_check incorrectly required non-blank
       // `action` text for the `action_required` state itself (the state a
-      // fresh above-115F observation lands in *before* any action is
+      // fresh above-range observation lands in *before* any action is
       // documented), blocking the feature's core workflow. See
       // drizzle/0012_fix_water_temperature_action_required_check.sql.
       const constraintFix = await readFile(
@@ -326,14 +326,14 @@ async function exerciseInputValidityConstraints(
     baseInsert({ state: "recheck_required" }), // no action text supplied
     "23514",
   );
-  // action_required is the state a fresh above-115F observation lands in
+  // action_required is the state a fresh above-range observation lands in
   // *before* any action is documented -- per the 0012 fix, it must NOT
   // require action text (this was 0011's defect; see the migration
   // application above).
   await baseInsert({ state: "action_required" }); // no action text supplied; must succeed
 
   // None of the rejected attempts above left rows behind, so 108F (below) and
-  // 118F (above) can still be inserted as valid, storable inputs.
+  // 125F (above) can still be inserted as valid, storable inputs.
   await client.query(
     `INSERT INTO "water_temperature_checks" (
 			"location_id", "house_name_snapshot", "operational_date", "shift_slot",
@@ -347,11 +347,11 @@ async function exerciseInputValidityConstraints(
 			"location_id", "house_name_snapshot", "operational_date", "shift_slot",
 			"kitchen_temp_tenths", "bath_temp_tenths", "staff_id", "staff_name_snapshot",
 			"staff_initials_snapshot", "observed_at", "state", "action", "created_by"
-		) VALUES ($1, 'House One', '2026-04-02', 2, 1180, 1130, 'staff-9', 'Staff Nine', 'S9', now(), 'action_required', 'Restricted resident access; notified maintenance', 'staff-9')
+		) VALUES ($1, 'House One', '2026-04-02', 2, 1250, 1130, 'staff-9', 'Staff Nine', 'S9', now(), 'action_required', 'Restricted resident access; notified maintenance', 'staff-9')
 		RETURNING "id"`,
     [LOCATION_ID],
   );
-  assert.ok(aboveRow.rows[0].id, "118F above-range reading is a valid, storable observation");
+  assert.ok(aboveRow.rows[0].id, "125F above-range reading is a valid, storable observation");
 
   // Malformed void metadata.
   await expectPgError(
@@ -380,7 +380,7 @@ async function exercisePreservationAcrossResolution(
 			"location_id", "house_name_snapshot", "operational_date", "shift_slot",
 			"kitchen_temp_tenths", "bath_temp_tenths", "staff_id", "staff_name_snapshot",
 			"staff_initials_snapshot", "observed_at", "state", "action", "created_by"
-		) VALUES ($1, 'House One', '2026-05-01', 1, 1180, 1130, 'staff-1', 'Jordan Ellis', 'JE', now(), 'recheck_required', 'Restricted use; will recheck', 'staff-1')
+		) VALUES ($1, 'House One', '2026-05-01', 1, 1250, 1130, 'staff-1', 'Jordan Ellis', 'JE', now(), 'recheck_required', 'Restricted use; will recheck', 'staff-1')
 		RETURNING "id"`,
     [LOCATION_ID],
   );
@@ -390,7 +390,7 @@ async function exercisePreservationAcrossResolution(
     `INSERT INTO "water_temperature_rechecks" (
 			"check_id", "fixture", "temp_tenths", "staff_id", "staff_name_snapshot",
 			"staff_initials_snapshot", "measured_at", "sequence", "created_by"
-		) VALUES ($1, 'kitchen', 1160, 'staff-1', 'Jordan Ellis', 'JE', now(), 1, 'staff-1')`,
+		) VALUES ($1, 'kitchen', 1230, 'staff-1', 'Jordan Ellis', 'JE', now(), 1, 'staff-1')`,
     [checkId],
   );
   await client.query(
@@ -411,8 +411,8 @@ async function exercisePreservationAcrossResolution(
   );
   assert.equal(
     header.rows[0].kitchen_temp_tenths,
-    1180,
-    "the original 118.0F kitchen observation is preserved after one unsafe and one safe recheck",
+    1250,
+    "the original 125.0F kitchen observation is preserved after one unsafe and one safe recheck",
   );
   assert.equal(header.rows[0].state, "complete");
 
@@ -421,7 +421,7 @@ async function exercisePreservationAcrossResolution(
     [checkId],
   );
   assert.deepEqual(rechecks.rows, [
-    { temp_tenths: 1160, sequence: 1 },
+    { temp_tenths: 1230, sequence: 1 },
     { temp_tenths: 1140, sequence: 2 },
   ]);
 
@@ -448,7 +448,7 @@ async function exerciseSupersedeAndRevisionRetention(
 			"location_id", "house_name_snapshot", "operational_date", "shift_slot",
 			"kitchen_temp_tenths", "bath_temp_tenths", "staff_id", "staff_name_snapshot",
 			"staff_initials_snapshot", "observed_at", "state", "action", "created_by"
-		) VALUES ($1, 'House One', '2026-05-02', 1, 1180, 1130, 'staff-1', 'Jordan Ellis', 'JE', now(), 'recheck_required', 'Restricted use; will recheck', 'staff-1')
+		) VALUES ($1, 'House One', '2026-05-02', 1, 1250, 1130, 'staff-1', 'Jordan Ellis', 'JE', now(), 'recheck_required', 'Restricted use; will recheck', 'staff-1')
 		RETURNING "id"`,
     [LOCATION_ID],
   );
@@ -497,7 +497,7 @@ async function exerciseSupersedeAndRevisionRetention(
   ]);
 
   const derived = deriveWaterTemperatureState({
-    kitchenTempTenths: 1180,
+    kitchenTempTenths: 1250,
     bathTempTenths: 1130,
     hasAction: true,
     rechecks: [
@@ -736,7 +736,7 @@ async function exerciseRecheckRacesVoidViaMutationLayer(
          "kitchen_temp_tenths", "bath_temp_tenths", "staff_id", "staff_name_snapshot",
          "staff_initials_snapshot", "observed_at", "state", "action", "created_by"
        ) VALUES (
-         $1, 'House One', '2026-07-02', 1, 1180, 1130, 'staff-1', 'Jordan Ellis', 'JE',
+         $1, 'House One', '2026-07-02', 1, 1250, 1130, 'staff-1', 'Jordan Ellis', 'JE',
          now(), 'recheck_required', 'Restricted use; will recheck', 'staff-1'
        ) RETURNING "id"`,
       [LOCATION_ID],

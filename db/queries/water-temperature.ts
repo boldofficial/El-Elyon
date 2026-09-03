@@ -418,6 +418,12 @@ export async function listWaterTemperatureChecksForMonth(args: {
 	month: number;
 	includeVoided?: boolean;
 }): Promise<WaterTemperatureCheckDto[]> {
+	// Care access (admin/supervisor/staff), scoped to the caller's authorized
+	// houses. Staff are deliberately included: they are the people who record
+	// these readings, so the month of their own house holds nothing to withhold
+	// from them. Only correction, voiding, and the other mutations are
+	// privileged -- see the PATCH paths, which check supervisor access
+	// separately.
 	const context = await getWaterTemperatureAccessContext(args.clerkUserId);
 	const location = await resolveAuthorizedWaterTemperatureLocation(context, args.locationId);
 	const {start, end} = monthBounds(args.year, args.month);
@@ -507,6 +513,49 @@ export async function getWaterTemperatureStatusForCurrentShift(
 
 	if (!row) return {status: 'due'};
 	return {status: row.state as WaterTemperatureStatus};
+}
+
+/**
+ * The ONE active record for the caller's own open, classified shift, or null
+ * when the obligation is still outstanding.
+ *
+ * This is a convenience for the entry dialog, NOT an access boundary: staff
+ * remain free to read their house's whole month via
+ * listWaterTemperatureChecksForMonth. The dialog used to call that and filter
+ * client-side for its own row, fetching up to 93 records to display one; this
+ * asks for what it actually needs.
+ *
+ * Identity comes exclusively from the caller's own open shift (R16), so there
+ * is no client-supplied location, date, or slot -- which keeps the dialog
+ * anchored to the obligation the worker is actually standing in front of,
+ * rather than one they typed a date into.
+ *
+ * It deliberately returns a colleague's record for the same location/date/
+ * slot: a replacement worker must be able to resume an unresolved corrective
+ * action, and must see an existing entry rather than duplicate it.
+ */
+export async function getWaterTemperatureCheckForCurrentShift(
+	clerkUserId: string
+): Promise<{check: WaterTemperatureCheckDto | null}> {
+	const identity = await getActiveShiftIdentity(clerkUserId);
+	if (!identity) throw new WaterTemperatureShiftRequiredError();
+
+	const [row] = await db
+		.select()
+		.from(waterTemperatureChecks)
+		.where(
+			and(
+				eq(waterTemperatureChecks.locationId, identity.locationId),
+				eq(waterTemperatureChecks.operationalDate, identity.operationalDate),
+				eq(waterTemperatureChecks.shiftSlot, identity.shiftSlot),
+				isNull(waterTemperatureChecks.voidedAt)
+			)
+		)
+		.limit(1);
+
+	if (!row) return {check: null};
+	const rechecks = await fetchRechecks(row.id);
+	return {check: toCheckDto(row, rechecks)};
 }
 
 export type {WaterTemperatureFixture, WaterTemperatureCheckState, WaterTemperatureRevisionAction};

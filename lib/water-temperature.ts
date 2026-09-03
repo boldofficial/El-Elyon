@@ -9,9 +9,25 @@ import { isValidLocalDate } from "./life-safety-reporting";
 export const WATER_TEMP_MIN_TENTHS = 0;
 export const WATER_TEMP_MAX_TENTHS = 2500;
 
-// The supplied form's safe range is 110F-115F inclusive.
+// Flagging thresholds. `SAFE_MIN_TENTHS` still matches the supplied paper
+// form's 110F floor: a reading under it stays visible as
+// `complete_with_attention`.
+//
+// `SAFE_MAX_TENTHS` no longer matches the form. The form's printed guidance
+// and escalation footer are transcribed at 115F and are deliberately left
+// that way (see ABOVE_115_ESCALATION_INSTRUCTIONS and
+// WATER_TEMPERATURE_SAFE_RANGE_VALUE), but by operational decision only a
+// reading ABOVE 121.0F now triggers the corrective-action/recheck workflow.
+// Readings from 115.1F through 121.0F therefore complete normally even
+// though the printed sheet still instructs staff to restrict resident use
+// above 115F. This divergence is intentional and known.
+//
+// These two constants are the single source of truth for classification --
+// every threshold-derived label, badge, and print annotation reads from them
+// rather than repeating a literal, so the workflow and what staff/inspectors
+// are shown can never drift apart again.
 export const SAFE_MIN_TENTHS = 1100;
-export const SAFE_MAX_TENTHS = 1150;
+export const SAFE_MAX_TENTHS = 1210;
 
 export const SHIFT_SLOTS = [1, 2, 3] as const;
 export type ShiftSlot = (typeof SHIFT_SLOTS)[number];
@@ -84,7 +100,46 @@ export function tenthsToFahrenheit(tenths: number): number {
   return tenths / 10;
 }
 
-/** Classifies a single fixture's reading against the safe 110-115F range. */
+/**
+ * The classification thresholds as plain Fahrenheit numbers, for building
+ * user-facing labels. Derived, never retyped: a label that hardcodes its own
+ * number will silently disagree with the workflow the next time a threshold
+ * moves. These describe what the system FLAGS -- they are not the paper
+ * form's printed guidance, which is transcribed separately and verbatim.
+ */
+export const SAFE_MIN_F = tenthsToFahrenheit(SAFE_MIN_TENTHS);
+export const SAFE_MAX_F = tenthsToFahrenheit(SAFE_MAX_TENTHS);
+
+/**
+ * The ceiling printed on the supplied paper form (115.0F), as a number.
+ *
+ * This is NOT a flagging threshold. It exists so surfaces can tell staff when
+ * a reading falls in the band the form calls unsafe but the software does not
+ * flag -- above FORM_GUIDANCE_MAX_TENTHS, at or below SAFE_MAX_TENTHS. Nothing
+ * in the compliance state machine reads it: `classifyFixtureReading` and
+ * `deriveWaterTemperatureState` are driven solely by SAFE_MIN/SAFE_MAX, so an
+ * advisory can never create, clear, or alter an obligation.
+ *
+ * When the two ceilings are reconciled -- by reissuing the form, or by moving
+ * SAFE_MAX_TENTHS back -- setting this equal to SAFE_MAX_TENTHS empties the
+ * advisory band and every surface goes quiet on its own.
+ */
+export const FORM_GUIDANCE_MAX_TENTHS = 1150;
+export const FORM_GUIDANCE_MAX_F = tenthsToFahrenheit(FORM_GUIDANCE_MAX_TENTHS);
+
+/**
+ * True when `tenths` sits in the advisory band: not flagged by the software,
+ * but above the printed form's published ceiling. Always false once the two
+ * ceilings agree, and false for anything the system does flag -- an
+ * above-range reading is already urgent and must not be softened into an
+ * advisory.
+ */
+export function isAboveFormGuidance(tenths: number): boolean {
+  return tenths > FORM_GUIDANCE_MAX_TENTHS && tenths <= SAFE_MAX_TENTHS;
+}
+
+/** Classifies a single fixture's reading against the safe range: below
+ * SAFE_MIN_F, above SAFE_MAX_F, or safe (inclusive of both bounds). */
 export function classifyFixtureReading(tenths: number): FixtureClassification {
   if (tenths < SAFE_MIN_TENTHS) return "below";
   if (tenths > SAFE_MAX_TENTHS) return "above";
@@ -120,11 +175,11 @@ export interface WaterTemperatureRecheckFact {
  *     -> recheck_required -> complete
  *
  * "missing" is not returned here: this function only derives the state for a
- * row that already exists. A fixture that started above 115F keeps that
- * requirement even if the same header also had a below-110F fixture; the
- * above-115 workflow takes precedence in the state label while the original
- * readings (including any below-range fixture) remain visible on the stored
- * row regardless of state.
+ * row that already exists. A fixture that started above SAFE_MAX_F keeps that
+ * requirement even if the same header also had a below-SAFE_MIN_F fixture;
+ * the above-range workflow takes precedence in the state label while the
+ * original readings (including any below-range fixture) remain visible on the
+ * stored row regardless of state.
  */
 export function deriveWaterTemperatureState(args: {
   kitchenTempTenths: number;

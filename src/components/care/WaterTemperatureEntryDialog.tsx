@@ -4,7 +4,13 @@
 
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {WaterTemperatureCheckDto, WaterTemperatureStatus} from '@/db/queries/water-temperature';
-import {MAX_ACTION_LENGTH, MAX_COMMENT_LENGTH} from '@/lib/water-temperature';
+import {
+	FORM_GUIDANCE_MAX_F,
+	MAX_ACTION_LENGTH,
+	MAX_COMMENT_LENGTH,
+	SAFE_MAX_F,
+	SAFE_MIN_F,
+} from '@/lib/water-temperature';
 import {
 	ABOVE_115_ESCALATION_INSTRUCTIONS,
 	EMPTY_DRAFT_BUNDLE,
@@ -28,6 +34,7 @@ import {
 	mapWaterTemperatureFailure,
 	newIdempotencyKey,
 	planDialogFocus,
+	type ReadingAdvisory,
 	remainingNarrativeCharacters,
 	resolveCloseIntent,
 	selectableRecheckFixtures,
@@ -54,6 +61,23 @@ const FIELD_CLASSES =
 const FOCUSABLE_SELECTOR =
 	'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
 	'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * Emphasis per advisory. Exhaustive by type rather than a ternary chain whose
+ * fallthrough would paint any new advisory as an urgent one: `above` is the
+ * only reading that carries an unmet obligation, so it is the only one in
+ * bold red. The form-guidance advisory shares `below`'s amber -- notable,
+ * nothing owed -- because an advisory styled as an alarm is one staff learn
+ * to dismiss, which would erode the real alarm next to it.
+ *
+ * Colour is never the only signal: each label states its meaning in words.
+ */
+const READING_ADVISORY_CLASSES: Record<ReadingAdvisory, string> = {
+	safe: 'text-green-800',
+	below: 'text-amber-900',
+	above_form_guidance: 'text-amber-900',
+	above: 'text-red-800 font-semibold',
+};
 
 interface WaterTemperatureEntryDialogProps {
 	identity: WaterTemperatureShiftIdentity;
@@ -129,17 +153,14 @@ export default function WaterTemperatureEntryDialog({
 		async (options: {silent?: boolean} = {}) => {
 			if (!options.silent) setLoadState('loading');
 			setLoadError(null);
-			const [year, month] = identity.operationalDate.split('-');
-			const params = new URLSearchParams({
-				locationId: identity.locationId,
-				year: String(Number(year)),
-				month: String(Number(month)),
-			});
 			try {
-				const response = await fetch(
-					`/api/documents/water-temperature-checks?${params.toString()}`,
-					{cache: 'no-store'}
-				);
+				// Staff-scoped single-record read. The server resolves the
+				// house/date/slot from the caller's own open shift, so this sends
+				// no parameters -- and, unlike the month listing it replaced, it
+				// never returns a colleague's unrelated shifts or other days.
+				const response = await fetch('/api/care/water-temperature-current', {
+					cache: 'no-store',
+				});
 				if (!response.ok) {
 					setLoadState('error');
 					setLoadError(
@@ -149,10 +170,11 @@ export default function WaterTemperatureEntryDialog({
 					return;
 				}
 				const payload = await response.json();
-				const records: WaterTemperatureCheckDto[] = Array.isArray(payload?.data)
-					? payload.data
-					: [];
-				setCheck(findCheckForIdentity(records, identity));
+				const check: WaterTemperatureCheckDto | null = payload?.check ?? null;
+				// The server already matched the caller's identity; the client-side
+				// identity filter is kept as a defence-in-depth assertion so a
+				// mismatched payload can never populate this dialog.
+				setCheck(check ? findCheckForIdentity([check], identity) : null);
 				setLoadState('ready');
 			} catch {
 				setLoadState('error');
@@ -637,14 +659,7 @@ function OriginalReadings({check}: {check: WaterTemperatureCheckDto}) {
 						<span className="font-medium text-gray-900">{entry.label}</span>
 						<span className="text-gray-900">
 							{entry.tempF.toFixed(1)}°F{' '}
-							<span
-								className={
-									entry.classification === 'safe'
-										? 'text-green-800'
-										: entry.classification === 'below'
-											? 'text-amber-900'
-											: 'text-red-800 font-semibold'
-								}>
+							<span className={READING_ADVISORY_CLASSES[entry.classification]}>
 								({entry.classificationLabel})
 							</span>
 						</span>
@@ -745,8 +760,17 @@ function TemperatureField({
 			/>
 			<p id={helpId(id)} className="mt-1 text-xs text-gray-600">
 				Degrees Fahrenheit, one decimal place. Safe range {SAFE_RANGE_LABEL}.
-				{classification === 'above' && ' This value is above 115°F and will require corrective action.'}
-				{classification === 'below' && ' This value is below 110°F and will be flagged for review.'}
+				{classification === 'above' &&
+					` This value is above ${SAFE_MAX_F}°F and will require corrective action.`}
+				{classification === 'below' &&
+					` This value is below ${SAFE_MIN_F}°F and will be flagged for review.`}
+				{/* Advisory only: the posted form is stricter than this system's
+				    flagging ceiling, so say what the form asks for while being
+				    explicit that nothing is being required here. */}
+				{classification === 'above_form_guidance' &&
+					` This value is above the posted ${FORM_GUIDANCE_MAX_F}°F guidance. It will be` +
+						' recorded without corrective action, but the posted form asks you to' +
+						' restrict resident use and notify your supervisor.'}
 			</p>
 			<FieldError fieldId={id} message={error} />
 		</div>

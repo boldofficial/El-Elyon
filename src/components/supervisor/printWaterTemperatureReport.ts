@@ -16,6 +16,7 @@ import {
 	type PrintDocumentOptions,
 } from '../shared/printDocument';
 import {ABOVE_115_ESCALATION_INSTRUCTIONS} from '../care/waterTemperatureEntryModel';
+import {SAFE_MAX_F, SAFE_MIN_F} from '@/lib/water-temperature';
 
 const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
 const LOGO_URL = '/logo.svg';
@@ -26,6 +27,14 @@ const LOGO_URL = '/logo.svg';
 
 export const WATER_TEMPERATURE_REPORT_TITLE = 'DAILY WATER TEMPERATURE CHECK LOG';
 export const WATER_TEMPERATURE_SAFE_RANGE_LEAD = 'SAFE WATER TEMPERATURE:';
+/**
+ * Transcribed from the paper form and deliberately NOT derived from
+ * SAFE_MAX_TENTHS. The system now flags only above 121.0°F, so this printed
+ * guidance intentionally states a stricter range than the software enforces:
+ * a 118°F reading prints on a sheet that calls 118°F unsafe, yet carries no
+ * flag. Kept verbatim by operational decision -- change it only alongside a
+ * decision to reissue the form itself.
+ */
 export const WATER_TEMPERATURE_SAFE_RANGE_VALUE = '110°F - 115°F';
 export const WATER_TEMPERATURE_SHIFT_INSTRUCTION =
 	'Check and document water temperatures at the beginning of each shift.';
@@ -271,10 +280,19 @@ export function buildSlotComment(
 		['kitchen', check.kitchenTempF],
 		['bath_shower', check.bathTempF],
 	] as const) {
-		if (value > 115) {
-			parts.push(`${FIXTURE_PRINT_LABELS[fixture]} ${formatTemperature(value)} above 115°F`);
-		} else if (value < 110) {
-			parts.push(`${FIXTURE_PRINT_LABELS[fixture]} ${formatTemperature(value)} below 110°F`);
+		// Derived annotation, NOT form copy: it must describe what the system
+		// actually flagged, so it reads from the classification constants. The
+		// static guidance/footer above stay transcribed at 115°F on purpose,
+		// so a reading between 115.1°F and SAFE_MAX_F prints unannotated here
+		// while the sheet's own guidance still calls it out.
+		if (value > SAFE_MAX_F) {
+			parts.push(
+				`${FIXTURE_PRINT_LABELS[fixture]} ${formatTemperature(value)} above ${SAFE_MAX_F}°F`
+			);
+		} else if (value < SAFE_MIN_F) {
+			parts.push(
+				`${FIXTURE_PRINT_LABELS[fixture]} ${formatTemperature(value)} below ${SAFE_MIN_F}°F`
+			);
 		}
 	}
 

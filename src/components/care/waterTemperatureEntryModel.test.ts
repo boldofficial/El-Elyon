@@ -22,10 +22,12 @@ import {
 	EMPTY_DRAFT_BUNDLE,
 	NARRATIVE_PRIVACY_NOTICE,
 	WATER_TEMPERATURE_ELEMENT_IDS,
+	advisoryForReading,
 	canOpenWaterTemperatureEntry,
 	canSubmitAction,
 	canSubmitInitialReadings,
 	canSubmitRecheck,
+	classificationLabel,
 	classifyTypedTemperature,
 	deriveAffectedFixtures,
 	deriveEntryContext,
@@ -451,16 +453,44 @@ test('temperatures accept one decimal place and reject higher precision or junk'
 	assert.equal(parseTemperatureField('251').ok, false);
 });
 
+test('the form-guidance band is advisory: flagged readings are never softened into it', () => {
+	// The band is open at the bottom and closed at the top: 115.0 is exactly
+	// what the form publishes as safe, and 121.0 is exactly what this system
+	// still accepts.
+	assert.equal(classifyTypedTemperature('115.0'), 'safe');
+	assert.equal(classifyTypedTemperature('115.1'), 'above_form_guidance');
+	assert.equal(classifyTypedTemperature('118.0'), 'above_form_guidance');
+	assert.equal(classifyTypedTemperature('121.0'), 'above_form_guidance');
+	// One tenth higher is a real obligation and must NOT be downgraded to the
+	// advisory -- that ordering is the whole safety property here.
+	assert.equal(classifyTypedTemperature('121.1'), 'above');
+
+	// A below-range reading is already flagged and passes through untouched.
+	assert.equal(advisoryForReading('below', 108), 'below');
+	assert.equal(advisoryForReading('above', 125), 'above');
+	assert.equal(advisoryForReading('safe', 112), 'safe');
+	assert.equal(advisoryForReading('safe', 118), 'above_form_guidance');
+
+	// The advisory says in words that nothing is required, so it can never be
+	// read as an unmet obligation.
+	assert.match(classificationLabel('above_form_guidance'), /no action required/);
+	assert.doesNotMatch(classificationLabel('above_form_guidance'), /unsafe/);
+	// ...and the genuine alarm still says unsafe.
+	assert.match(classificationLabel('above'), /unsafe/);
+});
+
 test('an unsafe typed value is classified for warning but never blocks submission', () => {
-	assert.equal(classifyTypedTemperature('118.0'), 'above');
+	assert.equal(classifyTypedTemperature('125.0'), 'above');
 	assert.equal(classifyTypedTemperature('108'), 'below');
 	assert.equal(classifyTypedTemperature('110'), 'safe');
+	// The unqualified 'safe' band tops out at the form's published ceiling;
+	// above that it is 'above_form_guidance' (covered by the advisory test).
 	assert.equal(classifyTypedTemperature('115'), 'safe');
 	assert.equal(classifyTypedTemperature('nope'), 'unknown');
-	// The saved-even-when-unsafe rule (R6): 118/113 is a submittable draft.
+	// The saved-even-when-unsafe rule (R6): 125/113 is a submittable draft.
 	assert.equal(
 		canSubmitInitialReadings({
-			draft: {kitchenTempF: '118.0', bathTempF: '113.0', comments: ''},
+			draft: {kitchenTempF: '125.0', bathTempF: '113.0', comments: ''},
 			isSubmitting: false,
 		}),
 		true

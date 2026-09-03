@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  FORM_GUIDANCE_MAX_TENTHS,
   MAX_ACTION_LENGTH,
   SAFE_MAX_TENTHS,
   SAFE_MIN_TENTHS,
   classifyFixtureReading,
   deriveWaterTemperatureState,
   fahrenheitReadingSchema,
+  isAboveFormGuidance,
   isValidIanaTimeZone,
   nextRecheckSequence,
   operationalDateSchema,
@@ -76,16 +78,38 @@ test("tenthsToFahrenheit is the inverse of toFahrenheitTenths for display", () =
 
 // --- Fixture classification -------------------------------------------------
 
-test("classifyFixtureReading uses the 110-115F inclusive safe range", () => {
+test("classifyFixtureReading treats both range bounds as inclusive", () => {
   assert.equal(classifyFixtureReading(SAFE_MIN_TENTHS), "safe");
   assert.equal(classifyFixtureReading(SAFE_MAX_TENTHS), "safe");
   assert.equal(classifyFixtureReading(SAFE_MIN_TENTHS - 1), "below");
   assert.equal(classifyFixtureReading(SAFE_MAX_TENTHS + 1), "above");
   assert.equal(classifyFixtureReading(1080), "below");
-  assert.equal(classifyFixtureReading(1180), "above");
+});
+
+// The configured thresholds, pinned. Everything above asserts behaviour
+// relative to the constants, so this is the one test that fails if the
+// flagging policy itself is changed -- which is the point: moving a
+// life-safety threshold should require deliberately editing an assertion
+// that names the number, not just quietly recolouring the suite.
+test("the configured flagging range is 110.0F-121.0F inclusive", () => {
+  assert.equal(SAFE_MIN_TENTHS, 1100);
+  assert.equal(SAFE_MAX_TENTHS, 1210);
+  // 118.0F sits inside the flagging range even though the printed paper
+  // form still calls it unsafe. That divergence is intentional; see
+  // SAFE_MAX_TENTHS in lib/water-temperature.ts.
+  assert.equal(classifyFixtureReading(1180), "safe");
+  assert.equal(classifyFixtureReading(1211), "above");
 });
 
 // --- State derivation --------------------------------------------------------
+
+// Threshold-relative fixtures. These track SAFE_MAX_TENTHS so a future
+// threshold move cannot silently turn an "unsafe" fixture into a safe one and
+// leave these tests quietly asserting the wrong workflow.
+const UNSAFE_TENTHS = SAFE_MAX_TENTHS + 40; // 125.0F at a 121.0F ceiling
+const UNSAFE_TENTHS_HIGHER = SAFE_MAX_TENTHS + 50; // 126.0F
+const UNSAFE_RECHECK_TENTHS = SAFE_MAX_TENTHS + 20; // 123.0F
+const SAFE_RECHECK_TENTHS = SAFE_MAX_TENTHS - 70; // 114.0F
 
 function recheck(
   overrides: Partial<WaterTemperatureRecheckFact>,
@@ -110,7 +134,7 @@ test("a normal 112/114 submission derives complete", () => {
   assert.equal(state, "complete");
 });
 
-test("a below-range 108/112 submission derives complete_with_attention, not the above-115 workflow", () => {
+test("a below-range 108/112 submission derives complete_with_attention, not the above-range workflow", () => {
   const state = deriveWaterTemperatureState({
     kitchenTempTenths: 1080,
     bathTempTenths: 1120,
@@ -120,9 +144,9 @@ test("a below-range 108/112 submission derives complete_with_attention, not the 
   assert.equal(state, "complete_with_attention");
 });
 
-test("118/113: kitchen above 115 requires action before any recheck can resolve it", () => {
+test("an above-range kitchen reading requires action before any recheck can resolve it", () => {
   const withoutAction = deriveWaterTemperatureState({
-    kitchenTempTenths: 1180,
+    kitchenTempTenths: UNSAFE_TENTHS,
     bathTempTenths: 1130,
     hasAction: false,
     rechecks: [],
@@ -130,7 +154,7 @@ test("118/113: kitchen above 115 requires action before any recheck can resolve 
   assert.equal(withoutAction, "action_required");
 
   const withActionNoRecheck = deriveWaterTemperatureState({
-    kitchenTempTenths: 1180,
+    kitchenTempTenths: UNSAFE_TENTHS,
     bathTempTenths: 1130,
     hasAction: true,
     rechecks: [],
@@ -138,22 +162,22 @@ test("118/113: kitchen above 115 requires action before any recheck can resolve 
   assert.equal(withActionNoRecheck, "recheck_required");
 });
 
-test("118/113: an unsafe 116 kitchen recheck remains pending; a later 114 recheck completes without losing the original 118", () => {
+test("an unsafe kitchen recheck remains pending; a later safe recheck completes without losing the original reading", () => {
   const stillUnsafe = deriveWaterTemperatureState({
-    kitchenTempTenths: 1180,
+    kitchenTempTenths: UNSAFE_TENTHS,
     bathTempTenths: 1130,
     hasAction: true,
-    rechecks: [recheck({ tempTenths: 1160, sequence: 1 })],
+    rechecks: [recheck({ tempTenths: UNSAFE_RECHECK_TENTHS, sequence: 1 })],
   });
   assert.equal(stillUnsafe, "recheck_required");
 
   const resolved = deriveWaterTemperatureState({
-    kitchenTempTenths: 1180,
+    kitchenTempTenths: UNSAFE_TENTHS,
     bathTempTenths: 1130,
     hasAction: true,
     rechecks: [
-      recheck({ tempTenths: 1160, sequence: 1 }),
-      recheck({ tempTenths: 1140, sequence: 2 }),
+      recheck({ tempTenths: UNSAFE_RECHECK_TENTHS, sequence: 1 }),
+      recheck({ tempTenths: SAFE_RECHECK_TENTHS, sequence: 2 }),
     ],
   });
   assert.equal(resolved, "complete");
@@ -161,33 +185,60 @@ test("118/113: an unsafe 116 kitchen recheck remains pending; a later 114 rechec
   // and is never mutated by state derivation.
 });
 
-test("when both fixtures exceed 115, a safe recheck for only one fixture does not complete the slot", () => {
+test("when both fixtures are above range, a safe recheck for only one does not complete the slot", () => {
   const bothAffected = deriveWaterTemperatureState({
-    kitchenTempTenths: 1180,
-    bathTempTenths: 1200,
+    kitchenTempTenths: UNSAFE_TENTHS,
+    bathTempTenths: UNSAFE_TENTHS_HIGHER,
     hasAction: true,
-    rechecks: [recheck({ fixture: "kitchen", tempTenths: 1140, sequence: 1 })],
+    rechecks: [
+      recheck({ fixture: "kitchen", tempTenths: SAFE_RECHECK_TENTHS, sequence: 1 }),
+    ],
   });
   assert.equal(bothAffected, "recheck_required");
 
   const bothResolved = deriveWaterTemperatureState({
-    kitchenTempTenths: 1180,
-    bathTempTenths: 1200,
+    kitchenTempTenths: UNSAFE_TENTHS,
+    bathTempTenths: UNSAFE_TENTHS_HIGHER,
     hasAction: true,
     rechecks: [
-      recheck({ fixture: "kitchen", tempTenths: 1140, sequence: 1 }),
+      recheck({ fixture: "kitchen", tempTenths: SAFE_RECHECK_TENTHS, sequence: 1 }),
       recheck({ fixture: "bath_shower", tempTenths: 1130, sequence: 1 }),
     ],
   });
   assert.equal(bothResolved, "complete");
 });
 
+test("a reading in the form-guidance band completes and raises no corrective workflow", () => {
+  // The band the threshold change created: the posted paper form calls 118.0F
+  // unsafe, this system does not flag it. The advisory shown to staff is
+  // presentation-only and must never reach the state machine, so this has to
+  // complete outright -- not complete_with_attention, and certainly not
+  // action_required.
+  const state = deriveWaterTemperatureState({
+    kitchenTempTenths: 1180,
+    bathTempTenths: 1130,
+    hasAction: false,
+    rechecks: [],
+  });
+  assert.equal(state, "complete");
+
+  // isAboveFormGuidance never overlaps what the system flags, in either
+  // direction -- that non-overlap is what keeps the advisory unable to soften
+  // a real obligation.
+  assert.equal(isAboveFormGuidance(SAFE_MAX_TENTHS), true);
+  assert.equal(isAboveFormGuidance(SAFE_MAX_TENTHS + 1), false);
+  assert.equal(isAboveFormGuidance(FORM_GUIDANCE_MAX_TENTHS), false);
+  assert.equal(isAboveFormGuidance(FORM_GUIDANCE_MAX_TENTHS + 1), true);
+  assert.equal(isAboveFormGuidance(SAFE_MIN_TENTHS - 1), false);
+  assert.equal(classifyFixtureReading(1180), "safe");
+});
+
 test("a superseded mistyped recheck is ignored; state derives from the latest active ordered recheck", () => {
   const mistyped = recheck({ tempTenths: 1300, sequence: 1 }); // e.g. fat-fingered
-  const corrected = recheck({ tempTenths: 1140, sequence: 2 });
+  const corrected = recheck({ tempTenths: SAFE_RECHECK_TENTHS, sequence: 2 });
 
   const withMistypeActive = deriveWaterTemperatureState({
-    kitchenTempTenths: 1180,
+    kitchenTempTenths: UNSAFE_TENTHS,
     bathTempTenths: 1130,
     hasAction: true,
     rechecks: [mistyped],
@@ -195,7 +246,7 @@ test("a superseded mistyped recheck is ignored; state derives from the latest ac
   assert.equal(withMistypeActive, "recheck_required");
 
   const withMistypeSuperseded = deriveWaterTemperatureState({
-    kitchenTempTenths: 1180,
+    kitchenTempTenths: UNSAFE_TENTHS,
     bathTempTenths: 1130,
     hasAction: true,
     rechecks: [
@@ -208,12 +259,12 @@ test("a superseded mistyped recheck is ignored; state derives from the latest ac
 
 test("a later active unsafe recheck reopens a previously-resolved fixture", () => {
   const state = deriveWaterTemperatureState({
-    kitchenTempTenths: 1180,
+    kitchenTempTenths: UNSAFE_TENTHS,
     bathTempTenths: 1130,
     hasAction: true,
     rechecks: [
-      recheck({ tempTenths: 1140, sequence: 1 }),
-      recheck({ tempTenths: 1160, sequence: 2 }),
+      recheck({ tempTenths: SAFE_RECHECK_TENTHS, sequence: 1 }),
+      recheck({ tempTenths: UNSAFE_RECHECK_TENTHS, sequence: 2 }),
     ],
   });
   assert.equal(state, "recheck_required");

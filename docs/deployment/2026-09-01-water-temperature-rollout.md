@@ -22,6 +22,68 @@ checklist is worse than a documented gap — record what actually ran.
 | U5 | `5e9f27c` | Supervisor/admin monthly workspace + printable check log |
 | U6 | `485cfef` | Read-only inspector month view + identical report |
 
+## Amendments since the plan was written
+
+Two changes land on top of U1–U6. Both alter behaviour the sections below
+describe, so read them first.
+
+### 1. The flagging ceiling is 121.0 °F, not 115 °F
+
+By operational decision, only a reading **above 121.0 °F** now triggers the
+corrective-action / recheck workflow (`SAFE_MAX_TENTHS` in
+`lib/water-temperature.ts`). The below-110 °F `complete_with_attention` flag is
+unchanged.
+
+**The printed form still says 110 °F – 115 °F, deliberately.** The transcribed
+guidance and the `IF TEMPERATURE IS ABOVE 115°F` escalation footer were kept
+verbatim. The practical consequence, which anyone reviewing a sheet needs to
+know: **a reading between 115.1 °F and 121.0 °F now completes with no flag, no
+corrective action, no recheck, and no reminder, while printing on a sheet whose
+own guidance calls that reading unsafe.** An inspector comparing the two will
+see the discrepancy. Treat "reissue the paper form, or move the constant back"
+as open follow-up, not a settled question.
+
+Derived output — the print report's comment annotations, inspector range
+badges, and staff classification labels — reads from the constants and
+therefore says 121 °F. Only the transcribed form copy says 115 °F.
+
+**The 115.1–121.0 °F band is not silent.** A fourth, advisory-only
+classification (`above_form_guidance`, from `FORM_GUIDANCE_MAX_TENTHS`) covers
+it. Staff see it on the entry field and on the saved record, worded to say the
+posted form asks them to restrict use *and* that this system requires no
+action. It is styled amber, not red — an advisory that looks like an alarm is
+one people learn to dismiss.
+
+It is presentation-only. `classifyFixtureReading` and
+`deriveWaterTemperatureState` are still driven solely by `SAFE_MIN`/`SAFE_MAX`,
+so the advisory cannot create, clear, or alter an obligation, and the stored
+`state` and DTO `classification` are unchanged. Reconciling the two ceilings
+later — reissue the form, or move `SAFE_MAX_TENTHS` back — needs only
+`FORM_GUIDANCE_MAX_TENTHS` set equal to `SAFE_MAX_TENTHS`; the band empties and
+every surface goes quiet on its own.
+
+### 2. New staff endpoint (no access change)
+
+**`GET /api/care/water-temperature-current`** returns the single active record
+for the caller's own open shift. Add it to any smoke test or route inventory:
+the staff entry/resume dialog is broken without it.
+
+It replaces the dialog's previous approach of fetching the caller's whole month
+and filtering client-side for one row — up to 93 records to display one. It is
+a narrower request, **not** an access boundary.
+
+**Read access is deliberately unchanged.** `GET /api/documents/water-temperature-checks`
+(whole-month records) remains open to care access — admin, supervisor, *and*
+staff — scoped to the caller's authorized houses. Staff are the people who
+record these readings, so their own house's month holds nothing to withhold
+from them. This was reviewed and affirmed, not overlooked; do not "harden" it
+to supervisor-only without asking, and note that the supervisor workspace UI
+still hides the month grid from staff via its `canManage` prop, so the API is
+currently more open than the interface. Mutations (correction, void, manual
+entry) remain privileged and are gated separately.
+
+Inspector access to the month projection is unchanged and remains by design.
+
 ## Deploy ordering
 
 The schema is **additive and nullable**, so N-1 application code tolerates it.

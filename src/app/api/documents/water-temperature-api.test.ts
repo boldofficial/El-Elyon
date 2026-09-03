@@ -53,10 +53,10 @@ test('staff create requests omit identity fields and require an idempotency key'
 	assert.equal(waterTemperatureStaffCreateSchema.safeParse({...valid, idempotencyKey: ''}).success, false);
 });
 
-test('above-115F is a valid, storable staff create submission (never rejected for being unsafe)', () => {
+test('an above-range reading is a valid, storable staff create submission (never rejected for being unsafe)', () => {
 	const unsafe = {
 		source: 'shift' as const,
-		kitchenTempF: 118.0,
+		kitchenTempF: 125.0,
 		bathTempF: 113.0,
 		comments: null,
 		idempotencyKey: 'client-key-2',
@@ -112,7 +112,7 @@ test('recheck requests require a valid fixture and reject an unsafe reading only
 		type: 'recheck' as const,
 		expectedVersion: 2,
 		fixture: 'kitchen' as const,
-		tempF: 118.0,
+		tempF: 125.0,
 		measuredAt: '2026-03-04T10:00:00.000Z',
 		idempotencyKey: 'recheck-key-1',
 	};
@@ -122,7 +122,7 @@ test('recheck requests require a valid fixture and reject an unsafe reading only
 		false
 	);
 	assert.equal(
-		waterTemperatureRecheckRequestSchema.safeParse({...valid, tempF: 118.87}).success,
+		waterTemperatureRecheckRequestSchema.safeParse({...valid, tempF: 125.87}).success,
 		false,
 		'more than one decimal place should be rejected'
 	);

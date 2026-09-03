@@ -21,10 +21,14 @@ import type {
 	WaterTemperatureStatus,
 } from '@/db/queries/water-temperature';
 import {
+	FORM_GUIDANCE_MAX_F,
 	MAX_ACTION_LENGTH,
 	MAX_COMMENT_LENGTH,
+	SAFE_MAX_F,
 	SAFE_MAX_TENTHS,
+	SAFE_MIN_F,
 	SAFE_MIN_TENTHS,
+	isAboveFormGuidance,
 	WATER_TEMPERATURE_FIXTURES,
 	type ShiftSlot,
 	type WaterTemperatureFixture,
@@ -55,7 +59,24 @@ export const NARRATIVE_PRIVACY_NOTICE =
 	'resident-identifying information. This text appears in inspector and ' +
 	'printed reports.';
 
+/**
+ * The paper form's printed guidance range, transcribed verbatim and kept at
+ * 110–115°F by operational decision even though the system now only flags
+ * above 121.0°F. Every surface that RESTATES the form's instruction uses
+ * this, so staff are still told to aim for the stricter published range.
+ *
+ * Do NOT use it to describe an actual classification outcome -- use
+ * FLAGGED_RANGE_LABEL for that, or the label will assert that a 118°F
+ * reading is "in range (110–115°F)", which is false.
+ */
 export const SAFE_RANGE_LABEL = '110–115°F';
+
+/**
+ * What the software actually flags, derived from the classification
+ * constants. Diverges from SAFE_RANGE_LABEL on purpose; see SAFE_MAX_TENTHS
+ * in lib/water-temperature.ts.
+ */
+export const FLAGGED_RANGE_LABEL = `${SAFE_MIN_F}–${SAFE_MAX_F}°F`;
 
 export const SAFE_RANGE_GUIDANCE =
 	`Safe range is ${SAFE_RANGE_LABEL}. Measure with a thermometer at the ` +
@@ -205,7 +226,7 @@ export function deriveWaterTemperatureBanner(
 				iconLabel: 'Urgent',
 				title: 'Unsafe water temperature — corrective action required',
 				body:
-					'A reading above 115°F was recorded and saved. Document the ' +
+					`A reading above ${SAFE_MAX_F}°F was recorded and saved. Document the ` +
 					'corrective action taken before recording a recheck.',
 				ctaLabel: 'Document corrective action',
 				showRetry: false,
@@ -459,18 +480,46 @@ export function parseTemperatureField(raw: string): TemperatureParseResult {
 	return {ok: true, value};
 }
 
+/**
+ * How a reading is described to a person. The first three mirror the
+ * compliance classifications; `above_form_guidance` is advisory only and has
+ * no counterpart in the state machine -- see FORM_GUIDANCE_MAX_TENTHS.
+ */
+export type ReadingAdvisory = 'safe' | 'below' | 'above' | 'above_form_guidance';
+
 /** Presentation-only classification of a typed value, used to warn *before*
  * submit. It never blocks submission: an unsafe observation is a fact that
- * must be saved exactly as measured (R6, "Not To Do" #2). */
+ * must be saved exactly as measured (R6, "Not To Do" #2).
+ *
+ * Order matters. `above` is tested first so a genuinely flagged reading is
+ * never downgraded to the softer advisory. */
 export function classifyTypedTemperature(
 	raw: string
-): 'safe' | 'below' | 'above' | 'unknown' {
+): ReadingAdvisory | 'unknown' {
 	const parsed = parseTemperatureField(raw);
 	if (!parsed.ok) return 'unknown';
 	const tenths = Math.round(parsed.value * 10);
 	if (tenths < SAFE_MIN_TENTHS) return 'below';
 	if (tenths > SAFE_MAX_TENTHS) return 'above';
+	if (isAboveFormGuidance(tenths)) return 'above_form_guidance';
 	return 'safe';
+}
+
+/**
+ * Refines a server-derived compliance classification into the advisory the
+ * reader should see. The server classifier stays three-valued -- it drives
+ * compliance state and its output is serialized into DTOs -- so the advisory
+ * band is recovered here from the reading itself.
+ *
+ * Only a `safe` classification can be refined. `below` and `above` are
+ * already flagged and pass through untouched.
+ */
+export function advisoryForReading(
+	classification: 'safe' | 'below' | 'above',
+	tempF: number
+): ReadingAdvisory {
+	if (classification !== 'safe') return classification;
+	return isAboveFormGuidance(Math.round(tempF * 10)) ? 'above_form_guidance' : 'safe';
 }
 
 // Mirrors lib/validation-schemas.ts's server-side rejection so a malformed
@@ -767,13 +816,13 @@ export function clockOutWarningMessage(status: WaterTemperatureStatus): string |
 			);
 		case 'action_required':
 			return (
-				'A water temperature above 115°F is unresolved: corrective action has ' +
+				`A water temperature above ${SAFE_MAX_F}°F is unresolved: corrective action has ` +
 				'not been documented. You can still clock out, but this stays visible ' +
 				'to your supervisor and to replacement staff.'
 			);
 		case 'recheck_required':
 			return (
-				'A water temperature above 115°F is unresolved: at least one fixture ' +
+				`A water temperature above ${SAFE_MAX_F}°F is unresolved: at least one fixture ` +
 				'still needs a safe recheck. You can still clock out, but this stays ' +
 				'visible to your supervisor and to replacement staff.'
 			);
@@ -1073,7 +1122,10 @@ export type OriginalReadingSummary = {
 	fixture: WaterTemperatureFixture;
 	label: string;
 	tempF: number;
-	classification: 'safe' | 'below' | 'above';
+	/** The advisory shown to the reader, which may refine the server's
+	 * compliance classification into `above_form_guidance`. The compliance
+	 * state on the record itself is unaffected. */
+	classification: ReadingAdvisory;
 	/** Text alternative so an out-of-range value is never signalled by red
 	 * text alone. */
 	classificationLabel: string;
@@ -1083,33 +1135,42 @@ export function deriveOriginalReadingSummary(
 	check: WaterTemperatureCheckDto | null
 ): OriginalReadingSummary[] {
 	if (!check) return [];
+	const kitchen = advisoryForReading(check.kitchenClassification, check.kitchenTempF);
+	const bath = advisoryForReading(check.bathClassification, check.bathTempF);
 	const entries: OriginalReadingSummary[] = [
 		{
 			fixture: 'kitchen',
 			label: FIXTURE_LABELS.kitchen,
 			tempF: check.kitchenTempF,
-			classification: check.kitchenClassification,
-			classificationLabel: classificationLabel(check.kitchenClassification),
+			classification: kitchen,
+			classificationLabel: classificationLabel(kitchen),
 		},
 		{
 			fixture: 'bath_shower',
 			label: FIXTURE_LABELS.bath_shower,
 			tempF: check.bathTempF,
-			classification: check.bathClassification,
-			classificationLabel: classificationLabel(check.bathClassification),
+			classification: bath,
+			classificationLabel: classificationLabel(bath),
 		},
 	];
 	return entries;
 }
 
-export function classificationLabel(classification: 'safe' | 'below' | 'above'): string {
+export function classificationLabel(classification: ReadingAdvisory): string {
 	switch (classification) {
+		// Describes the classification the system actually made, so these read
+		// from the flagging constants rather than the form's printed range.
 		case 'safe':
-			return `In range (${SAFE_RANGE_LABEL})`;
+			return `In range (${FLAGGED_RANGE_LABEL})`;
 		case 'below':
-			return `Below range (under 110°F)`;
+			return `Below range (under ${SAFE_MIN_F}°F)`;
 		case 'above':
-			return `Above range (over 115°F) — unsafe`;
+			return `Above range (over ${SAFE_MAX_F}°F) — unsafe`;
+		// Advisory: states plainly that nothing is required, so it cannot be
+		// mistaken for an unmet obligation, while still surfacing what the
+		// posted form says about this reading.
+		case 'above_form_guidance':
+			return `Above the posted ${FORM_GUIDANCE_MAX_F}°F guidance — no action required by this system`;
 	}
 }
 

@@ -40,7 +40,7 @@ const RAW_CHECKS = [
 		shiftId: '55555555-5555-4555-8555-555555555555',
 		operationalDate: '2026-03-04',
 		shiftSlot: 2,
-		kitchenTempTenths: 1180,
+		kitchenTempTenths: 1250,
 		bathTempTenths: 1130,
 		staffId: CLERK_ID,
 		staffNameSnapshot: STAFF_NAME,
@@ -194,7 +194,7 @@ test('missing, future, and recorded cells are explicit and separately counted', 
 	const recorded = view.rows[3].cells[1];
 	assert.equal(recorded.date, '2026-03-04');
 	assert.equal(recorded.status, 'complete');
-	assert.equal(recorded.kitchenTempF, 118);
+	assert.equal(recorded.kitchenTempF, 125);
 	assert.equal(recorded.bathTempF, 113);
 	assert.equal(recorded.initials, 'MS');
 	assert.equal(recorded.aboveRange, true);
@@ -266,7 +266,7 @@ test('cell descriptions name the state, readings, and initials for assistive tec
 	const recorded = view.rows[3].cells[1];
 	assert.equal(
 		recorded.description,
-		'2026-03-04, 2nd Shift: Complete, kitchen 118.0°F, bath / shower 113.0°F, initials MS, 2 rechecks recorded'
+		'2026-03-04, 2nd Shift: Complete, kitchen 125.0°F, bath / shower 113.0°F, initials MS, 2 rechecks recorded'
 	);
 	assert.equal(
 		describeInspectorWaterTemperatureCell(view.rows[0].cells[0]),
@@ -327,7 +327,7 @@ test('inspector and supervisor print byte-identical sheets for the same house an
 	assert.equal(fromInspector, fromSupervisor);
 
 	// The same active facts are actually on the sheet, not merely equal-and-empty.
-	assert.equal(fromInspector.includes('118.0'), true);
+	assert.equal(fromInspector.includes('125.0'), true);
 	assert.equal(fromInspector.includes('113.0'), true);
 	assert.equal(fromInspector.includes('Recheck Kitchen 116.0 (MS, superseded)'), true);
 	assert.equal(fromInspector.includes('Recheck Kitchen 114.0 (RB)'), true);
@@ -343,7 +343,7 @@ test('the printable mapping keeps the original unsafe reading and the ordered re
 	const printable = toPrintableInspectorWaterTemperatureMonth(inspectorMonth());
 	const check = printable.checks.find((entry) => entry.operationalDate === '2026-03-04');
 	assert.ok(check);
-	assert.equal(check.kitchenTempF, 118);
+	assert.equal(check.kitchenTempF, 125);
 	assert.deepEqual(
 		(check.rechecks ?? []).map((recheck) => [recheck.sequence, recheck.tempF, recheck.supersededAt]),
 		[

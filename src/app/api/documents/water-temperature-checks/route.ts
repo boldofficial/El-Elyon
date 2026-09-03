@@ -15,8 +15,16 @@ import {
 } from '../_water-temperature-route';
 
 // GET: authorized month listing for the digital review/print workspace
-// (U5). Location-scoped to the caller's authorized houses (R18); standard
-// results exclude voided records unless includeVoided=true is requested.
+// (U5). Open to care access (admin/supervisor/staff) and location-scoped to
+// the caller's authorized houses (R18); standard results exclude voided
+// records unless includeVoided=true is requested. Staff are included by
+// design: they record these readings, so their own house's month is theirs to
+// read.
+//
+// The staff entry dialog does not use this. It reads
+// GET /api/care/water-temperature-current, which returns just the one record
+// for the caller's open shift -- a narrower request for a narrower need, not
+// an access boundary.
 export async function GET(request: Request) {
 	try {
 		const {userId} = await auth();

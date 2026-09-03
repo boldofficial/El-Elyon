@@ -33,6 +33,7 @@ import {
 	type PrintableWaterTemperatureMonth,
 } from '@/components/supervisor/printWaterTemperatureReport';
 import {FIXTURE_LABELS, SHIFT_SLOT_LABELS} from '@/components/care/waterTemperatureEntryModel';
+import {SAFE_MAX_F, SAFE_MIN_F} from '@/lib/water-temperature';
 
 export const INSPECTOR_WATER_TEMPERATURE_SHIFT_SLOTS: readonly InspectorShiftSlot[] = [1, 2, 3];
 
@@ -257,8 +258,14 @@ function buildCell(args: {
 		kitchenTempF: check ? check.kitchenTempF : null,
 		bathTempF: check ? check.bathTempF : null,
 		initials: check ? check.staffInitials : '',
-		belowRange: check ? check.kitchenTempF < 110 || check.bathTempF < 110 : false,
-		aboveRange: check ? check.kitchenTempF > 115 || check.bathTempF > 115 : false,
+		// Derived from the shared classification constants so the inspector's
+		// badges cannot disagree with the state machine that produced `status`.
+		belowRange: check
+			? check.kitchenTempF < SAFE_MIN_F || check.bathTempF < SAFE_MIN_F
+			: false,
+		aboveRange: check
+			? check.kitchenTempF > SAFE_MAX_F || check.bathTempF > SAFE_MAX_F
+			: false,
 		rechecks: check ? check.rechecks : [],
 		description: '',
 	};

@@ -314,7 +314,9 @@ async function postDeployFindings(client: PoolClient): Promise<Finding[]> {
 		rows: orderingDrift.rows,
 	});
 
-	// 4. Unresolved above-115 obligations -- the operational safety number.
+	// 4. Unresolved above-range obligations -- the operational safety number.
+	//    Selected by STATE, not by temperature, so this probe stays correct
+	//    across a threshold change (the flagging ceiling is now 121.0F).
 	//    Reported as counts and identifiers only; readings stay out of logs.
 	const unresolved = await client.query(
 		`SELECT c.location_id, c.house_name_snapshot, c.operational_date, c.shift_slot,
@@ -327,7 +329,7 @@ async function postDeployFindings(client: PoolClient): Promise<Finding[]> {
 	);
 	findings.push({
 		severity: unresolved.rowCount ? "warn" : "info",
-		label: "Unresolved above-115F obligations",
+		label: "Unresolved above-range obligations",
 		detail: unresolved.rowCount
 			? `${unresolved.rowCount} obligation(s) awaiting documented action or a safe recheck. Operational follow-up, not a deploy blocker.`
 			: "0 -- no unresolved high-temperature obligations.",

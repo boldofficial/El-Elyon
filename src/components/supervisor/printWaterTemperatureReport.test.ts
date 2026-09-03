@@ -171,12 +171,12 @@ test('main temperature cells keep the original unsafe reading after a safe reche
 				check({
 					operationalDate: '2026-01-05',
 					shiftSlot: 2,
-					kitchenTempF: 118,
+					kitchenTempF: 125,
 					bathTempF: 113,
 					action: 'Lowered set point',
 					state: 'complete',
 					rechecks: [
-						{fixture: 'kitchen', tempF: 116, staffInitials: 'AB', sequence: 1},
+						{fixture: 'kitchen', tempF: 123, staffInitials: 'AB', sequence: 1},
 						{fixture: 'kitchen', tempF: 114, staffInitials: 'CD', sequence: 2},
 					],
 				}),
@@ -185,20 +185,26 @@ test('main temperature cells keep the original unsafe reading after a safe reche
 	);
 	const row = bodyRows(html)[4]!;
 
-	// The grid cell shows 118.0 -- never the later safe 114.0.
-	assert.match(row, /<td class="temp shift-2 group-start">118\.0<\/td>/);
+	// The grid cell shows 125.0 -- never the later safe 114.0.
+	assert.match(row, /<td class="temp shift-2 group-start">125\.0<\/td>/);
 	assert.match(row, /<td class="temp shift-2">113\.0<\/td>/);
 	assert.doesNotMatch(row, /<td class="temp shift-2 group-start">114\.0<\/td>/);
 
 	const comment = /<td class="comments">([\s\S]*?)<\/td>/.exec(row)![1]!;
 	assert.match(comment, /^2nd:/);
+	// Presence first: an indexOf ordering assertion passes vacuously when the
+	// needle is absent, because -1 is less than any real index.
 	assert.ok(
-		comment.indexOf('Kitchen 118.0 above 115') <
+		comment.includes('Kitchen 125.0 above 121'),
+		'the unsafe original reading must be annotated in the comment'
+	);
+	assert.ok(
+		comment.indexOf('Kitchen 125.0 above 121') <
 			comment.indexOf('Action:'),
 		'the unsafe original must precede the documented action'
 	);
 	assert.ok(
-		comment.indexOf('Recheck Kitchen 116.0') < comment.indexOf('Recheck Kitchen 114.0'),
+		comment.indexOf('Recheck Kitchen 123.0') < comment.indexOf('Recheck Kitchen 114.0'),
 		'rechecks must appear in sequence order'
 	);
 	assert.match(comment, /\(AB\)/);
@@ -210,19 +216,19 @@ test('slot comments are composed deterministically and expose initials, not name
 		check({
 			operationalDate: '2026-01-01',
 			shiftSlot: 1,
-			kitchenTempF: 118,
+			kitchenTempF: 125,
 			bathTempF: 108,
 			comments: 'Reported by\nmaintenance',
 			action: 'Adjusted mixing valve',
 			state: 'recheck_required',
-			rechecks: [{fixture: 'kitchen', tempF: 117, staffInitials: 'AB', sequence: 1}],
+			rechecks: [{fixture: 'kitchen', tempF: 123, staffInitials: 'AB', sequence: 1}],
 		})
 	);
 
-	assert.match(composed, /^Kitchen 118\.0 above 115°F; Bath\/Shower 108\.0 below 110°F/);
+	assert.match(composed, /^Kitchen 125\.0 above 121°F; Bath\/Shower 108\.0 below 110°F/);
 	assert.match(composed, /Reported by maintenance/);
 	assert.match(composed, /Action: Adjusted mixing valve/);
-	assert.match(composed, /Recheck Kitchen 117\.0 \(AB\)/);
+	assert.match(composed, /Recheck Kitchen 123\.0 \(AB\)/);
 	assert.match(composed, /Pending: safe recheck$/);
 	assert.equal(buildSlotComment(undefined), '');
 });
@@ -243,10 +249,10 @@ test('the comments cell shares one bounded budget across the shifts that use it'
 	// A short narrative is never padded, reordered, or truncated.
 	assert.equal(
 		buildCommentsCellText([
-			{slot: 1, text: 'Kitchen 118.0 above 115°F; Action: Reset mixer'},
+			{slot: 1, text: 'Kitchen 125.0 above 121°F; Action: Reset mixer'},
 			{slot: 3, text: 'All in range'},
 		]),
-		'1st: Kitchen 118.0 above 115°F; Action: Reset mixer | 3rd: All in range'
+		'1st: Kitchen 125.0 above 121°F; Action: Reset mixer | 3rd: All in range'
 	);
 	assert.equal(buildCommentsCellText([]), '');
 });
