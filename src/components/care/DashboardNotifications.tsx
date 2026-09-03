@@ -8,6 +8,7 @@
 
 import React, {useCallback, useEffect, useState} from 'react';
 import {toast} from 'sonner';
+import DocumentViewerModal from '@/components/shared/DocumentViewerModal';
 
 interface PendingIspAck {
 	ispFileId: string;
@@ -17,6 +18,8 @@ interface PendingIspAck {
 	versionLabel: string;
 	effectiveDate: string;
 	fileName: string;
+	fileStorageId: string;
+	contentType: string;
 }
 
 interface Memo {
@@ -64,6 +67,7 @@ export default function DashboardNotifications() {
 	const [reminders, setReminders] = useState<ComplianceReminder[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [acking, setAcking] = useState<string | null>(null);
+	const [viewingIsp, setViewingIsp] = useState<PendingIspAck | null>(null);
 
 	const fetchNotifications = useCallback(async () => {
 		try {
@@ -186,8 +190,11 @@ export default function DashboardNotifications() {
 							<li
 								key={ack.ispFileId}
 								className="px-4 py-3 flex items-center justify-between gap-4">
-								<div className="min-w-0">
-									<p className="text-sm font-medium text-gray-900 truncate">
+								<button
+									type="button"
+									onClick={() => setViewingIsp(ack)}
+									className="min-w-0 text-left group">
+									<p className="text-sm font-medium text-gray-900 truncate group-hover:text-amber-700 group-hover:underline">
 										{ack.residentName}
 										<span className="text-gray-400 font-normal">
 											{' '}
@@ -199,7 +206,7 @@ export default function DashboardNotifications() {
 										{new Date(ack.effectiveDate).toLocaleDateString()}
 										{ack.location ? ` · ${ack.location}` : ''}
 									</p>
-								</div>
+								</button>
 								<button
 									type="button"
 									onClick={() => handleAcknowledge(ack.ispFileId)}
@@ -264,6 +271,20 @@ export default function DashboardNotifications() {
 					</ul>
 				</div>
 			)}
+
+			<DocumentViewerModal
+				isOpen={!!viewingIsp}
+				onClose={() => setViewingIsp(null)}
+				document={
+					viewingIsp
+						? {
+								fileStorageId: viewingIsp.fileStorageId,
+								fileName: viewingIsp.fileName,
+								contentType: viewingIsp.contentType,
+							}
+						: null
+				}
+			/>
 		</div>
 	);
 }
