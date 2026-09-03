@@ -134,6 +134,13 @@ export async function editResidentLog(args: {
   });
   if (!resident) throw new Error('Resident not found');
 
+  // Carry the original log's shift link forward so an edited log stays
+  // associated with the shift it was written during (each edit inserts a
+  // new versioned row rather than updating in place -- see insert below).
+  const originalLog = await db.query.residentLogs.findFirst({
+    where: eq(residentLogs.id, logId),
+  });
+
   const userLocations =
     userRole.role === 'admin' ? [] : userRole.locations || [];
   if (
@@ -169,6 +176,7 @@ export async function editResidentLog(args: {
     template: template,
     content,
     location: resident.location,
+    shiftId: originalLog?.shiftId,
     createdAt: new Date(),
     // Assuming logId is the ID of the log being "edited" to create a new version
     // If the intention is to update the existing log entry, the logic would be different.
