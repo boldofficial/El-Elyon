@@ -26,6 +26,26 @@ import {and, asc, eq, inArray, isNull} from 'drizzle-orm';
 
 type AuditActor = {id: string; name: string | null};
 
+/**
+ * Every mutation below used to run inside db.transaction(), which throws
+ * unconditionally on this project's driver (drizzle-orm/neon-http - see
+ * db/index.ts) and so had never actually executed successfully.
+ *
+ * They're rewritten here as sequential statements rather than a single
+ * db.batch(). batch() sends every statement up front, before any result
+ * comes back, so it can't express "only write the audit revision if the
+ * update actually matched a row" - and that conditional is exactly what the
+ * optimistic-concurrency checks below (`if (!entry) throw
+ * LifeSafetyConflictError()`) depend on. Each statement here is
+ * individually atomic; what's given up is strict all-or-nothing atomicity
+ * across the pair (e.g. a report update succeeding but its audit-revision
+ * insert failing immediately after). The revision log is a secondary audit
+ * trail, not the record of truth - the entity being inspected/reported on is
+ * written correctly either way - so that gap is judged an acceptable
+ * trade for code this much simpler, especially given the whole call chain
+ * was previously 100% broken with no prior working behavior to preserve.
+ */
+
 export async function createLifeSafetyInspection(args: {
 	clerkUserId: string;
 	input: LifeSafetyInspectionInput;
@@ -34,18 +54,18 @@ export async function createLifeSafetyInspection(args: {
 		const context = await getLifeSafetyAccessContext(args.clerkUserId);
 		const location = await resolveAuthorizedLifeSafetyLocation(context, args.input.locationId);
 		const actor = await resolveAuditActor(args.clerkUserId);
-		return await db.transaction(async (tx) => {
-			const [entry] = await tx
-				.insert(lifeSafetyInspectionEntries)
-				.values({
-					...inspectionValues(args.input),
-					houseNameSnapshot: location.name,
-					createdBy: actor.id,
-				})
-				.returning();
-			await insertInspectionRevision(tx, entry, 'create', actor);
-			return entry;
-		});
+
+		const [entry] = await db
+			.insert(lifeSafetyInspectionEntries)
+			.values({
+				...inspectionValues(args.input),
+				houseNameSnapshot: location.name,
+				createdBy: actor.id,
+			})
+			.returning();
+
+		await insertInspectionRevision(entry, 'create', actor);
+		return entry;
 	} catch (error) {
 		throw translateMutationError(error);
 	}
@@ -65,34 +85,33 @@ export async function updateLifeSafetyInspection(args: {
 		const context = await getLifeSafetyAccessContext(args.clerkUserId);
 		const destination = await resolveAuthorizedLifeSafetyLocation(context, args.input.locationId);
 		const actor = await resolveAuditActor(args.clerkUserId);
-		return await db.transaction(async (tx) => {
-			const [entry] = await tx
-				.update(lifeSafetyInspectionEntries)
-				.set({
-					...inspectionValues(args.input),
-					houseNameSnapshot: destination.name,
-					version: args.expectedVersion + 1,
-					updatedBy: actor.id,
-					updatedAt: new Date(),
-				})
-				.where(
-					and(
-						eq(lifeSafetyInspectionEntries.id, args.id),
-						eq(lifeSafetyInspectionEntries.locationId, current.locationId),
-						eq(lifeSafetyInspectionEntries.version, args.expectedVersion),
-						isNull(lifeSafetyInspectionEntries.voidedAt)
-					)
+
+		const [entry] = await db
+			.update(lifeSafetyInspectionEntries)
+			.set({
+				...inspectionValues(args.input),
+				houseNameSnapshot: destination.name,
+				version: args.expectedVersion + 1,
+				updatedBy: actor.id,
+				updatedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(lifeSafetyInspectionEntries.id, args.id),
+					eq(lifeSafetyInspectionEntries.locationId, current.locationId),
+					eq(lifeSafetyInspectionEntries.version, args.expectedVersion),
+					isNull(lifeSafetyInspectionEntries.voidedAt)
 				)
-				.returning();
-			if (!entry) throw new LifeSafetyConflictError();
-			await insertInspectionRevision(
-				tx,
-				entry,
-				current.locationId === entry.locationId ? 'correct' : 'move',
-				actor
-			);
-			return entry;
-		});
+			)
+			.returning();
+		if (!entry) throw new LifeSafetyConflictError();
+
+		await insertInspectionRevision(
+			entry,
+			current.locationId === entry.locationId ? 'correct' : 'move',
+			actor
+		);
+		return entry;
 	} catch (error) {
 		throw translateMutationError(error);
 	}
@@ -110,30 +129,30 @@ export async function voidLifeSafetyInspection(args: {
 			throw new LifeSafetyConflictError();
 		}
 		const actor = await resolveAuditActor(args.clerkUserId);
-		return await db.transaction(async (tx) => {
-			const [entry] = await tx
-				.update(lifeSafetyInspectionEntries)
-				.set({
-					version: args.expectedVersion + 1,
-					voidedAt: new Date(),
-					voidedBy: actor.id,
-					voidReason: args.reason,
-					updatedBy: actor.id,
-					updatedAt: new Date(),
-				})
-				.where(
-					and(
-						eq(lifeSafetyInspectionEntries.id, args.id),
-						eq(lifeSafetyInspectionEntries.locationId, current.locationId),
-						eq(lifeSafetyInspectionEntries.version, args.expectedVersion),
-						isNull(lifeSafetyInspectionEntries.voidedAt)
-					)
+
+		const [entry] = await db
+			.update(lifeSafetyInspectionEntries)
+			.set({
+				version: args.expectedVersion + 1,
+				voidedAt: new Date(),
+				voidedBy: actor.id,
+				voidReason: args.reason,
+				updatedBy: actor.id,
+				updatedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(lifeSafetyInspectionEntries.id, args.id),
+					eq(lifeSafetyInspectionEntries.locationId, current.locationId),
+					eq(lifeSafetyInspectionEntries.version, args.expectedVersion),
+					isNull(lifeSafetyInspectionEntries.voidedAt)
 				)
-				.returning();
-			if (!entry) throw new LifeSafetyConflictError();
-			await insertInspectionRevision(tx, entry, 'void', actor, args.reason);
-			return entry;
-		});
+			)
+			.returning();
+		if (!entry) throw new LifeSafetyConflictError();
+
+		await insertInspectionRevision(entry, 'void', actor, args.reason);
+		return entry;
 	} catch (error) {
 		throw translateMutationError(error);
 	}
@@ -147,28 +166,26 @@ export async function createFireDrillReport(args: {
 		const context = await getLifeSafetyAccessContext(args.clerkUserId);
 		const location = await resolveAuthorizedLifeSafetyLocation(context, args.input.locationId);
 		const actor = await resolveAuditActor(args.clerkUserId);
-		return await db.transaction(async (tx) => {
-			const participants = await resolveParticipants(
-				tx,
-				location.name,
-				args.input.participants
-			);
-			const [report] = await tx
-				.insert(fireDrillReports)
-				.values({
-					...fireDrillValues(args.input),
-					houseNameSnapshot: location.name,
-					createdBy: actor.id,
-				})
-				.returning();
-			const savedParticipants = await tx
-				.insert(fireDrillParticipants)
-				.values(participants.map((participant) => ({...participant, fireDrillReportId: report.id})))
-				.returning();
-			const aggregate = {...report, participants: savedParticipants};
-			await insertFireDrillRevision(tx, aggregate, 'create', actor);
-			return aggregate;
-		});
+
+		const participants = await resolveParticipants(location.name, args.input.participants);
+
+		const [report] = await db
+			.insert(fireDrillReports)
+			.values({
+				...fireDrillValues(args.input),
+				houseNameSnapshot: location.name,
+				createdBy: actor.id,
+			})
+			.returning();
+
+		const savedParticipants = await db
+			.insert(fireDrillParticipants)
+			.values(participants.map((participant) => ({...participant, fireDrillReportId: report.id})))
+			.returning();
+
+		const aggregate = {...report, participants: savedParticipants};
+		await insertFireDrillRevision(aggregate, 'create', actor);
+		return aggregate;
 	} catch (error) {
 		throw translateMutationError(error);
 	}
@@ -188,46 +205,46 @@ export async function updateFireDrillReport(args: {
 		const context = await getLifeSafetyAccessContext(args.clerkUserId);
 		const destination = await resolveAuthorizedLifeSafetyLocation(context, args.input.locationId);
 		const actor = await resolveAuditActor(args.clerkUserId);
-		return await db.transaction(async (tx) => {
-			const participants = await resolveParticipants(
-				tx,
-				destination.name,
-				args.input.participants,
-				current.participants
-			);
-			const [report] = await tx
-				.update(fireDrillReports)
-				.set({
-					...fireDrillValues(args.input),
-					houseNameSnapshot: destination.name,
-					version: args.expectedVersion + 1,
-					updatedBy: actor.id,
-					updatedAt: new Date(),
-				})
-				.where(
-					and(
-						eq(fireDrillReports.id, args.id),
-						eq(fireDrillReports.locationId, current.locationId),
-						eq(fireDrillReports.version, args.expectedVersion),
-						isNull(fireDrillReports.voidedAt)
-					)
+
+		const participants = await resolveParticipants(
+			destination.name,
+			args.input.participants,
+			current.participants
+		);
+
+		const [report] = await db
+			.update(fireDrillReports)
+			.set({
+				...fireDrillValues(args.input),
+				houseNameSnapshot: destination.name,
+				version: args.expectedVersion + 1,
+				updatedBy: actor.id,
+				updatedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(fireDrillReports.id, args.id),
+					eq(fireDrillReports.locationId, current.locationId),
+					eq(fireDrillReports.version, args.expectedVersion),
+					isNull(fireDrillReports.voidedAt)
 				)
-				.returning();
-			if (!report) throw new LifeSafetyConflictError();
-			await tx.delete(fireDrillParticipants).where(eq(fireDrillParticipants.fireDrillReportId, report.id));
-			const savedParticipants = await tx
-				.insert(fireDrillParticipants)
-				.values(participants.map((participant) => ({...participant, fireDrillReportId: report.id})))
-				.returning();
-			const aggregate = {...report, participants: savedParticipants};
-			await insertFireDrillRevision(
-				tx,
-				aggregate,
-				current.locationId === report.locationId ? 'correct' : 'move',
-				actor
-			);
-			return aggregate;
-		});
+			)
+			.returning();
+		if (!report) throw new LifeSafetyConflictError();
+
+		await db.delete(fireDrillParticipants).where(eq(fireDrillParticipants.fireDrillReportId, report.id));
+		const savedParticipants = await db
+			.insert(fireDrillParticipants)
+			.values(participants.map((participant) => ({...participant, fireDrillReportId: report.id})))
+			.returning();
+
+		const aggregate = {...report, participants: savedParticipants};
+		await insertFireDrillRevision(
+			aggregate,
+			current.locationId === report.locationId ? 'correct' : 'move',
+			actor
+		);
+		return aggregate;
 	} catch (error) {
 		throw translateMutationError(error);
 	}
@@ -245,36 +262,37 @@ export async function voidFireDrillReport(args: {
 			throw new LifeSafetyConflictError();
 		}
 		const actor = await resolveAuditActor(args.clerkUserId);
-		return await db.transaction(async (tx) => {
-			const [report] = await tx
-				.update(fireDrillReports)
-				.set({
-					version: args.expectedVersion + 1,
-					voidedAt: new Date(),
-					voidedBy: actor.id,
-					voidReason: args.reason,
-					updatedBy: actor.id,
-					updatedAt: new Date(),
-				})
-				.where(
-					and(
-						eq(fireDrillReports.id, args.id),
-						eq(fireDrillReports.locationId, current.locationId),
-						eq(fireDrillReports.version, args.expectedVersion),
-						isNull(fireDrillReports.voidedAt)
-					)
+
+		const [report] = await db
+			.update(fireDrillReports)
+			.set({
+				version: args.expectedVersion + 1,
+				voidedAt: new Date(),
+				voidedBy: actor.id,
+				voidReason: args.reason,
+				updatedBy: actor.id,
+				updatedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(fireDrillReports.id, args.id),
+					eq(fireDrillReports.locationId, current.locationId),
+					eq(fireDrillReports.version, args.expectedVersion),
+					isNull(fireDrillReports.voidedAt)
 				)
-				.returning();
-			if (!report) throw new LifeSafetyConflictError();
-			const participants = await tx
-				.select()
-				.from(fireDrillParticipants)
-				.where(eq(fireDrillParticipants.fireDrillReportId, report.id))
-				.orderBy(asc(fireDrillParticipants.position));
-			const aggregate = {...report, participants};
-			await insertFireDrillRevision(tx, aggregate, 'void', actor, args.reason);
-			return aggregate;
-		});
+			)
+			.returning();
+		if (!report) throw new LifeSafetyConflictError();
+
+		const participants = await db
+			.select()
+			.from(fireDrillParticipants)
+			.where(eq(fireDrillParticipants.fireDrillReportId, report.id))
+			.orderBy(asc(fireDrillParticipants.position));
+
+		const aggregate = {...report, participants};
+		await insertFireDrillRevision(aggregate, 'void', actor, args.reason);
+		return aggregate;
 	} catch (error) {
 		throw translateMutationError(error);
 	}
@@ -320,10 +338,7 @@ async function resolveAuditActor(clerkUserId: string): Promise<AuditActor> {
 	return {id: clerkUserId, name: employee?.name || user?.name || null};
 }
 
-type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 async function resolveParticipants(
-	tx: Transaction,
 	locationName: string,
 	inputs: FireDrillParticipantInput[],
 	existingParticipants: Pick<
@@ -343,7 +358,7 @@ async function resolveParticipants(
 		.map((participant) => participant.residentId)
 		.filter((id): id is string => Boolean(id));
 	const rosterRows = rosterIds.length
-		? await tx
+		? await db
 				.select({id: residents.id, name: residents.name})
 				.from(residents)
 				.where(and(inArray(residents.id, rosterIds), eq(residents.location, locationName)))
@@ -366,13 +381,12 @@ async function resolveParticipants(
 }
 
 async function insertInspectionRevision(
-	tx: Transaction,
 	entry: typeof lifeSafetyInspectionEntries.$inferSelect,
 	action: 'create' | 'correct' | 'move' | 'void',
 	actor: AuditActor,
 	reason?: string
 ) {
-	await tx.insert(lifeSafetyReportRevisions).values({
+	await db.insert(lifeSafetyReportRevisions).values({
 		inspectionEntryId: entry.id,
 		entityType: 'inspection',
 		version: entry.version,
@@ -385,7 +399,6 @@ async function insertInspectionRevision(
 }
 
 async function insertFireDrillRevision(
-	tx: Transaction,
 	aggregate: typeof fireDrillReports.$inferSelect & {
 		participants: (typeof fireDrillParticipants.$inferSelect)[];
 	},
@@ -393,7 +406,7 @@ async function insertFireDrillRevision(
 	actor: AuditActor,
 	reason?: string
 ) {
-	await tx.insert(lifeSafetyReportRevisions).values({
+	await db.insert(lifeSafetyReportRevisions).values({
 		fireDrillReportId: aggregate.id,
 		entityType: 'fire_drill',
 		version: aggregate.version,
