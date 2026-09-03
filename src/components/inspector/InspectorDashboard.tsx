@@ -27,6 +27,24 @@ import {
 	printAnnualInspectionReport,
 	printFireDrillReport,
 } from '@/components/supervisor/printLifeSafetyReports';
+import type {InspectorWaterTemperatureMonth} from '@/lib/inspector-water-temperature-projection';
+import {
+	INSPECTOR_WATER_TEMPERATURE_LEGEND_NOTICE,
+	INSPECTOR_WATER_TEMPERATURE_MONTH_NAMES,
+	INSPECTOR_WATER_TEMPERATURE_READ_ONLY_NOTICE,
+	buildInspectorWaterTemperatureMonthView,
+	formatInspectorTemperature,
+	inspectorLocalToday,
+	inspectorWaterTemperatureQuery,
+	isInspectorWaterTemperatureReady,
+	isValidInspectorMonthSelection,
+	toPrintableInspectorWaterTemperatureMonth,
+	type InspectorWaterTemperatureCell,
+	type InspectorWaterTemperatureCellTone,
+	type InspectorWaterTemperatureLoadState,
+	type InspectorWaterTemperatureScope,
+} from './waterTemperaturePresentation';
+import {printWaterTemperatureCheckLog} from '@/components/supervisor/printWaterTemperatureReport';
 
 interface Session {
 	location: string;
@@ -51,7 +69,8 @@ type TabKey =
 	| 'isps'
 	| 'fireEvac'
 	| 'fireDrills'
-	| 'smoke';
+	| 'smoke'
+	| 'waterTemperature';
 
 const TABS: {key: TabKey; label: string; icon: string}[] = [
 	{key: 'logs', label: 'Care Logs', icon: '📝'},
@@ -60,6 +79,7 @@ const TABS: {key: TabKey; label: string; icon: string}[] = [
 	{key: 'fireEvac', label: 'Fire Evacuation', icon: '🚪'},
 	{key: 'fireDrills', label: 'Fire Drills', icon: '🧯'},
 	{key: 'smoke', label: 'Life-Safety Inspections', icon: '🚨'},
+	{key: 'waterTemperature', label: 'Water Temperature', icon: '🌡️'},
 ];
 
 function downloadHref(fileId: string) {
@@ -78,6 +98,19 @@ export default function InspectorDashboard() {
 	const [loadingLifeSafety, setLoadingLifeSafety] = useState(false);
 	const [lifeSafetyError, setLifeSafetyError] = useState('');
 	const [tab, setTab] = useState<TabKey>('logs');
+
+	// --- Water temperature (U6): month-scoped, read-only, session-bound ---
+	const [waterData, setWaterData] = useState<InspectorWaterTemperatureMonth | null>(null);
+	const [waterState, setWaterState] = useState<InspectorWaterTemperatureLoadState>('idle');
+	const [waterError, setWaterError] = useState('');
+	const [waterScope, setWaterScope] = useState<InspectorWaterTemperatureScope>(() => {
+		const now = new Date();
+		return {year: now.getFullYear(), month: now.getMonth() + 1};
+	});
+	const [loadedWaterScope, setLoadedWaterScope] = useState<InspectorWaterTemperatureScope | null>(
+		null
+	);
+	const [waterReloadToken, setWaterReloadToken] = useState(0);
 
 	const checkSession = useCallback(async () => {
 		try {
@@ -131,6 +164,68 @@ export default function InspectorDashboard() {
 		}
 	}, [session, loadData, loadLifeSafety]);
 
+	// The house is never sent: the server derives it from the session cookie.
+	// Only the month/year selectors travel, and a response for a month that is
+	// no longer selected is discarded rather than rendered.
+	useEffect(() => {
+		if (!session || tab !== 'waterTemperature') return;
+		if (!isValidInspectorMonthSelection(waterScope.year, waterScope.month)) {
+			setWaterData(null);
+			setLoadedWaterScope(null);
+			setWaterError('Choose a month and a year from 2020 through 2100.');
+			setWaterState('error');
+			return;
+		}
+
+		const scope = waterScope;
+		let cancelled = false;
+		setWaterData(null);
+		setLoadedWaterScope(null);
+		setWaterError('');
+		setWaterState('loading');
+
+		async function loadWaterTemperature() {
+			try {
+				const response = await fetch(
+					`/api/inspector/water-temperature?${inspectorWaterTemperatureQuery(scope)}`,
+					{cache: 'no-store'}
+				);
+				if (!response.ok) throw new Error('Failed to load water temperature records');
+				const payload = (await response.json()) as InspectorWaterTemperatureMonth;
+				if (cancelled) return;
+				setWaterData(payload);
+				setLoadedWaterScope(scope);
+				setWaterState('ready');
+			} catch (error) {
+				if (cancelled) return;
+				console.error(error);
+				setWaterData(null);
+				setWaterError(
+					'Water temperature records could not be loaded for this inspector session.'
+				);
+				setWaterState('error');
+			}
+		}
+
+		void loadWaterTemperature();
+		return () => {
+			cancelled = true;
+		};
+	}, [session, tab, waterScope, waterReloadToken]);
+
+	// Every cached record for the previous grant is dropped on logout AND on a
+	// new sign-in, so one account's data can never be shown under another's
+	// session (R18: authenticated data is cleared on logout/account change).
+	const clearInspectorData = useCallback(() => {
+		setData(null);
+		setLifeSafety(null);
+		setLifeSafetyError('');
+		setWaterData(null);
+		setLoadedWaterScope(null);
+		setWaterError('');
+		setWaterState('idle');
+	}, []);
+
 	const handleLogin = async (e: React.FormEvent) => {
 		e.preventDefault();
 		if (!otp.trim()) return;
@@ -143,6 +238,7 @@ export default function InspectorDashboard() {
 			});
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || 'Invalid code');
+			clearInspectorData();
 			setSession(body);
 			setOtp('');
 		} catch (error: any) {
@@ -155,9 +251,7 @@ export default function InspectorDashboard() {
 	const handleLogout = async () => {
 		await fetch('/api/inspector/logout', {method: 'POST'});
 		setSession(null);
-		setData(null);
-		setLifeSafety(null);
-		setLifeSafetyError('');
+		clearInspectorData();
 	};
 
 	const residentName = (id: string) =>
@@ -243,7 +337,17 @@ export default function InspectorDashboard() {
 			</header>
 
 			<main className="max-w-6xl mx-auto px-4 py-6">
-				{tab === 'fireDrills' || tab === 'smoke' ? (
+				{tab === 'waterTemperature' ? (
+					<InspectorWaterTemperaturePanel
+						data={waterData}
+						scope={waterScope}
+						loadedScope={loadedWaterScope}
+						state={waterState}
+						error={waterError}
+						onScopeChange={setWaterScope}
+						onRetry={() => setWaterReloadToken((token) => token + 1)}
+					/>
+				) : tab === 'fireDrills' || tab === 'smoke' ? (
 					<InspectorLifeSafetyPanel
 						kind={tab === 'fireDrills' ? 'fire-drills' : 'inspections'}
 						data={lifeSafety}
@@ -515,6 +619,264 @@ function InspectorFireDrillCard({label, sequence, report}: {label: string; seque
 				</div>
 			)}
 		</article>
+	);
+}
+
+// ============================================================================
+// WATER TEMPERATURE (U6)
+//
+// Read-only by construction: this panel renders values produced by
+// ./waterTemperaturePresentation and offers no create, correct, action,
+// recheck, or void control anywhere. It shares U5's print builder so the
+// inspector's paper output is identical to the supervisor's.
+// ============================================================================
+
+const WATER_TONE_CLASSES: Record<InspectorWaterTemperatureCellTone, string> = {
+	muted: 'border-gray-200 bg-gray-50 text-gray-500',
+	neutral: 'border-dashed border-gray-400 bg-white text-gray-700',
+	positive: 'border-green-300 bg-green-50 text-green-900',
+	attention: 'border-amber-400 bg-amber-50 text-amber-900',
+	urgent: 'border-red-400 bg-red-50 text-red-900',
+};
+
+function InspectorWaterTemperaturePanel({
+	data,
+	scope,
+	loadedScope,
+	state,
+	error,
+	onScopeChange,
+	onRetry,
+}: {
+	data: InspectorWaterTemperatureMonth | null;
+	scope: InspectorWaterTemperatureScope;
+	loadedScope: InspectorWaterTemperatureScope | null;
+	state: InspectorWaterTemperatureLoadState;
+	error: string;
+	onScopeChange: (scope: InspectorWaterTemperatureScope) => void;
+	onRetry: () => void;
+}) {
+	const [printing, setPrinting] = useState(false);
+	const ready = isInspectorWaterTemperatureReady({currentScope: scope, loadedScope, state});
+	const view = useMemo(
+		() =>
+			ready && data
+				? buildInspectorWaterTemperatureMonthView({data, todayLocalDate: inspectorLocalToday()})
+				: null,
+		[ready, data]
+	);
+
+	async function printLog() {
+		if (!data || !ready || printing) return;
+		setPrinting(true);
+		try {
+			await printWaterTemperatureCheckLog(toPrintableInspectorWaterTemperatureMonth(data));
+		} catch (printError) {
+			console.error(printError);
+			toast.error('Could not open the water temperature print report');
+		} finally {
+			setPrinting(false);
+		}
+	}
+
+	return (
+		<div className="space-y-5">
+			<section
+				className="rounded-lg border border-gray-200 bg-white p-4"
+				aria-labelledby="inspector-water-temperature-heading">
+				<div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+					<div>
+						<h2 id="inspector-water-temperature-heading" className="font-semibold text-gray-900">
+							Daily Water Temperature Check Log
+						</h2>
+						<p className="mt-1 text-sm text-gray-600">
+							{data?.houseName ?? 'This inspector session’s house'} ·{' '}
+							{INSPECTOR_WATER_TEMPERATURE_READ_ONLY_NOTICE}
+						</p>
+						<div className="mt-3 flex flex-wrap gap-3">
+							<div>
+								<label
+									htmlFor="inspector-water-month"
+									className="block text-xs font-medium uppercase tracking-wide text-gray-600">
+									Month
+								</label>
+								<select
+									id="inspector-water-month"
+									value={scope.month}
+									onChange={(event) =>
+										onScopeChange({...scope, month: Number(event.target.value)})
+									}
+									className="mt-1 min-w-40 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900">
+									{INSPECTOR_WATER_TEMPERATURE_MONTH_NAMES.map((name, index) => (
+										<option key={name} value={index + 1}>
+											{name}
+										</option>
+									))}
+								</select>
+							</div>
+							<div>
+								<label
+									htmlFor="inspector-water-year"
+									className="block text-xs font-medium uppercase tracking-wide text-gray-600">
+									Year
+								</label>
+								<input
+									id="inspector-water-year"
+									type="number"
+									min={2020}
+									max={2100}
+									value={scope.year}
+									onChange={(event) =>
+										onScopeChange({...scope, year: Number(event.target.value)})
+									}
+									className="mt-1 w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+								/>
+							</div>
+						</div>
+					</div>
+					<button
+						type="button"
+						onClick={() => void printLog()}
+						disabled={!ready || printing}
+						className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-300">
+						{printing ? 'Preparing sheet…' : 'Print monthly log'}
+					</button>
+				</div>
+			</section>
+
+			{state === 'error' && (
+				<div className="rounded-lg border border-red-200 bg-red-50 p-6 text-red-900" role="alert">
+					<p className="font-semibold">Water temperature records are unavailable.</p>
+					<p className="mt-1 text-sm">{error}</p>
+					<button type="button" onClick={onRetry} className="mt-3 text-sm font-medium underline">
+						Try again
+					</button>
+				</div>
+			)}
+
+			{state === 'loading' && (
+				<InspectorStatus
+					title="Loading water temperature records…"
+					detail="Reading this inspector session’s authorized house only."
+				/>
+			)}
+
+			{view && (
+				<>
+					<section
+						className="rounded-lg border border-gray-200 bg-white p-4"
+						aria-label={`Summary for ${view.monthLabel}`}>
+						<dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-6">
+							<SummaryFigure label="Complete" value={view.summary.complete} />
+							<SummaryFigure label="Below range" value={view.summary.completeWithAttention} />
+							<SummaryFigure label="Pending" value={view.summary.pending} />
+							<SummaryFigure label="Missing" value={view.summary.missing} />
+							<SummaryFigure label="Not yet due" value={view.summary.future} />
+							<SummaryFigure label="N/A dates" value={view.summary.naDays} />
+						</dl>
+					</section>
+
+					<section
+						className="overflow-hidden rounded-lg border border-gray-200 bg-white"
+						aria-labelledby="inspector-water-temperature-grid-heading">
+						<div className="border-b border-gray-200 px-4 py-3">
+							<h3
+								id="inspector-water-temperature-grid-heading"
+								className="font-semibold text-gray-900">
+								{view.monthLabel}
+							</h3>
+							<p className="mt-1 text-sm text-gray-600">
+								{INSPECTOR_WATER_TEMPERATURE_LEGEND_NOTICE}
+							</p>
+						</div>
+						<div className="overflow-x-auto">
+							<table className="min-w-[900px] table-fixed border-collapse text-left text-sm">
+								<caption className="sr-only">
+									Daily water temperature checks for {view.monthLabel} by 1st, 2nd, and 3rd shift
+								</caption>
+								<thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-600">
+									<tr>
+										<th scope="col" className="w-20 border-b border-r border-gray-200 px-3 py-3">
+											Date
+										</th>
+										{['1st Shift', '2nd Shift', '3rd Shift'].map((label) => (
+											<th
+												key={label}
+												scope="col"
+												className="border-b border-r border-gray-200 px-3 py-3 last:border-r-0">
+												{label}
+											</th>
+										))}
+									</tr>
+								</thead>
+								<tbody>
+									{view.rows.map((row) => (
+										<tr key={row.day} className="align-top even:bg-gray-50/40">
+											<th
+												scope="row"
+												className="border-b border-r border-gray-200 px-3 py-3 font-semibold text-gray-900">
+												{row.dayLabel}
+											</th>
+											{row.cells.map((cell) => (
+												<td
+													key={`${row.day}-${cell.slot}`}
+													className="border-b border-r border-gray-200 p-2 last:border-r-0">
+													<InspectorWaterTemperatureCellView cell={cell} />
+												</td>
+											))}
+										</tr>
+									))}
+								</tbody>
+							</table>
+						</div>
+					</section>
+				</>
+			)}
+		</div>
+	);
+}
+
+function SummaryFigure({label, value}: {label: string; value: number}) {
+	return (
+		<div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+			<dt className="text-xs uppercase tracking-wide text-gray-600">{label}</dt>
+			<dd className="text-lg font-semibold text-gray-900">{value}</dd>
+		</div>
+	);
+}
+
+function InspectorWaterTemperatureCellView({cell}: {cell: InspectorWaterTemperatureCell}) {
+	return (
+		<div
+			className={`rounded-md border p-2 ${WATER_TONE_CLASSES[cell.marker.tone]}`}
+			aria-label={cell.description}>
+			<div className="flex items-center justify-between gap-2">
+				<span className="inline-flex items-center gap-1 text-xs font-semibold">
+					<span aria-hidden="true">{cell.marker.symbol}</span>
+					<span>{cell.marker.label}</span>
+				</span>
+				{cell.initials && <span className="text-xs">{cell.initials}</span>}
+			</div>
+			{cell.check && (
+				<p className="mt-1 text-xs">
+					Kitchen {formatInspectorTemperature(cell.kitchenTempF)} · Bath / Shower{' '}
+					{formatInspectorTemperature(cell.bathTempF)}
+				</p>
+			)}
+			{cell.check?.comments && <p className="mt-1 text-xs">{cell.check.comments}</p>}
+			{cell.check?.action && <p className="mt-1 text-xs">Action: {cell.check.action}</p>}
+			{cell.rechecks.length > 0 && (
+				<ul className="mt-1 space-y-0.5 text-xs">
+					{cell.rechecks.map((recheck) => (
+						<li key={`${recheck.fixture}-${recheck.sequence}`}>
+							Recheck {recheck.fixture === 'kitchen' ? 'Kitchen' : 'Bath / Shower'}{' '}
+							{formatInspectorTemperature(recheck.tempF)} ({recheck.staffInitials}
+							{recheck.superseded ? ', superseded' : ''})
+						</li>
+					))}
+				</ul>
+			)}
+		</div>
 	);
 }
 

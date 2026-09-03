@@ -56,8 +56,7 @@ const inputClass =
 
 const PARTICIPANT_SOURCE_LABELS: Record<ParticipantSource, string> = {
 	roster: 'Roster resident',
-	manual: 'Manual participant',
-	external: 'External participant',
+	manual: 'Resident not on roster',
 };
 
 export default function FireDrillWorkspace() {
@@ -447,7 +446,6 @@ export default function FireDrillWorkspace() {
 					onResidentToAddChange={setResidentToAdd}
 					onAddResident={addResident}
 					onAddManualParticipant={() => addNamedParticipant('manual')}
-					onAddExternalParticipant={() => addNamedParticipant('external')}
 					onUpdateParticipant={updateParticipant}
 					onChangeParticipantSource={updateParticipantSource}
 					onChangeParticipantResident={updateParticipantResident}
@@ -528,7 +526,6 @@ function FireDrillEditor(props: {
 	onResidentToAddChange: (id: string) => void;
 	onAddResident: () => void;
 	onAddManualParticipant: () => void;
-	onAddExternalParticipant: () => void;
 	onUpdateParticipant: (index: number, changes: Partial<ParticipantDraft>) => void;
 	onChangeParticipantSource: (index: number, participantSource: ParticipantSource) => void;
 	onChangeParticipantResident: (index: number, residentId: string) => void;
@@ -631,8 +628,7 @@ function FireDrillEditor(props: {
 								{availableResidents.map((resident) => <option key={resident.id} value={resident.id}>{resident.name}</option>)}
 							</select>
 							<button type="button" onClick={props.onAddResident} disabled={!props.residentToAdd} className="shrink-0 rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:bg-gray-300">Add roster resident</button>
-							<button type="button" onClick={props.onAddManualParticipant} className="shrink-0 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">Add manual participant</button>
-							<button type="button" onClick={props.onAddExternalParticipant} className="shrink-0 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">Add external participant</button>
+							<button type="button" onClick={props.onAddManualParticipant} className="shrink-0 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50">Add resident not on roster</button>
 						</div>
 						{props.residents.length === 0 && <p className="mt-2 text-xs text-amber-800">No active residents are available for this house.</p>}
 						{props.form.participants.length === 0 ? (
@@ -661,8 +657,7 @@ function FireDrillEditor(props: {
 													onChange={(event) => props.onChangeParticipantSource(index, event.target.value as ParticipantSource)}
 												>
 													<option value="roster">Roster resident</option>
-													<option value="manual">Manual participant</option>
-													<option value="external">External participant</option>
+													<option value="manual">Resident not on roster</option>
 												</select>
 											</div>
 											{participant.participantSource === 'roster' ? (
@@ -682,7 +677,7 @@ function FireDrillEditor(props: {
 											) : (
 												<div className="lg:col-span-2">
 													<label htmlFor={`fire-drill-resident-name-${participant.key}`} className="mb-1 block text-xs font-medium text-gray-700">
-														{participant.participantSource === 'manual' ? 'Manual participant name' : 'External participant name'}
+														Resident name
 													</label>
 													<input
 														id={`fire-drill-resident-name-${participant.key}`}

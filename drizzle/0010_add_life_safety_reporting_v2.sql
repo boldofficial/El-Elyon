@@ -27,15 +27,32 @@ INSERT INTO "location_legacy_names" ("location_id", "name", "created_at")
 ALTER TABLE "inspector_access"
 	ADD COLUMN IF NOT EXISTS "location_id" uuid;
 
-ALTER TABLE "inspector_access"
-	ADD CONSTRAINT "inspector_access_location_fk"
-	FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE SET NULL;
+-- PostgreSQL has no ADD CONSTRAINT IF NOT EXISTS, so guard it explicitly.
+-- Without this, a migration that failed partway through (this one did, on a
+-- later statement) can never be re-run: the retry aborts here with 42710
+-- "constraint already exists" before reaching the statements that still need
+-- to apply.
+DO $$
+BEGIN
+	IF NOT EXISTS (
+		SELECT 1 FROM pg_constraint WHERE conname = 'inspector_access_location_fk'
+	) THEN
+		ALTER TABLE "inspector_access"
+			ADD CONSTRAINT "inspector_access_location_fk"
+			FOREIGN KEY ("location_id") REFERENCES "locations"("id") ON DELETE SET NULL;
+	END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS "inspector_access_location_id_idx"
 	ON "inspector_access" ("location_id");
 
+-- (array_agg("id"))[1] rather than min("id"): PostgreSQL has no min()/max()
+-- aggregate for uuid before version 18, so min("id") fails here with 42883
+-- "function min(uuid) does not exist". HAVING count(*) = 1 already restricts
+-- each group to exactly one row, so this picks that single id -- identical
+-- result, no version dependency.
 WITH unique_active_locations AS (
-	SELECT "name", min("id") AS "location_id"
+	SELECT "name", (array_agg("id"))[1] AS "location_id"
 	FROM "locations"
 	WHERE "status" = 'active'
 	GROUP BY "name"

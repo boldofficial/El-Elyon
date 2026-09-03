@@ -39,6 +39,11 @@ const NAV_SECTIONS = [
 		icon: '🧯',
 	},
 	{
+		key: 'water-temperature',
+		label: 'Water Temperature',
+		icon: '🌡️',
+	},
+	{
 		key: 'care-logs',
 		label: 'Logs & Incidents',
 		icon: '📋',

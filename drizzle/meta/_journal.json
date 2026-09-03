@@ -1,0 +1,111 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1764693139000,
+      "tag": "0000_initial_database_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770872986000,
+      "tag": "0001_add_life_safety_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770872986001,
+      "tag": "0002_add_memos_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770872986002,
+      "tag": "0003_add_vacation_requests_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778794311000,
+      "tag": "0004_add_resident_emergency_contact",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779219458000,
+      "tag": "0005_one_open_shift_per_user",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779989440000,
+      "tag": "0006_add_resident_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780721219000,
+      "tag": "0007_add_admin_privileges",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787109942000,
+      "tag": "0008_add_isp_file_acknowledgments",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787112288000,
+      "tag": "0009_add_inspector_access",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788149032000,
+      "tag": "0010_add_life_safety_reporting_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1788278566000,
+      "tag": "0011_add_daily_water_temperature_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788285084000,
+      "tag": "0012_fix_water_temperature_action_required_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788321277060,
+      "tag": "0013_seed_config_operational_time_zone",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1788393600000,
+      "tag": "0014_fire_drill_participants_cascade",
+      "breakpoints": true
+    }
+  ]
+}

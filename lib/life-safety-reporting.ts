@@ -14,11 +14,16 @@ export const LIFE_SAFETY_EQUIPMENT_TYPES = [
 
 export const LIFE_SAFETY_OUTCOMES = ["pass", "fail"] as const;
 
-export const FIRE_DRILL_PARTICIPANT_SOURCES = [
-  "roster",
-  "manual",
-  "external",
-] as const;
+// Fire drills record resident evacuation results only, so there is no
+// "external" (non-resident) source: the drill sheet has no column for one and
+// no requirement asks for it. "manual" covers the real gap -- a resident who
+// cannot be selected from the roster dropdown, such as a new admission not yet
+// in the system or one since removed.
+//
+// The database CHECK constraint still permits 'external' (see db/schema.ts).
+// That is deliberate: no row has ever used it, nothing can produce it now, and
+// tightening it would require another migration for no behavioural gain.
+export const FIRE_DRILL_PARTICIPANT_SOURCES = ["roster", "manual"] as const;
 
 export const LIFE_SAFETY_REVISION_ACTIONS = [
   "create",
