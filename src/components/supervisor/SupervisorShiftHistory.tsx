@@ -1,6 +1,7 @@
 "use client";
 
 import React, {useEffect, useMemo, useState} from "react";
+import SharedLogsTable from "@/components/care/SharedLogsTable";
 
 interface ShiftRecord {
   shiftId: string;
@@ -13,6 +14,7 @@ interface ShiftRecord {
   durationMs: number;
   logCount: number;
   activityCount: number;
+  logs: any[];
 }
 
 export default function SupervisorShiftHistory() {
@@ -24,6 +26,7 @@ export default function SupervisorShiftHistory() {
   const [selectedLocation, setSelectedLocation] = useState<string>("all");
   const [selectedStaff, setSelectedStaff] = useState<string>("all");
   const [dateRange, setDateRange] = useState({from: "", to: ""});
+  const [expandedShiftId, setExpandedShiftId] = useState<string | null>(null);
 
   useEffect(() => {
     async function bootstrap() {
@@ -194,20 +197,47 @@ export default function SupervisorShiftHistory() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {records.map((shift) => (
-                        <tr key={shift.shiftId}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            <div className="font-medium">{shift.staffName}</div>
-                            <div className="text-gray-500 text-xs">{shift.staffEmail}</div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.location}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDateTime(shift.clockInTime)}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.clockOutTime ? formatDateTime(shift.clockOutTime) : "Still working"}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDurationHours(shift.durationMs)}h</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.logCount}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.activityCount}</td>
-                        </tr>
-                      ))}
+                      {records.map((shift) => {
+                        const isExpanded = expandedShiftId === shift.shiftId;
+                        return (
+                          <React.Fragment key={shift.shiftId}>
+                            <tr>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                <div className="font-medium">{shift.staffName}</div>
+                                <div className="text-gray-500 text-xs">{shift.staffEmail}</div>
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.location}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDateTime(shift.clockInTime)}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.clockOutTime ? formatDateTime(shift.clockOutTime) : "Still working"}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDurationHours(shift.durationMs)}h</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {shift.logCount > 0 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedShiftId(isExpanded ? null : shift.shiftId)
+                                    }
+                                    className="text-blue-600 hover:text-blue-800 underline underline-offset-2 font-medium"
+                                    aria-expanded={isExpanded}
+                                  >
+                                    {shift.logCount}
+                                  </button>
+                                ) : (
+                                  shift.logCount
+                                )}
+                              </td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.activityCount}</td>
+                            </tr>
+                            {isExpanded && (
+                              <tr>
+                                <td colSpan={7} className="px-6 py-4 bg-gray-50">
+                                  <SharedLogsTable logs={shift.logs} />
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

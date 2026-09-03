@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
 		if (shiftIds.length > 0) {
 			const logs = await db.query.residentLogs.findMany({
 				where: inArray(residentLogs.shiftId, shiftIds),
-				with: {activities: true},
+				with: {activities: true, resident: true},
 			});
 
 			for (const log of logs) {
@@ -70,11 +70,17 @@ export async function GET(req: NextRequest) {
 					id: log.id,
 					logType: log.logType,
 					template: log.template,
+					content: log.content,
+					authorId: log.authorId,
 					authorName: log.authorName,
 					createdAt: log.createdAt,
+					residentName: log.resident?.name,
+					residentLocation: log.resident?.location,
 					activities: (log.activities || []).map((activity) => ({
+						id: activity.id,
 						activityType: activity.activityType,
 						completed: activity.completed,
+						notes: activity.notes,
 					})),
 				});
 
