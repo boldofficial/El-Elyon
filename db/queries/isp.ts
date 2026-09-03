@@ -31,6 +31,8 @@ export interface PendingISPFileAck {
     versionLabel: string;
     effectiveDate: Date;
     fileName: string;
+    fileStorageId: string;
+    contentType: string;
 }
 
 // Active ISP files the given user still needs to acknowledge, scoped to the
@@ -80,5 +82,7 @@ export async function getPendingISPFileAcknowledgments(
             versionLabel: f.versionLabel,
             effectiveDate: f.effectiveDate,
             fileName: f.fileName,
+            fileStorageId: f.fileStorageId,
+            contentType: f.contentType,
         }));
 }
