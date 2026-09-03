@@ -3,6 +3,7 @@
 import React, {useState, useEffect} from 'react';
 import SelfieCapture from '../shared/SelfieCapture';
 import {toast} from 'sonner';
+import DashboardNotifications from './DashboardNotifications';
 
 interface CareShiftWorkspaceProps {
 	onShiftChange?: () => void;
@@ -307,6 +308,9 @@ export default function CareShiftWorkspace({ onShiftChange }: CareShiftWorkspace
 					)}
 				</div>
 			</div>
+
+			{/* Notifications: pending ISP acknowledgments & unread memos */}
+			<DashboardNotifications />
 
 			{/* Shift Guidelines */}
 			<div className="bg-blue-50 rounded-lg border border-blue-200 p-6">

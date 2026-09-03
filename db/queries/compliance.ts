@@ -276,6 +276,40 @@ export async function internalListAdmins() {
 	});
 }
 
+// Compliance alert types whose reminders are shown to EVERY user (all roles).
+// The remaining types (isp, fire_evac) are shown only to supervisors + admins.
+export const ALL_USER_ALERT_TYPES = ['smoke_detector', 'fire_drill'] as const;
+
+// Reminders to show in a user's dashboard notification feed, honoring both
+// location scope and per-type audience rules.
+export async function getComplianceRemindersForUser(clerkUserId: string) {
+	const role = await getUserRoleDoc(clerkUserId);
+	if (!role) return [];
+
+	const roleName = role.role?.toLowerCase();
+	const isStaff = roleName !== 'admin' && roleName !== 'supervisor';
+
+	const alerts = await listActiveAlerts(clerkUserId);
+
+	// Staff only see the all-user fire-safety reminders; ISP / fire-evac
+	// deadline reminders are for supervisors + admins.
+	const visible = isStaff
+		? alerts.filter((a) =>
+				(ALL_USER_ALERT_TYPES as readonly string[]).includes(a.type)
+		  )
+		: alerts;
+
+	return visible.map((a) => ({
+		id: a.id,
+		type: a.type,
+		title: a.title,
+		description: a.description,
+		location: a.location,
+		severity: a.severity,
+		createdAt: a.createdAt,
+	}));
+}
+
 // Query: List active alerts for user (by location)
 export async function listActiveAlerts(clerkUserId: string) {
 	const role = await getUserRoleDoc(clerkUserId);
