@@ -1060,8 +1060,15 @@ export const fireDrillParticipants = pgTable(
 		fireDrillReportId: uuid('fire_drill_report_id')
 			.notNull()
 			.references(() => fireDrillReports.id, {onDelete: 'cascade'}),
+		// CASCADE, not SET NULL: sourceReferenceCheck below requires that a
+		// 'roster' participant always has a non-null residentId. SET NULL would
+		// try to null this column out from under a live roster row and fail that
+		// check constraint, which blocks deleting any resident who has ever
+		// participated (via roster) in a fire drill. Deleting the participation
+		// record along with the resident avoids the conflict; resident_name_snapshot
+		// still preserves the human-readable record of who attended.
 		residentId: uuid('resident_id').references(() => residents.id, {
-			onDelete: 'set null'
+			onDelete: 'cascade'
 		}),
 		residentNameSnapshot: varchar('resident_name_snapshot', {
 			length: 255
@@ -1596,7 +1603,7 @@ export const ispFilesRelations = relations(ispFiles, ({one, many}) => ({
 		references: [residents.id]
 	}),
 	accessLogs: many(ispAccessLogs),
-	acknowledgments: many(ispFileAcknowledgments)
+	acknowledgments: many(ispFileAcknowledgments),
 }));
 
 export const ispFileAcknowledgmentsRelations = relations(
