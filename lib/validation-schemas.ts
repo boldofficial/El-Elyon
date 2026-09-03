@@ -1,4 +1,10 @@
 import {z} from 'zod';
+import {
+	fireDrillReportInputSchema,
+	lifeSafetyExpectedVersionSchema,
+	lifeSafetyInspectionInputSchema,
+	lifeSafetyVoidInputSchema,
+} from './life-safety-reporting';
 
 // ============================================================================
 // MEMO SCHEMAS
@@ -59,30 +65,69 @@ export const residentDocumentSchema = z.object({
 });
 
 // ============================================================================
-// FIRE DRILL SCHEMAS
+// LIFE-SAFETY REPORTING V2 SCHEMAS
 // ============================================================================
 
-export const fireDrillSchema = z.object({
-	location: z.string().min(1, 'Location is required').max(255, 'Location too long'),
-	year: z.number().int().min(2020).max(2100),
-	sequence: z.number().int().min(1).max(12),
-	drillDate: z.string().datetime('Invalid drill date format'),
-	conductedBy: z.string().min(1, 'Conductor name is required').max(255, 'Name too long'),
-	evacuationTime: z.string().max(50, 'Time too long').optional(),
-	notes: z.string().max(2000, 'Notes too long').optional(),
-});
+const lifeSafetyUuidSchema = z.string().uuid('Invalid ID');
+const lifeSafetyYearQuerySchema = z.coerce.number().int().min(2020).max(2100);
+const lifeSafetyLimitSchema = z.coerce.number().int().min(1).max(100).default(50);
 
-// ============================================================================
-// SMOKE DETECTOR CHECK SCHEMAS
-// ============================================================================
+export const lifeSafetyCollectionQuerySchema = z
+	.object({
+		locationId: lifeSafetyUuidSchema,
+		year: lifeSafetyYearQuerySchema,
+		includeVoided: z
+			.enum(['true', 'false'])
+			.default('false')
+			.transform((value) => value === 'true'),
+	})
+	.strict();
 
-export const smokeDetectorCheckSchema = z.object({
-	location: z.string().min(1, 'Location is required').max(255, 'Location too long'),
-	checkDate: z.string().datetime('Invalid check date format'),
-	checkedBy: z.string().min(1, 'Inspector name is required').max(255, 'Name too long'),
-	detectorStatus: z.enum(['functional', 'needs-repair', 'replaced']),
-	notes: z.string().max(2000, 'Notes too long').optional(),
-});
+export const lifeSafetyResidentQuerySchema = z
+	.object({
+		locationId: lifeSafetyUuidSchema,
+	})
+	.strict();
+
+export const lifeSafetyLegacyQuerySchema = z
+	.object({
+		location: z
+			.string()
+			.trim()
+			.min(1)
+			.max(255)
+			.refine((value) => value.toLowerCase() !== 'all', 'A concrete location is required'),
+		year: lifeSafetyYearQuerySchema.optional(),
+		month: z.coerce.number().int().min(1).max(12).optional(),
+		sequence: z.coerce.number().int().min(1).max(2).optional(),
+		cursor: lifeSafetyUuidSchema.optional(),
+		limit: lifeSafetyLimitSchema,
+	})
+	.strict();
+
+export const lifeSafetyInspectionCreateSchema = lifeSafetyInspectionInputSchema;
+export const lifeSafetyInspectionUpdateSchema = z
+	.object({
+		expectedVersion: lifeSafetyExpectedVersionSchema,
+		entry: lifeSafetyInspectionInputSchema,
+	})
+	.strict();
+
+export const fireDrillReportCreateSchema = fireDrillReportInputSchema;
+export const fireDrillReportUpdateSchema = z
+	.object({
+		expectedVersion: lifeSafetyExpectedVersionSchema,
+		report: fireDrillReportInputSchema,
+	})
+	.strict();
+
+export const lifeSafetyRecordIdSchema = lifeSafetyUuidSchema;
+export const lifeSafetyRecordVoidSchema = lifeSafetyVoidInputSchema;
+
+export type LifeSafetyCollectionQuery = z.infer<
+	typeof lifeSafetyCollectionQuerySchema
+>;
+export type LifeSafetyLegacyQuery = z.infer<typeof lifeSafetyLegacyQuerySchema>;
 
 // ============================================================================
 // INCIDENT REPORT SCHEMAS

@@ -69,6 +69,7 @@ export async function POST(req: Request) {
 		// otp is returned exactly once for the admin to hand to the inspector.
 		return NextResponse.json({
 			id: record.id,
+			locationId: record.locationId,
 			location: record.location,
 			label: record.label,
 			expiresAt: record.expiresAt,

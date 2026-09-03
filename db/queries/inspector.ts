@@ -8,9 +8,19 @@ import {
 	fireEvac,
 	fireDrills,
 	smokeDetectorChecks,
+	locations,
+	lifeSafetyInspectionEntries,
+	fireDrillReports,
+	fireDrillParticipants,
 } from '../schema';
-import {eq, and, desc, inArray} from 'drizzle-orm';
+import {eq, and, asc, desc, inArray, isNull} from 'drizzle-orm';
 import {hashOtp} from '@/lib/inspector-auth';
+import {listLocationAliases} from './life-safety';
+import {groupFireDrillJoinRows} from './fire-drill-aggregate';
+import {
+	projectInspectorLifeSafetyData,
+	InspectorLifeSafetyScopeError,
+} from '@/lib/inspector-life-safety-projection';
 
 // Find a live (non-revoked, non-expired) grant matching a submitted OTP.
 export async function findActiveInspectorAccessByOtp(otp: string) {
@@ -137,4 +147,114 @@ export async function getInspectorAllowedFileIds(
 		for (const att of incident.attachments || []) ids.add(att);
 	}
 	return ids;
+}
+
+// Minimal life-safety projection for a live inspector session. The session's
+// immutable location ID is the only scope input: route query parameters never
+// enter this boundary.
+export async function getInspectorLifeSafetyData(locationId: string) {
+	const location = await db.query.locations.findFirst({
+		where: and(eq(locations.id, locationId), eq(locations.status, 'active')),
+	});
+	if (!location) {
+		throw new InspectorLifeSafetyScopeError();
+	}
+	const legacyNames = await listLocationAliases(location.id);
+	if (legacyNames === null) {
+		throw new InspectorLifeSafetyScopeError();
+	}
+	const legacyLocationNames = legacyNames.length > 0 ? legacyNames : [location.name];
+
+	const [inspections, reportRows, legacySmokeChecks, legacyFireDrills] = await Promise.all([
+		db
+			.select({
+				reportYear: lifeSafetyInspectionEntries.reportYear,
+				reportMonth: lifeSafetyInspectionEntries.reportMonth,
+				equipmentType: lifeSafetyInspectionEntries.equipmentType,
+				inspectionDate: lifeSafetyInspectionEntries.inspectionDate,
+				staffInitials: lifeSafetyInspectionEntries.staffInitials,
+				outcome: lifeSafetyInspectionEntries.outcome,
+				notes: lifeSafetyInspectionEntries.notes,
+			})
+			.from(lifeSafetyInspectionEntries)
+			.where(and(
+				eq(lifeSafetyInspectionEntries.locationId, location.id),
+				isNull(lifeSafetyInspectionEntries.voidedAt)
+			))
+			.orderBy(
+				desc(lifeSafetyInspectionEntries.reportYear),
+				asc(lifeSafetyInspectionEntries.reportMonth),
+				asc(lifeSafetyInspectionEntries.equipmentType)
+			),
+		db
+			.select({
+				report: {
+					id: fireDrillReports.id,
+					reportYear: fireDrillReports.reportYear,
+					sequence: fireDrillReports.sequence,
+					drillDate: fireDrillReports.drillDate,
+					drillTime: fireDrillReports.drillTime,
+					staffNames: fireDrillReports.staffNames,
+				},
+				participant: {
+					fireDrillReportId: fireDrillParticipants.fireDrillReportId,
+					residentNameSnapshot: fireDrillParticipants.residentNameSnapshot,
+					durationMinutes: fireDrillParticipants.durationMinutes,
+					durationSeconds: fireDrillParticipants.durationSeconds,
+					comment: fireDrillParticipants.comment,
+					position: fireDrillParticipants.position,
+				},
+			})
+			.from(fireDrillReports)
+			.leftJoin(
+				fireDrillParticipants,
+				eq(fireDrillParticipants.fireDrillReportId, fireDrillReports.id)
+			)
+			.where(and(
+				eq(fireDrillReports.locationId, location.id),
+				isNull(fireDrillReports.voidedAt)
+			))
+			.orderBy(
+				desc(fireDrillReports.reportYear),
+				asc(fireDrillReports.sequence),
+				asc(fireDrillParticipants.position)
+			),
+		db
+			.select({
+				date: smokeDetectorChecks.date,
+				smokeStatus: smokeDetectorChecks.smokeStatus,
+				coStatus: smokeDetectorChecks.coStatus,
+				staffInitials: smokeDetectorChecks.staffInitials,
+				notes: smokeDetectorChecks.notes,
+			})
+			.from(smokeDetectorChecks)
+			.where(inArray(smokeDetectorChecks.location, legacyLocationNames))
+			.orderBy(desc(smokeDetectorChecks.date)),
+		db
+			.select({
+				year: fireDrills.year,
+				sequence: fireDrills.sequence,
+				residentName: fireDrills.residentName,
+				date: fireDrills.date,
+				time: fireDrills.time,
+				staffName: fireDrills.staffName,
+				comment: fireDrills.comment,
+			})
+			.from(fireDrills)
+			.where(inArray(fireDrills.location, legacyLocationNames))
+			.orderBy(desc(fireDrills.year), asc(fireDrills.sequence), desc(fireDrills.date)),
+	]);
+
+	const aggregates = groupFireDrillJoinRows(reportRows);
+	const reports = aggregates.map(({participants: _participants, ...report}) => report);
+	const participants = aggregates.flatMap((report) => report.participants);
+
+	return projectInspectorLifeSafetyData({
+		location,
+		inspections,
+		fireDrills: reports,
+		participants,
+		legacySmokeChecks,
+		legacyFireDrills,
+	});
 }

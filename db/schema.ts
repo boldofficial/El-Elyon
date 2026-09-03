@@ -8,9 +8,12 @@ import {
 	jsonb,
 	index,
 	uniqueIndex,
+	check,
 	uuid,
+	date,
+	time
 } from 'drizzle-orm/pg-core';
-import {relations} from 'drizzle-orm';
+import {relations, sql} from 'drizzle-orm';
 
 // Create a custom table creator with a prefix
 // const pgTable = pgTableCreator((name) => `el_elyon_${name}`);
@@ -55,11 +58,11 @@ export const residents = pgTable(
 		careNotes: text('care_notes'),
 		profileImageId: varchar('profile_image_id', {length: 500}),
 		createdAt: timestamp('created_at').defaultNow(),
-		createdBy: varchar('created_by', {length: 255}),
+		createdBy: varchar('created_by', {length: 255})
 	},
 	(table) => ({
 		locationIdx: index('residents_location_idx').on(table.location),
-		createdByIdx: index('residents_created_by_idx').on(table.createdBy),
+		createdByIdx: index('residents_created_by_idx').on(table.createdBy)
 	})
 );
 
@@ -75,10 +78,10 @@ export const guardians = pgTable(
 		address: text('address'),
 		residentIds: jsonb('resident_ids').$type<string[]>(),
 		createdAt: timestamp('created_at').defaultNow(),
-		createdBy: varchar('created_by', {length: 255}),
+		createdBy: varchar('created_by', {length: 255})
 	},
 	(table) => ({
-		createdByIdx: index('guardians_created_by_idx').on(table.createdBy),
+		createdByIdx: index('guardians_created_by_idx').on(table.createdBy)
 	})
 );
 
@@ -119,7 +122,7 @@ export const employees = pgTable(
 		onboardedBy: varchar('onboarded_by', {length: 255}),
 		onboardedAt: timestamp('onboarded_at'),
 		inviteBounced: boolean('invite_bounced'),
-		inviteResent: integer('invite_resent'),
+		inviteResent: integer('invite_resent')
 	},
 	(table) => ({
 		workEmailIdx: index('employees_work_email_idx').on(table.workEmail),
@@ -128,7 +131,7 @@ export const employees = pgTable(
 		assignedDeviceIdIdx: index('employees_assigned_device_id_idx').on(
 			table.assignedDeviceId
 		),
-		inviteTokenIdx: index('employees_invite_token_idx').on(table.inviteToken),
+		inviteTokenIdx: index('employees_invite_token_idx').on(table.inviteToken)
 	})
 );
 
@@ -142,10 +145,10 @@ export const roles = pgTable(
 		locations: jsonb('locations').$type<string[]>().default([]),
 		assignedBy: varchar('assigned_by', {length: 255}),
 		assignedAt: timestamp('assigned_at'),
-		teams: jsonb('teams').$type<string[]>(),
+		teams: jsonb('teams').$type<string[]>()
 	},
 	(table) => ({
-		clerkUserIdIdx: index('roles_clerk_user_id_idx').on(table.clerkUserId),
+		clerkUserIdIdx: index('roles_clerk_user_id_idx').on(table.clerkUserId)
 	})
 );
 
@@ -159,7 +162,7 @@ export const adminPrivileges = pgTable(
 		grantedBy: varchar('granted_by', {length: 255}).notNull(),
 		grantedAt: timestamp('granted_at').notNull().defaultNow(),
 		revokedBy: varchar('revoked_by', {length: 255}),
-		revokedAt: timestamp('revoked_at'),
+		revokedAt: timestamp('revoked_at')
 	},
 	(table) => ({
 		clerkUserIdIdx: index('admin_privileges_clerk_user_id_idx').on(
@@ -168,7 +171,7 @@ export const adminPrivileges = pgTable(
 		activeIdx: index('admin_privileges_active_idx').on(
 			table.clerkUserId,
 			table.privilege
-		),
+		)
 	})
 );
 
@@ -185,12 +188,12 @@ export const shifts = pgTable(
 		kioskId: uuid('kiosk_id'),
 		notes: text('notes'),
 		clockInSelfie: varchar('clock_in_selfie', {length: 255}),
-		clockOutSelfie: varchar('clock_out_selfie', {length: 255}),
+		clockOutSelfie: varchar('clock_out_selfie', {length: 255})
 	},
 	(table) => ({
 		clerkUserIdIdx: index('shifts_clerk_user_id_idx').on(table.clerkUserId),
 		locationIdx: index('shifts_location_idx').on(table.location),
-		clockInTimeIdx: index('shifts_clock_in_time_idx').on(table.clockInTime),
+		clockInTimeIdx: index('shifts_clock_in_time_idx').on(table.clockInTime)
 	})
 );
 
@@ -210,11 +213,11 @@ export const kiosks = pgTable(
 		registeredAt: timestamp('registered_at'),
 		registeredBy: varchar('registered_by', {length: 255}),
 		createdAt: timestamp('created_at').defaultNow(),
-		createdBy: varchar('created_by', {length: 255}),
+		createdBy: varchar('created_by', {length: 255})
 	},
 	(table) => ({
 		locationIdx: index('kiosks_location_idx').on(table.location),
-		deviceIdIdx: index('kiosks_device_id_idx').on(table.deviceId),
+		deviceIdIdx: index('kiosks_device_id_idx').on(table.deviceId)
 	})
 );
 
@@ -236,7 +239,7 @@ export const residentLogs = pgTable(
 		authorName: varchar('author_name', {length: 255}),
 		version: integer('version').default(1),
 		template: varchar('template', {length: 255}),
-		createdAt: timestamp('created_at').defaultNow(),
+		createdAt: timestamp('created_at').defaultNow()
 		// metadata: jsonb('metadata').$type<{
 		// 	mood?: string;
 		// 	behavior?: string;
@@ -249,7 +252,7 @@ export const residentLogs = pgTable(
 		locationIdx: index('resident_logs_location_idx').on(table.location),
 		authorIdIdx: index('resident_logs_author_id_idx').on(table.authorId),
 		authorNameIdx: index('resident_logs_author_name_idx').on(table.authorName),
-		createdAtIdx: index('resident_logs_created_at_idx').on(table.createdAt),
+		createdAtIdx: index('resident_logs_created_at_idx').on(table.createdAt)
 	})
 );
 
@@ -263,12 +266,12 @@ export const auditLogs = pgTable(
 		timestamp: timestamp('timestamp').notNull(),
 		deviceId: varchar('device_id', {length: 255}).notNull(),
 		location: varchar('location', {length: 255}).notNull(),
-		details: text('details'),
+		details: text('details')
 	},
 	(table) => ({
 		clerkUserIdIdx: index('audit_logs_clerk_user_id_idx').on(table.clerkUserId),
 		timestampIdx: index('audit_logs_timestamp_idx').on(table.timestamp),
-		eventIdx: index('audit_logs_event_idx').on(table.event),
+		eventIdx: index('audit_logs_event_idx').on(table.event)
 	})
 );
 
@@ -293,13 +296,13 @@ export const complianceAlerts = pgTable(
 			logType?: string;
 			expectedCount?: number;
 			actualCount?: number;
-		}>(),
+		}>()
 	},
 	(table) => ({
 		statusIdx: index('compliance_alerts_status_idx').on(table.status),
 		severityIdx: index('compliance_alerts_severity_idx').on(table.severity),
 		locationIdx: index('compliance_alerts_location_idx').on(table.location),
-		createdAtIdx: index('compliance_alerts_created_at_idx').on(table.createdAt),
+		createdAtIdx: index('compliance_alerts_created_at_idx').on(table.createdAt)
 	})
 );
 
@@ -325,7 +328,7 @@ export const ispFiles = pgTable(
 		activatedBy: varchar('activated_by', {length: 255}),
 		activatedAt: timestamp('activated_at'),
 		archivedBy: varchar('archived_by', {length: 255}),
-		archivedAt: timestamp('archived_at'),
+		archivedAt: timestamp('archived_at')
 	},
 	(table) => ({
 		residentIdIdx: index('isp_files_resident_id_idx').on(table.residentId),
@@ -336,7 +339,7 @@ export const ispFiles = pgTable(
 		residentVersionIdx: index('isp_files_resident_version_idx').on(
 			table.residentId,
 			table.versionLabel
-		),
+		)
 	})
 );
 
@@ -359,7 +362,7 @@ export const ispAccessLogs = pgTable(
 		ipAddress: varchar('ip_address', {length: 100}),
 		userAgent: text('user_agent'),
 		success: boolean('success').notNull(),
-		errorMessage: text('error_message'),
+		errorMessage: text('error_message')
 	},
 	(table) => ({
 		ispFileIdIdx: index('isp_access_logs_isp_file_id_idx').on(table.ispFileId),
@@ -370,7 +373,7 @@ export const ispAccessLogs = pgTable(
 			table.clerkUserId
 		),
 		timestampIdx: index('isp_access_logs_timestamp_idx').on(table.timestamp),
-		actionIdx: index('isp_access_logs_action_idx').on(table.action),
+		actionIdx: index('isp_access_logs_action_idx').on(table.action)
 	})
 );
 
@@ -387,10 +390,10 @@ export const isp = pgTable(
 		goals: jsonb('goals').$type<string[]>(),
 		version: integer('version'),
 		createdAt: timestamp('created_at').defaultNow(),
-		dueAt: timestamp('due_at'),
+		dueAt: timestamp('due_at')
 	},
 	(table) => ({
-		residentIdIdx: index('isp_resident_id_idx').on(table.residentId),
+		residentIdIdx: index('isp_resident_id_idx').on(table.residentId)
 	})
 );
 
@@ -409,13 +412,13 @@ export const ispAcknowledgments = pgTable(
 		acknowledgedAt: timestamp('acknowledged_at').notNull(),
 		acknowledgedIsp: uuid('acknowledged_isp')
 			.notNull()
-			.references(() => isp.id),
+			.references(() => isp.id)
 	},
 	(table) => ({
 		residentUserIdx: index('isp_acknowledgments_resident_user_idx').on(
 			table.residentId,
 			table.clerkUserId
-		),
+		)
 	})
 );
 
@@ -464,11 +467,11 @@ export const fireEvac = pgTable(
 		fileName: varchar('file_name', {length: 255}),
 		fileSize: integer('file_size'),
 		contentType: varchar('content_type', {length: 100}),
-		notes: text('notes'),
+		notes: text('notes')
 	},
 	(table) => ({
 		residentIdIdx: index('fire_evac_resident_id_idx').on(table.residentId),
-		locationIdx: index('fire_evac_location_idx').on(table.location),
+		locationIdx: index('fire_evac_location_idx').on(table.location)
 	})
 );
 
@@ -480,7 +483,7 @@ export const config = pgTable('config', {
 	alertWeekday: integer('alert_weekday'),
 	alertHour: integer('alert_hour'),
 	alertMinute: integer('alert_minute'),
-	selfieEnforced: boolean('selfie_enforced'),
+	selfieEnforced: boolean('selfie_enforced')
 });
 
 // Guardian Checklist Templates Table
@@ -504,7 +507,7 @@ export const guardianChecklistTemplates = pgTable(
 		createdAt: timestamp('created_at').notNull(),
 		updatedAt: timestamp('updated_at'),
 		updatedBy: varchar('updated_by', {length: 255}),
-		active: boolean('active').notNull(),
+		active: boolean('active').notNull()
 	},
 	(table) => ({
 		activeIdx: index('guardian_checklist_templates_active_idx').on(
@@ -512,7 +515,7 @@ export const guardianChecklistTemplates = pgTable(
 		),
 		createdByIdx: index('guardian_checklist_templates_created_by_idx').on(
 			table.createdBy
-		),
+		)
 	})
 );
 
@@ -539,7 +542,7 @@ export const guardianChecklistLinks = pgTable(
 				questionId: string;
 				answer: string | number | boolean;
 			}>
-		>(),
+		>()
 	},
 	(table) => ({
 		tokenIdx: index('guardian_checklist_links_token_idx').on(table.token),
@@ -549,7 +552,7 @@ export const guardianChecklistLinks = pgTable(
 		sentByIdx: index('guardian_checklist_links_sent_by_idx').on(table.sentBy),
 		completedIdx: index('guardian_checklist_links_completed_idx').on(
 			table.completed
-		),
+		)
 	})
 );
 
@@ -566,11 +569,11 @@ export const kioskPairingTokens = pgTable(
 		issuedBy: varchar('issued_by', {length: 255}).notNull(),
 		issuedAt: timestamp('issued_at').notNull(),
 		expiresAt: timestamp('expires_at').notNull(),
-		usedAt: timestamp('used_at'),
+		usedAt: timestamp('used_at')
 	},
 	(table) => ({
 		tokenIdx: index('kiosk_pairing_tokens_token_idx').on(table.token),
-		statusIdx: index('kiosk_pairing_tokens_status_idx').on(table.status),
+		statusIdx: index('kiosk_pairing_tokens_status_idx').on(table.status)
 	})
 );
 
@@ -594,12 +597,12 @@ export const devices = pgTable(
 			screenResolution?: string;
 			ipAddress?: string;
 		}>(),
-		notes: text('notes'),
+		notes: text('notes')
 	},
 	(table) => ({
 		deviceIdIdx: index('devices_device_id_idx').on(table.deviceId),
 		locationIdx: index('devices_location_idx').on(table.location),
-		isActiveIdx: index('devices_is_active_idx').on(table.isActive),
+		isActiveIdx: index('devices_is_active_idx').on(table.isActive)
 	})
 );
 
@@ -617,12 +620,12 @@ export const users = pgTable(
 		createdAt: timestamp('created_at').notNull(),
 		updatedAt: timestamp('updated_at'),
 		resetToken: varchar('reset_token', {length: 255}),
-		resetTokenExpiry: timestamp('reset_token_expiry'),
+		resetTokenExpiry: timestamp('reset_token_expiry')
 	},
 	(table) => ({
 		clerkUserIdIdx: index('users_clerk_user_id_idx').on(table.clerkUserId),
 		emailIdx: index('users_email_idx').on(table.email),
-		resetTokenIdx: index('users_reset_token_idx').on(table.resetToken),
+		resetTokenIdx: index('users_reset_token_idx').on(table.resetToken)
 	})
 );
 
@@ -638,10 +641,30 @@ export const locations = pgTable(
 		status: varchar('status', {length: 50}),
 		createdBy: varchar('created_by', {length: 255}),
 		createdAt: timestamp('created_at').defaultNow(),
-		updatedAt: timestamp('updated_at'),
+		updatedAt: timestamp('updated_at')
 	},
 	(table) => ({
-		nameIdx: index('locations_name_idx').on(table.name),
+		nameIdx: index('locations_name_idx').on(table.name)
+	})
+);
+
+export const locationLegacyNames = pgTable(
+	'location_legacy_names',
+	{
+		locationId: uuid('location_id')
+			.notNull()
+			.references(() => locations.id, {onDelete: 'cascade'}),
+		name: varchar('name', {length: 255}).notNull(),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(table) => ({
+		locationIdx: index('location_legacy_names_location_id_idx').on(
+			table.locationId
+		),
+		nameIdx: index('location_legacy_names_name_idx').on(table.name),
+		locationNameUidx: uniqueIndex(
+			'location_legacy_names_location_id_name_uidx'
+		).on(table.locationId, table.name)
 	})
 );
 
@@ -660,10 +683,10 @@ export const hrFiles = pgTable(
 		uploadedBy: varchar('uploaded_by', {length: 255}).notNull(),
 		uploadedAt: timestamp('uploaded_at').notNull(),
 		archivedAt: timestamp('archived_at'),
-		archivedBy: varchar('archived_by', {length: 255}),
+		archivedBy: varchar('archived_by', {length: 255})
 	},
 	(table) => ({
-		employeeIdIdx: index('hr_files_employee_id_idx').on(table.employeeId),
+		employeeIdIdx: index('hr_files_employee_id_idx').on(table.employeeId)
 	})
 );
 
@@ -682,7 +705,7 @@ export const hrFileLogs = pgTable(
 		action: varchar('action', {length: 50}).notNull(),
 		timestamp: timestamp('timestamp').notNull(),
 		success: boolean('success').notNull(),
-		errorMessage: text('error_message'),
+		errorMessage: text('error_message')
 	},
 	(table) => ({
 		clerkUserIdIdx: index('hr_file_logs_clerk_user_id_idx').on(
@@ -691,7 +714,7 @@ export const hrFileLogs = pgTable(
 		hrFileIdIdx: index('hr_file_logs_hr_file_id_idx').on(table.hrFileId),
 		employeeIdIdx: index('hr_file_logs_employee_id_idx').on(table.employeeId),
 		timestampIdx: index('hr_file_logs_timestamp_idx').on(table.timestamp),
-		actionIdx: index('hr_file_logs_action_idx').on(table.action),
+		actionIdx: index('hr_file_logs_action_idx').on(table.action)
 	})
 );
 
@@ -710,13 +733,13 @@ export const complianceReminderTemplates = pgTable(
 			.notNull()
 			.references(() => users.id),
 		createdAt: timestamp('created_at').notNull(),
-		updatedAt: timestamp('updated_at'),
+		updatedAt: timestamp('updated_at')
 	},
 	(table) => ({
 		typeIdx: index('compliance_reminder_templates_type_idx').on(table.type),
 		activeIdx: index('compliance_reminder_templates_active_idx').on(
 			table.active
-		),
+		)
 	})
 );
 
@@ -737,14 +760,14 @@ export const employeeTrainings = pgTable(
 		createdAt: timestamp('created_at').defaultNow(),
 		createdBy: varchar('created_by', {length: 255}),
 		updatedAt: timestamp('updated_at'),
-		updatedBy: varchar('updated_by', {length: 255}),
+		updatedBy: varchar('updated_by', {length: 255})
 	},
 	(table) => ({
 		employeeIdIdx: index('employee_trainings_employee_id_idx').on(
 			table.employeeId
 		),
 		yearIdx: index('employee_trainings_year_idx').on(table.trainingYear),
-		completedIdx: index('employee_trainings_completed_idx').on(table.completed),
+		completedIdx: index('employee_trainings_completed_idx').on(table.completed)
 	})
 );
 
@@ -759,13 +782,13 @@ export const residentLogActivities = pgTable(
 		activityType: varchar('activity_type', {length: 100}).notNull(), // 'took_meds', 'meal', 'bath', etc.
 		completed: boolean('completed').notNull().default(false),
 		notes: text('notes'),
-		timestamp: timestamp('timestamp').defaultNow(),
+		timestamp: timestamp('timestamp').defaultNow()
 	},
 	(table) => ({
 		logIdIdx: index('resident_log_activities_log_id_idx').on(table.logId),
 		activityTypeIdx: index('resident_log_activities_activity_type_idx').on(
 			table.activityType
-		),
+		)
 	})
 );
 
@@ -785,13 +808,13 @@ export const residentDocuments = pgTable(
 		contentType: varchar('content_type', {length: 100}).notNull(),
 		description: text('description'),
 		uploadedBy: varchar('uploaded_by', {length: 255}).notNull(),
-		uploadedAt: timestamp('uploaded_at').defaultNow(),
+		uploadedAt: timestamp('uploaded_at').defaultNow()
 	},
 	(table) => ({
 		residentIdIdx: index('resident_documents_resident_id_idx').on(
 			table.residentId
 		),
-		typeIdx: index('resident_documents_type_idx').on(table.type),
+		typeIdx: index('resident_documents_type_idx').on(table.type)
 	})
 );
 
@@ -809,11 +832,11 @@ export const smokeDetectorChecks = pgTable(
 		createdBy: varchar('created_by', {length: 255}).notNull(),
 		updatedBy: varchar('updated_by', {length: 255}),
 		createdAt: timestamp('created_at').defaultNow(),
-		updatedAt: timestamp('updated_at'),
+		updatedAt: timestamp('updated_at')
 	},
 	(table) => ({
 		locationIdx: index('smoke_detector_checks_location_idx').on(table.location),
-		dateIdx: index('smoke_detector_checks_date_idx').on(table.date),
+		dateIdx: index('smoke_detector_checks_date_idx').on(table.date)
 	})
 );
 
@@ -833,12 +856,266 @@ export const fireDrills = pgTable(
 		createdBy: varchar('created_by', {length: 255}).notNull(),
 		updatedBy: varchar('updated_by', {length: 255}),
 		createdAt: timestamp('created_at').defaultNow(),
-		updatedAt: timestamp('updated_at'),
+		updatedAt: timestamp('updated_at')
 	},
 	(table) => ({
 		locationIdx: index('fire_drills_location_idx').on(table.location),
 		yearIdx: index('fire_drills_year_idx').on(table.year),
-		sequenceIdx: index('fire_drills_sequence_idx').on(table.sequence),
+		sequenceIdx: index('fire_drills_sequence_idx').on(table.sequence)
+	})
+);
+
+// Life-safety reporting v2. These normalized tables intentionally coexist with
+// smokeDetectorChecks and fireDrills so ambiguous legacy records remain intact.
+export const lifeSafetyInspectionEntries = pgTable(
+	'life_safety_inspection_entries',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		locationId: uuid('location_id')
+			.notNull()
+			.references(() => locations.id, {onDelete: 'restrict'}),
+		houseNameSnapshot: varchar('house_name_snapshot', {
+			length: 255
+		}).notNull(),
+		reportYear: integer('report_year').notNull(),
+		reportMonth: integer('report_month').notNull(),
+		equipmentType: varchar('equipment_type', {length: 32}).notNull(),
+		inspectionDate: date('inspection_date', {mode: 'string'}).notNull(),
+		staffInitials: varchar('staff_initials', {length: 50}).notNull(),
+		outcome: varchar('outcome', {length: 20}).notNull(),
+		notes: text('notes'),
+		version: integer('version').notNull().default(1),
+		voidedAt: timestamp('voided_at'),
+		voidedBy: varchar('voided_by', {length: 255}),
+		voidReason: text('void_reason'),
+		createdBy: varchar('created_by', {length: 255}).notNull(),
+		updatedBy: varchar('updated_by', {length: 255}),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		updatedAt: timestamp('updated_at')
+	},
+	(table) => ({
+		locationYearIdx: index(
+			'life_safety_inspection_entries_location_year_idx'
+		).on(table.locationId, table.reportYear),
+		activeIdentityIdx: uniqueIndex(
+			'life_safety_inspection_entries_active_identity_uidx'
+		)
+			.on(
+				table.locationId,
+				table.reportYear,
+				table.reportMonth,
+				table.equipmentType
+			)
+			.where(sql`${table.voidedAt} is null`),
+		yearCheck: check(
+			'life_safety_inspection_entries_year_check',
+			sql`${table.reportYear} between 2020 and 2100`
+		),
+		monthCheck: check(
+			'life_safety_inspection_entries_month_check',
+			sql`${table.reportMonth} between 1 and 12`
+		),
+		equipmentCheck: check(
+			'life_safety_inspection_entries_equipment_check',
+			sql`${table.equipmentType} in ('smoke', 'carbon_monoxide', 'fire_extinguisher')`
+		),
+		dateIdentityCheck: check(
+			'life_safety_inspection_entries_date_identity_check',
+			sql`extract(year from ${table.inspectionDate}) = ${table.reportYear} and extract(month from ${table.inspectionDate}) = ${table.reportMonth}`
+		),
+		outcomeCheck: check(
+			'life_safety_inspection_entries_outcome_check',
+			sql`${table.outcome} in ('pass', 'fail')`
+		),
+		versionCheck: check(
+			'life_safety_inspection_entries_version_check',
+			sql`${table.version} >= 1`
+		),
+		snapshotCheck: check(
+			'life_safety_inspection_entries_snapshot_check',
+			sql`length(btrim(${table.houseNameSnapshot})) > 0 and length(btrim(${table.staffInitials})) > 0`
+		),
+		voidCheck: check(
+			'life_safety_inspection_entries_void_check',
+			sql`(${table.voidedAt} is null and ${table.voidedBy} is null and ${table.voidReason} is null) or (${table.voidedAt} is not null and ${table.voidedBy} is not null and coalesce(length(btrim(${table.voidReason})), 0) > 0)`
+		)
+	})
+);
+
+export const fireDrillReports = pgTable(
+	'fire_drill_reports',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		locationId: uuid('location_id')
+			.notNull()
+			.references(() => locations.id, {onDelete: 'restrict'}),
+		houseNameSnapshot: varchar('house_name_snapshot', {
+			length: 255
+		}).notNull(),
+		reportYear: integer('report_year').notNull(),
+		sequence: integer('sequence').notNull(),
+		drillDate: date('drill_date', {mode: 'string'}).notNull(),
+		drillTime: time('drill_time', {precision: 0}).notNull(),
+		staffNames: jsonb('staff_names').$type<string[]>().notNull(),
+		version: integer('version').notNull().default(1),
+		voidedAt: timestamp('voided_at'),
+		voidedBy: varchar('voided_by', {length: 255}),
+		voidReason: text('void_reason'),
+		createdBy: varchar('created_by', {length: 255}).notNull(),
+		updatedBy: varchar('updated_by', {length: 255}),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		updatedAt: timestamp('updated_at')
+	},
+	(table) => ({
+		locationYearIdx: index('fire_drill_reports_location_year_idx').on(
+			table.locationId,
+			table.reportYear
+		),
+		activeIdentityIdx: uniqueIndex('fire_drill_reports_active_identity_uidx')
+			.on(table.locationId, table.reportYear, table.sequence)
+			.where(sql`${table.voidedAt} is null`),
+		yearCheck: check(
+			'fire_drill_reports_year_check',
+			sql`${table.reportYear} between 2020 and 2100`
+		),
+		sequenceCheck: check(
+			'fire_drill_reports_sequence_check',
+			sql`${table.sequence} in (1, 2)`
+		),
+		dateIdentityCheck: check(
+			'fire_drill_reports_date_identity_check',
+			sql`extract(year from ${table.drillDate}) = ${table.reportYear}`
+		),
+		staffNamesCheck: check(
+			'fire_drill_reports_staff_names_check',
+			sql`case when jsonb_typeof(${table.staffNames}) = 'array' then jsonb_array_length(${table.staffNames}) between 1 and 24 and not jsonb_path_exists(${table.staffNames}, '$[*] ? (@.type() != "string" || @ == "")') else false end`
+		),
+		versionCheck: check(
+			'fire_drill_reports_version_check',
+			sql`${table.version} >= 1`
+		),
+		snapshotCheck: check(
+			'fire_drill_reports_snapshot_check',
+			sql`length(btrim(${table.houseNameSnapshot})) > 0`
+		),
+		voidCheck: check(
+			'fire_drill_reports_void_check',
+			sql`(${table.voidedAt} is null and ${table.voidedBy} is null and ${table.voidReason} is null) or (${table.voidedAt} is not null and ${table.voidedBy} is not null and coalesce(length(btrim(${table.voidReason})), 0) > 0)`
+		)
+	})
+);
+
+export const fireDrillParticipants = pgTable(
+	'fire_drill_participants',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		fireDrillReportId: uuid('fire_drill_report_id')
+			.notNull()
+			.references(() => fireDrillReports.id, {onDelete: 'cascade'}),
+		// CASCADE, not SET NULL: sourceReferenceCheck below requires that a
+		// 'roster' participant always has a non-null residentId. SET NULL would
+		// try to null this column out from under a live roster row and fail that
+		// check constraint, which blocks deleting any resident who has ever
+		// participated (via roster) in a fire drill. Deleting the participation
+		// record along with the resident avoids the conflict; resident_name_snapshot
+		// still preserves the human-readable record of who attended.
+		residentId: uuid('resident_id').references(() => residents.id, {
+			onDelete: 'cascade'
+		}),
+		residentNameSnapshot: varchar('resident_name_snapshot', {
+			length: 255
+		}).notNull(),
+		participantSource: varchar('participant_source', {length: 20}).notNull(),
+		durationMinutes: integer('duration_minutes'),
+		durationSeconds: integer('duration_seconds'),
+		comment: text('comment'),
+		position: integer('position').notNull(),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(table) => ({
+		reportIdx: index('fire_drill_participants_report_idx').on(
+			table.fireDrillReportId
+		),
+		positionIdx: uniqueIndex('fire_drill_participants_position_uidx').on(
+			table.fireDrillReportId,
+			table.position
+		),
+		residentIdx: uniqueIndex('fire_drill_participants_resident_uidx')
+			.on(table.fireDrillReportId, table.residentId)
+			.where(sql`${table.residentId} is not null`),
+		sourceCheck: check(
+			'fire_drill_participants_source_check',
+			sql`${table.participantSource} in ('roster', 'manual', 'external')`
+		),
+		sourceReferenceCheck: check(
+			'fire_drill_participants_source_reference_check',
+			sql`(${table.participantSource} = 'roster' and ${table.residentId} is not null) or (${table.participantSource} in ('manual', 'external') and ${table.residentId} is null)`
+		),
+		durationCheck: check(
+			'fire_drill_participants_duration_check',
+			sql`(${table.durationMinutes} is not null and ${table.durationMinutes} between 0 and 2147483647 and ${table.durationSeconds} between 0 and 59) or (${table.durationMinutes} is null and ${table.durationSeconds} is null and coalesce(length(btrim(${table.comment})), 0) > 0)`
+		),
+		positionCheck: check(
+			'fire_drill_participants_position_check',
+			sql`${table.position} between 0 and 63`
+		),
+		snapshotCheck: check(
+			'fire_drill_participants_snapshot_check',
+			sql`length(btrim(${table.residentNameSnapshot})) > 0`
+		)
+	})
+);
+
+export const lifeSafetyReportRevisions = pgTable(
+	'life_safety_report_revisions',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		inspectionEntryId: uuid('inspection_entry_id').references(
+			() => lifeSafetyInspectionEntries.id,
+			{onDelete: 'restrict'}
+		),
+		fireDrillReportId: uuid('fire_drill_report_id').references(
+			() => fireDrillReports.id,
+			{
+				onDelete: 'restrict'
+			}
+		),
+		entityType: varchar('entity_type', {length: 20}).notNull(),
+		version: integer('version').notNull(),
+		action: varchar('action', {length: 20}).notNull(),
+		snapshot: jsonb('snapshot').$type<Record<string, unknown>>().notNull(),
+		reason: text('reason'),
+		actorId: varchar('actor_id', {length: 255}).notNull(),
+		actorNameSnapshot: varchar('actor_name_snapshot', {length: 255}),
+		createdAt: timestamp('created_at').notNull().defaultNow()
+	},
+	(table) => ({
+		inspectionVersionIdx: uniqueIndex(
+			'life_safety_report_revisions_inspection_version_uidx'
+		)
+			.on(table.inspectionEntryId, table.version)
+			.where(sql`${table.inspectionEntryId} is not null`),
+		drillVersionIdx: uniqueIndex(
+			'life_safety_report_revisions_drill_version_uidx'
+		)
+			.on(table.fireDrillReportId, table.version)
+			.where(sql`${table.fireDrillReportId} is not null`),
+		entityCheck: check(
+			'life_safety_report_revisions_entity_check',
+			sql`(${table.entityType} = 'inspection' and ${table.inspectionEntryId} is not null and ${table.fireDrillReportId} is null) or (${table.entityType} = 'fire_drill' and ${table.fireDrillReportId} is not null and ${table.inspectionEntryId} is null)`
+		),
+		versionCheck: check(
+			'life_safety_report_revisions_version_check',
+			sql`${table.version} >= 1`
+		),
+		actionCheck: check(
+			'life_safety_report_revisions_action_check',
+			sql`${table.action} in ('create', 'correct', 'move', 'void')`
+		),
+		snapshotCheck: check(
+			'life_safety_report_revisions_snapshot_check',
+			sql`jsonb_typeof(${table.snapshot}) = 'object'`
+		)
 	})
 );
 
@@ -849,6 +1126,9 @@ export const inspectorAccess = pgTable(
 	'inspector_access',
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
+		locationId: uuid('location_id').references(() => locations.id, {
+			onDelete: 'set null'
+		}),
 		location: varchar('location', {length: 255}).notNull(),
 		label: varchar('label', {length: 255}), // e.g. inspector name / purpose
 		otpHash: varchar('otp_hash', {length: 255}).notNull(),
@@ -858,12 +1138,15 @@ export const inspectorAccess = pgTable(
 		createdAt: timestamp('created_at').notNull().defaultNow(),
 		revokedAt: timestamp('revoked_at'),
 		revokedBy: varchar('revoked_by', {length: 255}),
-		lastAccessedAt: timestamp('last_accessed_at'),
+		lastAccessedAt: timestamp('last_accessed_at')
 	},
 	(table) => ({
 		otpHashIdx: index('inspector_access_otp_hash_idx').on(table.otpHash),
+		locationIdIdx: index('inspector_access_location_id_idx').on(
+			table.locationId
+		),
 		locationIdx: index('inspector_access_location_idx').on(table.location),
-		expiresAtIdx: index('inspector_access_expires_at_idx').on(table.expiresAt),
+		expiresAtIdx: index('inspector_access_expires_at_idx').on(table.expiresAt)
 	})
 );
 
@@ -888,7 +1171,7 @@ export const incidentReports = pgTable(
 		followUpNotes: text('follow_up_notes'),
 		attachments: jsonb('attachments').$type<string[]>(), // Array of file IDs
 		createdAt: timestamp('created_at').defaultNow(),
-		updatedAt: timestamp('updated_at'),
+		updatedAt: timestamp('updated_at')
 	},
 	(table) => ({
 		residentIdIdx: index('incident_reports_resident_id_idx').on(
@@ -900,7 +1183,7 @@ export const incidentReports = pgTable(
 		incidentDateIdx: index('incident_reports_incident_date_idx').on(
 			table.incidentDate
 		),
-		severityIdx: index('incident_reports_severity_idx').on(table.severity),
+		severityIdx: index('incident_reports_severity_idx').on(table.severity)
 	})
 );
 
@@ -918,38 +1201,101 @@ export const residentsRelations = relations(residents, ({many}) => ({
 	ispAcknowledgments: many(ispAcknowledgments),
 	incidentReports: many(incidentReports),
 	documents: many(residentDocuments),
+	fireDrillParticipants: many(fireDrillParticipants)
 }));
+
+export const locationsRelations = relations(locations, ({many}) => ({
+	lifeSafetyInspectionEntries: many(lifeSafetyInspectionEntries),
+	fireDrillReports: many(fireDrillReports)
+}));
+
+export const lifeSafetyInspectionEntriesRelations = relations(
+	lifeSafetyInspectionEntries,
+	({one, many}) => ({
+		location: one(locations, {
+			fields: [lifeSafetyInspectionEntries.locationId],
+			references: [locations.id]
+		}),
+		revisions: many(lifeSafetyReportRevisions, {
+			relationName: 'inspectionRevisions'
+		})
+	})
+);
+
+export const fireDrillReportsRelations = relations(
+	fireDrillReports,
+	({one, many}) => ({
+		location: one(locations, {
+			fields: [fireDrillReports.locationId],
+			references: [locations.id]
+		}),
+		participants: many(fireDrillParticipants),
+		revisions: many(lifeSafetyReportRevisions, {
+			relationName: 'fireDrillRevisions'
+		})
+	})
+);
+
+export const fireDrillParticipantsRelations = relations(
+	fireDrillParticipants,
+	({one}) => ({
+		report: one(fireDrillReports, {
+			fields: [fireDrillParticipants.fireDrillReportId],
+			references: [fireDrillReports.id]
+		}),
+		resident: one(residents, {
+			fields: [fireDrillParticipants.residentId],
+			references: [residents.id]
+		})
+	})
+);
+
+export const lifeSafetyReportRevisionsRelations = relations(
+	lifeSafetyReportRevisions,
+	({one}) => ({
+		inspectionEntry: one(lifeSafetyInspectionEntries, {
+			fields: [lifeSafetyReportRevisions.inspectionEntryId],
+			references: [lifeSafetyInspectionEntries.id],
+			relationName: 'inspectionRevisions'
+		}),
+		fireDrillReport: one(fireDrillReports, {
+			fields: [lifeSafetyReportRevisions.fireDrillReportId],
+			references: [fireDrillReports.id],
+			relationName: 'fireDrillRevisions'
+		})
+	})
+);
 
 export const employeesRelations = relations(employees, ({many}) => ({
 	hrFiles: many(hrFiles),
 	hrFileLogs: many(hrFileLogs),
-	trainings: many(employeeTrainings),
+	trainings: many(employeeTrainings)
 }));
 
 export const shiftsRelations = relations(shifts, ({one, many}) => ({
 	kiosk: one(kiosks, {
 		fields: [shifts.kioskId],
-		references: [kiosks.id],
+		references: [kiosks.id]
 	}),
-	residentLogs: many(residentLogs),
+	residentLogs: many(residentLogs)
 }));
 
 export const residentLogsRelations = relations(residentLogs, ({one, many}) => ({
 	resident: one(residents, {
 		fields: [residentLogs.residentId],
-		references: [residents.id],
+		references: [residents.id]
 	}),
 	shift: one(shifts, {
 		fields: [residentLogs.shiftId],
-		references: [shifts.id],
+		references: [shifts.id]
 	}),
-	activities: many(residentLogActivities),
+	activities: many(residentLogActivities)
 }));
 
 export const ispFilesRelations = relations(ispFiles, ({one, many}) => ({
 	resident: one(residents, {
 		fields: [ispFiles.residentId],
-		references: [residents.id],
+		references: [residents.id]
 	}),
 	accessLogs: many(ispAccessLogs),
 	acknowledgments: many(ispFileAcknowledgments),
@@ -972,20 +1318,20 @@ export const ispFileAcknowledgmentsRelations = relations(
 export const ispAccessLogsRelations = relations(ispAccessLogs, ({one}) => ({
 	ispFile: one(ispFiles, {
 		fields: [ispAccessLogs.ispFileId],
-		references: [ispFiles.id],
+		references: [ispFiles.id]
 	}),
 	resident: one(residents, {
 		fields: [ispAccessLogs.residentId],
-		references: [residents.id],
-	}),
+		references: [residents.id]
+	})
 }));
 
 export const ispRelations = relations(isp, ({one, many}) => ({
 	resident: one(residents, {
 		fields: [isp.residentId],
-		references: [residents.id],
+		references: [residents.id]
 	}),
-	acknowledgments: many(ispAcknowledgments),
+	acknowledgments: many(ispAcknowledgments)
 }));
 
 export const ispAcknowledgmentsRelations = relations(
@@ -993,20 +1339,20 @@ export const ispAcknowledgmentsRelations = relations(
 	({one}) => ({
 		resident: one(residents, {
 			fields: [ispAcknowledgments.residentId],
-			references: [residents.id],
+			references: [residents.id]
 		}),
 		isp: one(isp, {
 			fields: [ispAcknowledgments.ispId],
-			references: [isp.id],
-		}),
+			references: [isp.id]
+		})
 	})
 );
 
 export const fireEvacRelations = relations(fireEvac, ({one}) => ({
 	resident: one(residents, {
 		fields: [fireEvac.residentId],
-		references: [residents.id],
-	}),
+		references: [residents.id]
+	})
 }));
 
 export const guardianChecklistLinksRelations = relations(
@@ -1014,39 +1360,39 @@ export const guardianChecklistLinksRelations = relations(
 	({one}) => ({
 		resident: one(residents, {
 			fields: [guardianChecklistLinks.residentId],
-			references: [residents.id],
+			references: [residents.id]
 		}),
 		template: one(guardianChecklistTemplates, {
 			fields: [guardianChecklistLinks.templateId],
-			references: [guardianChecklistTemplates.id],
-		}),
+			references: [guardianChecklistTemplates.id]
+		})
 	})
 );
 
 export const guardianChecklistTemplatesRelations = relations(
 	guardianChecklistTemplates,
 	({many}) => ({
-		links: many(guardianChecklistLinks),
+		links: many(guardianChecklistLinks)
 	})
 );
 
 export const hrFilesRelations = relations(hrFiles, ({one, many}) => ({
 	employee: one(employees, {
 		fields: [hrFiles.employeeId],
-		references: [employees.id],
+		references: [employees.id]
 	}),
-	logs: many(hrFileLogs),
+	logs: many(hrFileLogs)
 }));
 
 export const hrFileLogsRelations = relations(hrFileLogs, ({one}) => ({
 	hrFile: one(hrFiles, {
 		fields: [hrFileLogs.hrFileId],
-		references: [hrFiles.id],
+		references: [hrFiles.id]
 	}),
 	employee: one(employees, {
 		fields: [hrFileLogs.employeeId],
-		references: [employees.id],
-	}),
+		references: [employees.id]
+	})
 }));
 
 export const complianceReminderTemplatesRelations = relations(
@@ -1054,8 +1400,8 @@ export const complianceReminderTemplatesRelations = relations(
 	({one}) => ({
 		createdByUser: one(users, {
 			fields: [complianceReminderTemplates.createdBy],
-			references: [users.id],
-		}),
+			references: [users.id]
+		})
 	})
 );
 
@@ -1064,8 +1410,8 @@ export const employeeTrainingsRelations = relations(
 	({one}) => ({
 		employee: one(employees, {
 			fields: [employeeTrainings.employeeId],
-			references: [employees.id],
-		}),
+			references: [employees.id]
+		})
 	})
 );
 
@@ -1074,16 +1420,16 @@ export const residentLogActivitiesRelations = relations(
 	({one}) => ({
 		log: one(residentLogs, {
 			fields: [residentLogActivities.logId],
-			references: [residentLogs.id],
-		}),
+			references: [residentLogs.id]
+		})
 	})
 );
 
 export const incidentReportsRelations = relations(incidentReports, ({one}) => ({
 	resident: one(residents, {
 		fields: [incidentReports.residentId],
-		references: [residents.id],
-	}),
+		references: [residents.id]
+	})
 }));
 
 // Memos Table
@@ -1093,7 +1439,9 @@ export const memos = pgTable(
 		id: uuid('id').primaryKey().defaultRandom(),
 		title: varchar('title', {length: 255}).notNull(),
 		content: text('content').notNull(),
-		senderClerkUserId: varchar('sender_clerk_user_id', {length: 255}).notNull(),
+		senderClerkUserId: varchar('sender_clerk_user_id', {
+			length: 255
+		}).notNull(),
 		senderName: varchar('sender_name', {length: 255}).notNull(),
 		recipientType: varchar('recipient_type', {length: 50}).notNull(), // 'location', 'all-staff', 'all-supervisors', 'all-employees', 'selected-locations', 'selected-users'
 		targetLocations: jsonb('target_locations').$type<string[]>().default([]),
@@ -1101,12 +1449,12 @@ export const memos = pgTable(
 		priority: varchar('priority', {length: 20}).default('normal'), // 'normal', 'high', 'urgent'
 		expiresAt: timestamp('expires_at'),
 		createdAt: timestamp('created_at').defaultNow(),
-		updatedAt: timestamp('updated_at'),
+		updatedAt: timestamp('updated_at')
 	},
 	(table) => ({
 		senderIdx: index('memos_sender_idx').on(table.senderClerkUserId),
 		createdAtIdx: index('memos_created_at_idx').on(table.createdAt),
-		recipientTypeIdx: index('memos_recipient_type_idx').on(table.recipientType),
+		recipientTypeIdx: index('memos_recipient_type_idx').on(table.recipientType)
 	})
 );
 
@@ -1115,13 +1463,15 @@ export const memosRead = pgTable(
 	'memos_read',
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
-		memoId: uuid('memo_id').notNull().references(() => memos.id, {onDelete: 'cascade'}),
+		memoId: uuid('memo_id')
+			.notNull()
+			.references(() => memos.id, {onDelete: 'cascade'}),
 		clerkUserId: varchar('clerk_user_id', {length: 255}).notNull(),
-		readAt: timestamp('read_at').defaultNow(),
+		readAt: timestamp('read_at').defaultNow()
 	},
 	(table) => ({
 		memoIdIdx: index('memos_read_memo_id_idx').on(table.memoId),
-		userIdIdx: index('memos_read_user_id_idx').on(table.clerkUserId),
+		userIdIdx: index('memos_read_user_id_idx').on(table.clerkUserId)
 	})
 );
 
@@ -1130,7 +1480,9 @@ export const vacationRequests = pgTable(
 	'vacation_requests',
 	{
 		id: uuid('id').primaryKey().defaultRandom(),
-		employeeClerkUserId: varchar('employee_clerk_user_id', {length: 255}).notNull(),
+		employeeClerkUserId: varchar('employee_clerk_user_id', {
+			length: 255
+		}).notNull(),
 		employeeName: varchar('employee_name', {length: 255}).notNull(),
 		startDate: timestamp('start_date').notNull(),
 		endDate: timestamp('end_date').notNull(),
@@ -1141,11 +1493,13 @@ export const vacationRequests = pgTable(
 		adminName: varchar('admin_name', {length: 255}),
 		respondedAt: timestamp('responded_at'),
 		createdAt: timestamp('created_at').defaultNow(),
-		updatedAt: timestamp('updated_at').defaultNow(),
+		updatedAt: timestamp('updated_at').defaultNow()
 	},
 	(table) => ({
-		employeeIdx: index('vacation_requests_employee_idx').on(table.employeeClerkUserId),
+		employeeIdx: index('vacation_requests_employee_idx').on(
+			table.employeeClerkUserId
+		),
 		statusIdx: index('vacation_requests_status_idx').on(table.status),
-		startDateIdx: index('vacation_requests_start_date_idx').on(table.startDate),
+		startDateIdx: index('vacation_requests_start_date_idx').on(table.startDate)
 	})
 );

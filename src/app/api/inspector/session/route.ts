@@ -10,6 +10,7 @@ export async function GET(req: Request) {
 		return NextResponse.json({error: 'No active session'}, {status: 401});
 	}
 	return NextResponse.json({
+		locationId: session.locationId,
 		location: session.location,
 		label: session.label,
 		expiresAt: session.expiresAt,
