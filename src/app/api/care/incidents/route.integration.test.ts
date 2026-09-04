@@ -115,6 +115,9 @@ async function cleanup() {
 	await pool.query('delete from roles where clerk_user_id = any($1::varchar[])', [
 		[STAFF_USER, ADMIN_USER],
 	]);
+	await pool.query('delete from audit_logs where clerk_user_id = any($1::varchar[])', [
+		[STAFF_USER, ADMIN_USER],
+	]);
 }
 
 async function seed() {
@@ -170,14 +173,22 @@ test(
 		const res = await GET(
 			new Request(`http://localhost/api/care/incidents?location=${encodeURIComponent(LOCATION_B)}`)
 		);
-		assert.equal(res.status, 200);
+		assert.equal(
+			res.status,
+			403,
+			'a location param outside the assignment of the caller must be ' +
+				'refused, not silently narrowed to an empty result'
+		);
 
 		const body = await res.json();
-		assert.deepEqual(
-			body,
-			[],
-			'an arbitrary location param outside the caller\'s assignment must not be honored'
+		assert.deepEqual(body, {error: 'Access denied'});
+
+		const audit = await pool.query(
+			`select 1 from audit_logs
+			   where clerk_user_id = $1 and event = 'access_denied' and details = $2`,
+			[STAFF_USER, `incidents_cross_location_param_${LOCATION_B}`]
 		);
+		assert.equal(audit.rowCount, 1, 'the refused location param must be audited');
 	}
 );
 
@@ -189,10 +200,17 @@ test(
 		const res = await GET(
 			new Request(`http://localhost/api/care/incidents?residentId=${RESIDENT_B}`)
 		);
-		assert.equal(res.status, 200);
+		assert.equal(res.status, 403);
 
 		const body = await res.json();
-		assert.deepEqual(body, []);
+		assert.deepEqual(body, {error: 'Access denied'});
+
+		const audit = await pool.query(
+			`select 1 from audit_logs
+			   where clerk_user_id = $1 and event = 'access_denied' and details = $2`,
+			[STAFF_USER, `incidents_cross_location_${RESIDENT_B}`]
+		);
+		assert.equal(audit.rowCount, 1, 'the refused residentId must be audited');
 	}
 );
 

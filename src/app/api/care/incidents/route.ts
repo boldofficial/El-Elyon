@@ -2,7 +2,7 @@
 
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireCareAccess, logAudit} from '@/lib/db-helpers';
+import {requireCareAccess, logAudit, residentInScope} from '@/lib/db-helpers';
 import {
 	createIncidentReport,
 	updateIncidentReport,
@@ -34,6 +34,20 @@ export async function GET(request: Request) {
 		const parsedOffset = offsetParam ? parseInt(offsetParam, 10) : 0;
 		const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
 
+		// An out-of-scope residentId is denied outright rather than being filtered
+		// down to an empty list, which reads the same as "no incidents on file".
+		if (residentId) {
+			const allowed = await residentInScope({
+				clerkUserId: userId,
+				userRole,
+				residentId,
+				auditDetail: 'incidents_cross_location',
+			});
+			if (!allowed) {
+				return NextResponse.json({error: 'Access denied'}, {status: 403});
+			}
+		}
+
 		const conditions: SQL[] = [];
 		if (residentId) conditions.push(eq(incidentReports.residentId, residentId));
 		const searchClause = searchCondition(search, [
@@ -51,7 +65,14 @@ export async function GET(request: Request) {
 			const userLocations = userRole.locations || [];
 			if (location) {
 				if (!userLocations.includes(location)) {
-					return NextResponse.json([]);
+					await logAudit({
+						clerkUserId: userId,
+						event: 'access_denied',
+						details: `incidents_cross_location_param_${location}`,
+						deviceId: 'system',
+						location,
+					});
+					return NextResponse.json({error: 'Access denied'}, {status: 403});
 				}
 				conditions.push(eq(incidentReports.location, location));
 			} else if (userLocations.length > 0) {

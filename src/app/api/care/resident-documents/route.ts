@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireCareAccess } from '@/lib/db-helpers';
+import { requireCareAccess, residentInScope } from '@/lib/db-helpers';
 import { db } from '../../../../../db';
 import { residentDocuments, residents, ispFiles, fireEvac } from '../../../../../db/schema';
 import { auth, currentUser } from '@clerk/nextjs/server';
@@ -25,6 +25,22 @@ export async function GET(req: NextRequest) {
     const limit = parsedLimit !== undefined && Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
     const parsedOffset = offsetParam ? parseInt(offsetParam, 10) : 0;
     const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
+
+    // A client-supplied residentId is an explicit request for one resident's
+    // records, so an out-of-scope one is denied outright rather than being left
+    // to the location filter below, which would return an indistinguishable
+    // empty list. The filter still applies as defence in depth.
+    if (residentId) {
+        const allowed = await residentInScope({
+            clerkUserId: userId,
+            userRole,
+            residentId,
+            auditDetail: 'resident_documents_cross_location',
+        });
+        if (!allowed) {
+            return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+        }
+    }
 
     // 1. Generic Documents
     let docsQuery = db

@@ -125,6 +125,7 @@ async function cleanup() {
 		[RESIDENT_A, RESIDENT_B],
 	]);
 	await pool.query('delete from roles where clerk_user_id = $1', [STAFF_USER]);
+	await pool.query('delete from audit_logs where clerk_user_id = $1', [STAFF_USER]);
 }
 
 async function seed() {
@@ -180,15 +181,27 @@ test(
 		);
 
 		const res = await GET(req);
-		assert.equal(res.status, 200);
+		assert.equal(
+			res.status,
+			403,
+			'a resident outside the assigned locations of the caller must be ' +
+				'refused outright -- an empty 200 is indistinguishable from a ' +
+				'resident who simply has no documents, which hides the denial'
+		);
 
 		const body = await res.json();
-		assert.deepEqual(
-			body,
-			[],
-			'documents/ISP files/fire-evac plans for a resident outside the caller\'s ' +
-				'assigned locations must not be returned'
+		assert.deepEqual(body, {error: 'Access denied'});
+
+		// The denial must leave a trail; a silent refusal is how the original
+		// IDOR stayed invisible for as long as it did.
+		const audit = await pool.query(
+			`select details from audit_logs
+			   where clerk_user_id = $1 and event = 'access_denied'
+			     and details like 'resident_documents_cross_location%'`,
+			[STAFF_USER]
 		);
+		assert.equal(audit.rowCount, 1, 'cross-location access must be audited');
+		assert.ok(audit.rows[0].details.includes(RESIDENT_B));
 	}
 );
 
