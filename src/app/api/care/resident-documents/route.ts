@@ -76,32 +76,43 @@ export async function GET(req: NextRequest) {
         .leftJoin(residents, eq(fireEvac.residentId, residents.id));
 
     // Apply Filters and Execute
+    // Non-admins are scoped to their assigned locations regardless of whether
+    // residentId is present -- otherwise a caller could pass another facility's
+    // residentId and read that resident's documents/ISP/fire-evac files.
+    let locationCondition: any;
+    if (userRole.role !== 'admin') {
+        const userLocations = userRole.locations || [];
+        locationCondition = userLocations.length > 0
+            ? inArray(residents.location, userLocations)
+            : eq(residents.id, 'impossible');
+    }
+
     if (residentId) {
         // @ts-ignore
-        docsQuery = docsQuery.where(eq(residentDocuments.residentId, residentId));
+        docsQuery = docsQuery.where(
+            locationCondition
+                ? and(eq(residentDocuments.residentId, residentId), locationCondition)
+                : eq(residentDocuments.residentId, residentId)
+        );
         // @ts-ignore
-        ispQuery = ispQuery.where(eq(ispFiles.residentId, residentId));
+        ispQuery = ispQuery.where(
+            locationCondition
+                ? and(eq(ispFiles.residentId, residentId), locationCondition)
+                : eq(ispFiles.residentId, residentId)
+        );
         // @ts-ignore
-        fireEvacQuery = fireEvacQuery.where(eq(fireEvac.residentId, residentId));
-    } else {
-         if (userRole.role !== 'admin') {
-             const userLocations = userRole.locations || [];
-             if (userLocations.length > 0) {
-                 // @ts-ignore
-                 docsQuery = docsQuery.where(inArray(residents.location, userLocations));
-                 // @ts-ignore
-                 ispQuery = ispQuery.where(inArray(residents.location, userLocations));
-                 // @ts-ignore
-                 fireEvacQuery = fireEvacQuery.where(inArray(residents.location, userLocations));
-             } else {
-                 // @ts-ignore
-                 docsQuery = docsQuery.where(eq(residents.id, 'impossible'));
-                 // @ts-ignore
-                 ispQuery = ispQuery.where(eq(residents.id, 'impossible'));
-                 // @ts-ignore
-                 fireEvacQuery = fireEvacQuery.where(eq(residents.id, 'impossible'));
-             }
-         }
+        fireEvacQuery = fireEvacQuery.where(
+            locationCondition
+                ? and(eq(fireEvac.residentId, residentId), locationCondition)
+                : eq(fireEvac.residentId, residentId)
+        );
+    } else if (locationCondition) {
+        // @ts-ignore
+        docsQuery = docsQuery.where(locationCondition);
+        // @ts-ignore
+        ispQuery = ispQuery.where(locationCondition);
+        // @ts-ignore
+        fireEvacQuery = fireEvacQuery.where(locationCondition);
     }
 
     const [docs, isps, fireEvacs] = await Promise.all([

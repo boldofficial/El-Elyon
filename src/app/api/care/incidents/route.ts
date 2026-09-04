@@ -10,7 +10,7 @@ import {
 } from '@/db/mutations/incident-reports';
 import {db} from '@/db/index';
 import {incidentReports} from '@/db/schema';
-import {eq, and} from 'drizzle-orm';
+import {eq, and, inArray} from 'drizzle-orm';
 
 // GET - List incident reports
 export async function GET(request: Request) {
@@ -20,23 +20,37 @@ export async function GET(request: Request) {
 	}
 
 	try {
-		await requireCareAccess(userId);
+		const userRole = await requireCareAccess(userId);
 
 		const {searchParams} = new URL(request.url);
 		const residentId = searchParams.get('residentId');
 		const location = searchParams.get('location');
 
-		let whereClause;
-		if (residentId && location) {
-			whereClause = and(
-				eq(incidentReports.residentId, residentId),
-				eq(incidentReports.location, location)
-			);
-		} else if (residentId) {
-			whereClause = eq(incidentReports.residentId, residentId);
-		} else if (location) {
-			whereClause = eq(incidentReports.location, location);
+		const conditions = [];
+		if (residentId) {
+			conditions.push(eq(incidentReports.residentId, residentId));
 		}
+
+		// Non-admins are scoped to their assigned locations -- a client-supplied
+		// `location` param is only honored when it's one of theirs, otherwise
+		// they'd be able to pull reports for a facility they aren't assigned to.
+		if (userRole.role !== 'admin') {
+			const userLocations = userRole.locations || [];
+			if (location) {
+				if (!userLocations.includes(location)) {
+					return NextResponse.json([]);
+				}
+				conditions.push(eq(incidentReports.location, location));
+			} else if (userLocations.length > 0) {
+				conditions.push(inArray(incidentReports.location, userLocations));
+			} else {
+				conditions.push(eq(incidentReports.location, '__no_access__'));
+			}
+		} else if (location) {
+			conditions.push(eq(incidentReports.location, location));
+		}
+
+		const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
 		const reports = await db.query.incidentReports.findMany({
 			where: whereClause,
