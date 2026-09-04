@@ -23,6 +23,7 @@
 # misc
 .DS_Store
 *.pem
+deploy/documenso/*.p12
 
 # debug
 npm-debug.log*

@@ -2,7 +2,8 @@
 
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {logAudit} from '@/lib/db-helpers';
+import {logAudit, AccessDeniedError} from '@/lib/db-helpers';
+import {requireSignatureStorageAccess} from '@/db/mutations/isp-signatures';
 import {internalServerError} from '@/lib/api-errors';
 import {
 	uploadFile,
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
 		const formData = await request.formData();
 		const file = formData.get('file') as File;
 		const fileType = formData.get('fileType') as string; // 'hr_doc', 'incident_attachment', etc.
+		if (fileType?.startsWith('isp-signatures')) return NextResponse.json({error: 'Signature records must be prepared through ISP management.'}, {status: 403});
 
 		if (!file) {
 			return NextResponse.json({error: 'No file provided'}, {status: 400});
@@ -101,6 +103,7 @@ export async function GET(request: Request) {
 			return NextResponse.json({error: 'Missing fileId'}, {status: 400});
 		}
 
+		if (fileId.startsWith('isp-signatures/')) await requireSignatureStorageAccess(userId, fileId);
 		// Generate presigned URL
 		const url = await generateDownloadUrl(fileId);
 
@@ -111,6 +114,7 @@ export async function GET(request: Request) {
 		// Redirect the user to the presigned URL
 		return NextResponse.redirect(url);
 	} catch (error) {
+		if (error instanceof AccessDeniedError) return NextResponse.json({error: 'Access denied.'}, {status: 403});
 		return internalServerError(error, 'GetFileURL');
 	}
 }
@@ -130,6 +134,7 @@ export async function DELETE(request: Request) {
 			return NextResponse.json({error: 'Missing fileId'}, {status: 400});
 		}
 
+		if (fileId.startsWith('isp-signatures/')) return NextResponse.json({error: 'Signature records are retained and cannot be deleted here.'}, {status: 403});
 		// Delete from S3
 		await deleteFile(fileId);
 

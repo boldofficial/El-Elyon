@@ -14,6 +14,7 @@ import {
 	time
 } from 'drizzle-orm/pg-core';
 import {relations, sql} from 'drizzle-orm';
+import type {ISPSignatureDraft, ISPSignatureState, ISPSignerStatus} from '../lib/isp-signatures';
 
 // Create a custom table creator with a prefix
 // const pgTable = pgTableCreator((name) => `el_elyon_${name}`);
@@ -374,6 +375,34 @@ export const ispFiles = pgTable(
 		)
 	})
 );
+
+// Prepared ISP snapshots and their external signature lifecycle. Never overwrite a sent snapshot.
+export const ispSignaturePackets = pgTable('isp_signature_packets', {
+	id: uuid('id').primaryKey().defaultRandom(),
+	residentId: uuid('resident_id').notNull().references(() => residents.id, {onDelete: 'restrict'}),
+	residentName: varchar('resident_name', {length: 255}).notNull(),
+	draft: jsonb('draft').$type<ISPSignatureDraft>().notNull(),
+	state: varchar('state', {length: 30}).$type<ISPSignatureState>().notNull().default('draft'),
+	revision: integer('revision').notNull().default(1),
+	providerId: varchar('provider_id', {length: 255}),
+	providerOrigin: varchar('provider_origin', {length: 500}),
+	originalKey: text('original_key'),
+	originalSha256: varchar('original_sha256', {length: 64}),
+	signedKey: text('signed_key'),
+	auditKey: text('audit_key'),
+	signerStatuses: jsonb('signer_statuses').$type<ISPSignerStatus[]>().notNull().default([]),
+	createdBy: varchar('created_by', {length: 255}).notNull(),
+	createdAt: timestamp('created_at').notNull().defaultNow(),
+	updatedAt: timestamp('updated_at').notNull().defaultNow(),
+	lastSyncedAt: timestamp('last_synced_at'),
+	lastReminderAt: timestamp('last_reminder_at'),
+	lockToken: uuid('lock_token'),
+	lockedUntil: timestamp('locked_until'),
+}, table => ({
+	residentIdx: index('isp_signature_packets_resident_idx').on(table.residentId),
+	providerIdx: uniqueIndex('isp_signature_packets_provider_idx').on(table.providerOrigin, table.providerId),
+	stateCheck: check('isp_signature_packets_state_check', sql`${table.state} IN ('draft','preparing','ready','sending','pending','completed','rejected','cancelled')`),
+}));
 
 // ISP Access Logs Table
 export const ispAccessLogs = pgTable(

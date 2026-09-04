@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { FileText, Upload, Download, Check, Trash2, X, AlertCircle } from "lucide-react";
+import ISPSignatureWorkspace from './ISPSignatureWorkspace';
 
 // Define interfaces for data structures
 interface ISPFile {
@@ -332,6 +333,7 @@ export default function ISPWorkspace({ residentId, residentName, onClose }: ISPW
       </div>
 
       <div className="flex-1 overflow-y-auto pr-2 space-y-6">
+        {canEdit && <ISPSignatureWorkspace key={residentId} residentId={residentId} onFilesChanged={() => void fetchAllData()} />}
         
         {/* Upload Form */}
         {showUploadForm && (
