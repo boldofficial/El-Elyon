@@ -1,8 +1,8 @@
 'use client';
 
-import React, {useState, useEffect} from 'react';
-import {format} from 'date-fns';
+import React, {useCallback} from 'react';
 import SharedLogsTable from './SharedLogsTable';
+import {usePaginatedSearch} from './usePaginatedSearch';
 
 interface Activity {
 	id: string;
@@ -25,72 +25,69 @@ interface Props {
 	residentId: string;
 }
 
-export default function ResidentActivityHistory({residentId}: Props) {
-	const [logs, setLogs] = useState<Log[]>([]);
-	const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-	useEffect(() => {
-		async function fetchLogs() {
-			setLoading(true);
-            setError(null);
+async function hydrateActivities(rawLogs: any[]) {
+	return Promise.all(
+		rawLogs.map(async (log) => {
+			if (log.activities && log.activities.length > 0) return log;
 			try {
-				const res = await fetch(
-					`/api/care/resident-logs?residentId=${residentId}&limit=50`
-				);
-				if (!res.ok) throw new Error('Failed to fetch logs');
-				const data = await res.json();
-
-				// Ensure activities are present by hydrating from the activities endpoint when missing
-				const logsWithActivities = await Promise.all(
-					(data as any[]).map(async (log) => {
-						if (log.activities && log.activities.length > 0) return log;
-						try {
-							const actRes = await fetch(`/api/care/resident-logs/${log.id}/activities`);
-							if (!actRes.ok) return log;
-							const activities = await actRes.json();
-							return {...log, activities};
-						} catch (_err) {
-							return log;
-						}
-					})
-				);
-
-				setLogs(logsWithActivities);
-			} catch (error: any) {
-				console.error('Error fetching logs:', error);
-                setError(error.message || 'Failed to load history');
-			} finally {
-				setLoading(false);
+				const actRes = await fetch(`/api/care/resident-logs/${log.id}/activities`);
+				if (!actRes.ok) return log;
+				const activities = await actRes.json();
+				return {...log, activities};
+			} catch (_err) {
+				return log;
 			}
-		}
+		})
+	);
+}
 
-		fetchLogs();
-	}, [residentId]);
+export default function ResidentActivityHistory({residentId}: Props) {
+	const extraParams = React.useMemo(() => ({residentId}), [residentId]);
+	const transform = useCallback((raw: any[]) => hydrateActivities(raw), []);
 
-	if (loading) {
-		return (
-			<div className="flex justify-center py-8">
-				<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-			</div>
-		);
-	}
-
-    if (error) {
-        return <div className="text-red-500 text-center py-8">{error}</div>;
-    }
-
-	if (logs.length === 0) {
-		return (
-			<div className="text-center py-12 text-gray-500">
-				<p>No activity history found.</p>
-			</div>
-		);
-	}
+	const {items: logs, loading, error, hasMore, loadingMore, search, setSearch, debouncedSearch, loadMore} =
+		usePaginatedSearch<Log>({
+			endpoint: '/api/care/resident-logs',
+			extraParams,
+			transform,
+		});
 
 	return (
-		<div className="space-y-6">
-            <SharedLogsTable logs={logs} />
+		<div className="space-y-4">
+			<input
+				type="text"
+				value={search}
+				onChange={(e) => setSearch(e.target.value)}
+				placeholder="Search log entries or staff name..."
+				className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+			/>
+
+			{loading ? (
+				<div className="flex justify-center py-8">
+					<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+				</div>
+			) : error ? (
+				<div className="text-red-500 text-center py-8">{error}</div>
+			) : logs.length === 0 ? (
+				<div className="text-center py-12 text-gray-500">
+					<p>{debouncedSearch ? 'No log entries match your search.' : 'No activity history found.'}</p>
+				</div>
+			) : (
+				<div className="space-y-6">
+					<SharedLogsTable logs={logs} />
+					{hasMore && (
+						<div className="flex justify-center pt-2">
+							<button
+								onClick={loadMore}
+								disabled={loadingMore}
+								className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+							>
+								{loadingMore ? 'Loading...' : 'View More'}
+							</button>
+						</div>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }

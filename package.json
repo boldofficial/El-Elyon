@@ -11,6 +11,7 @@
 		"test:life-safety:db": "tsx --test db/life-safety.integration.test.ts",
 		"test:water-temperature": "tsx --test lib/water-temperature.test.ts lib/operational-time.test.ts lib/inspector-water-temperature-projection.test.ts src/app/api/documents/water-temperature-api.test.ts src/app/api/inspector/water-temperature/route.test.ts src/components/care/CareShiftWorkspace.test.tsx src/components/care/waterTemperatureEntryModel.test.ts src/components/supervisor/waterTemperatureModel.test.ts src/components/supervisor/printWaterTemperatureReport.test.ts src/components/shared/printDocument.test.ts src/components/inspector/waterTemperaturePresentation.test.ts",
 		"test:water-temperature:db": "tsx --test db/water-temperature.integration.test.ts",
+		"test:query-helpers": "tsx --test db/query-helpers.test.ts",
 		"water-temperature:cutover-report": "tsx scripts/water-temperature-rollout-check.ts pre-cutover",
 		"water-temperature:post-deploy-check": "tsx scripts/water-temperature-rollout-check.ts post-deploy",
 		"db:generate": "drizzle-kit generate --name",

@@ -6,6 +6,7 @@ import {db} from '@/db/index';
 import {residentLogs, residentLogActivities, residents, employees, shifts} from '@/db/schema';
 import {eq, desc, asc, SQL, and, isNull} from 'drizzle-orm';
 import {requireCareAccess} from '@/lib/db-helpers';
+import {searchCondition, paginatePage} from '@/db/query-helpers';
 
 export async function GET(req: NextRequest) {
 	try {
@@ -18,12 +19,21 @@ export async function GET(req: NextRequest) {
 		const searchParams = req.nextUrl.searchParams;
 		const residentId = searchParams.get('residentId');
 		const location = searchParams.get('location');
-		const limit = parseInt(searchParams.get('limit') || '50');
+		const parsedLimit = parseInt(searchParams.get('limit') || '50', 10);
+		const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 50;
+		const parsedOffset = parseInt(searchParams.get('offset') || '0', 10);
+		const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
+		const search = searchParams.get('search')?.trim();
 
 		const conditions: SQL[] = [];
 
 		if (residentId) {
 			conditions.push(eq(residentLogs.residentId, residentId));
+		}
+
+		const searchClause = searchCondition(search, [residentLogs.content, residentLogs.authorName]);
+		if (searchClause) {
+			conditions.push(searchClause);
 		}
 
 		const userRole = await requireCareAccess(userId);
@@ -38,7 +48,9 @@ export async function GET(req: NextRequest) {
 			});
 
 			if (!currentShift) {
-				return NextResponse.json([]);
+				const emptyResponse = NextResponse.json([]);
+				emptyResponse.headers.set('X-Has-More', 'false');
+				return emptyResponse;
 			}
 
 			conditions.push(eq(residentLogs.location, currentShift.location));
@@ -47,7 +59,8 @@ export async function GET(req: NextRequest) {
 		const logs = await db.query.residentLogs.findMany({
 			where:
 				conditions.length > 0 ? (residentLogs, {and}) => and(...conditions) : undefined,
-			limit,
+			limit: limit + 1,
+			offset,
 			orderBy: [desc(residentLogs.createdAt)],
 			with: {
 				resident: true,
@@ -57,9 +70,11 @@ export async function GET(req: NextRequest) {
 			},
 		});
 
+		const {items: pageLogs, hasMore} = paginatePage(logs, limit);
+
 		const employeeList = await db.query.employees.findMany();
 
-		const formattedLogs = logs.map((log: any) => {
+		const formattedLogs = pageLogs.map((log: any) => {
 			const author = employeeList.find(
 				(employee) => employee.clerkUserId === log.authorId
 			);
@@ -72,7 +87,9 @@ export async function GET(req: NextRequest) {
 			};
 		});
 
-		return NextResponse.json(formattedLogs);
+		const response = NextResponse.json(formattedLogs);
+		response.headers.set('X-Has-More', String(hasMore));
+		return response;
 	} catch (error) {
 		console.error('Error getting logs:', error);
 		return NextResponse.json({error: 'Internal server error'}, {status: 500});

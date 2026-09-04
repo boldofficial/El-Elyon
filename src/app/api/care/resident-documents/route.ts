@@ -3,7 +3,8 @@ import { requireCareAccess } from '@/lib/db-helpers';
 import { db } from '../../../../../db';
 import { residentDocuments, residents, ispFiles, fireEvac } from '../../../../../db/schema';
 import { auth, currentUser } from '@clerk/nextjs/server';
-import { eq, desc, and, inArray, sql } from 'drizzle-orm';
+import { eq, desc, and, inArray, sql, SQL } from 'drizzle-orm';
+import { searchCondition, offsetSlice } from '@/db/query-helpers';
 
 // GET all documents or filtered by residentId
 export async function GET(req: NextRequest) {
@@ -16,6 +17,14 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const residentId = searchParams.get('residentId');
+    const sourceFilter = searchParams.get('source'); // 'generic' | 'isp' | 'fire_evac'
+    const search = searchParams.get('search')?.trim();
+    const limitParam = searchParams.get('limit');
+    const offsetParam = searchParams.get('offset');
+    const parsedLimit = limitParam ? parseInt(limitParam, 10) : undefined;
+    const limit = parsedLimit !== undefined && Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
+    const parsedOffset = offsetParam ? parseInt(offsetParam, 10) : 0;
+    const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
 
     // 1. Generic Documents
     let docsQuery = db
@@ -76,38 +85,66 @@ export async function GET(req: NextRequest) {
         .leftJoin(residents, eq(fireEvac.residentId, residents.id));
 
     // Apply Filters and Execute
+    const docsConditions: SQL[] = [];
+    const ispConditions: SQL[] = [];
+    const fireEvacConditions: SQL[] = [];
+
     if (residentId) {
-        // @ts-ignore
-        docsQuery = docsQuery.where(eq(residentDocuments.residentId, residentId));
-        // @ts-ignore
-        ispQuery = ispQuery.where(eq(ispFiles.residentId, residentId));
-        // @ts-ignore
-        fireEvacQuery = fireEvacQuery.where(eq(fireEvac.residentId, residentId));
+        docsConditions.push(eq(residentDocuments.residentId, residentId));
+        ispConditions.push(eq(ispFiles.residentId, residentId));
+        fireEvacConditions.push(eq(fireEvac.residentId, residentId));
     } else {
          if (userRole.role !== 'admin') {
              const userLocations = userRole.locations || [];
              if (userLocations.length > 0) {
-                 // @ts-ignore
-                 docsQuery = docsQuery.where(inArray(residents.location, userLocations));
-                 // @ts-ignore
-                 ispQuery = ispQuery.where(inArray(residents.location, userLocations));
-                 // @ts-ignore
-                 fireEvacQuery = fireEvacQuery.where(inArray(residents.location, userLocations));
+                 docsConditions.push(inArray(residents.location, userLocations));
+                 ispConditions.push(inArray(residents.location, userLocations));
+                 fireEvacConditions.push(inArray(residents.location, userLocations));
              } else {
-                 // @ts-ignore
-                 docsQuery = docsQuery.where(eq(residents.id, 'impossible'));
-                 // @ts-ignore
-                 ispQuery = ispQuery.where(eq(residents.id, 'impossible'));
-                 // @ts-ignore
-                 fireEvacQuery = fireEvacQuery.where(eq(residents.id, 'impossible'));
+                 docsConditions.push(eq(residents.id, 'impossible'));
+                 ispConditions.push(eq(residents.id, 'impossible'));
+                 fireEvacConditions.push(eq(residents.id, 'impossible'));
              }
          }
     }
 
+    const docsSearchClause = searchCondition(search, [
+        residentDocuments.title,
+        residentDocuments.description,
+        residentDocuments.fileName,
+    ]);
+    if (docsSearchClause) docsConditions.push(docsSearchClause);
+
+    const ispSearchClause = searchCondition(search, [
+        ispFiles.versionLabel,
+        ispFiles.notes,
+        ispFiles.fileName,
+    ]);
+    if (ispSearchClause) ispConditions.push(ispSearchClause);
+
+    const fireEvacSearchClause = searchCondition(search, [fireEvac.notes, fireEvac.fileName]);
+    if (fireEvacSearchClause) fireEvacConditions.push(fireEvacSearchClause);
+
+    if (docsConditions.length > 0) {
+        // @ts-expect-error - drizzle's dynamic query builder chaining isn't typed for reassignment
+        docsQuery = docsQuery.where(and(...docsConditions));
+    }
+    if (ispConditions.length > 0) {
+        // @ts-expect-error - drizzle's dynamic query builder chaining isn't typed for reassignment
+        ispQuery = ispQuery.where(and(...ispConditions));
+    }
+    if (fireEvacConditions.length > 0) {
+        // @ts-expect-error - drizzle's dynamic query builder chaining isn't typed for reassignment
+        fireEvacQuery = fireEvacQuery.where(and(...fireEvacConditions));
+    }
+
+    // Skip subqueries excluded by the source filter entirely rather than
+    // fetching and discarding them, since limit/offset below assumes the
+    // merged set only contains rows the caller actually asked for.
     const [docs, isps, fireEvacs] = await Promise.all([
-        docsQuery,
-        ispQuery,
-        fireEvacQuery
+        !sourceFilter || sourceFilter === 'generic' ? docsQuery : Promise.resolve([]),
+        !sourceFilter || sourceFilter === 'isp' ? ispQuery : Promise.resolve([]),
+        !sourceFilter || sourceFilter === 'fire_evac' ? fireEvacQuery : Promise.resolve([]),
     ]);
 
     // Combine and Sort
@@ -117,7 +154,12 @@ export async function GET(req: NextRequest) {
         return dateB - dateA; // Descending
     });
 
-    return NextResponse.json(allDocs);
+    const {items: pageDocs, hasMore} =
+      limit !== undefined ? offsetSlice(allDocs, offset, limit) : {items: allDocs, hasMore: false};
+
+    const response = NextResponse.json(pageDocs);
+    response.headers.set('X-Has-More', String(hasMore));
+    return response;
   } catch (error: any) {
     console.error('Error fetching documents:', error);
     return NextResponse.json(
