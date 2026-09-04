@@ -10,7 +10,8 @@ import {
 } from '@/db/mutations/incident-reports';
 import {db} from '@/db/index';
 import {incidentReports} from '@/db/schema';
-import {eq, and, inArray} from 'drizzle-orm';
+import {eq, and, inArray, SQL} from 'drizzle-orm';
+import {searchCondition, paginatePage} from '@/db/query-helpers';
 
 // GET - List incident reports
 export async function GET(request: Request) {
@@ -25,11 +26,23 @@ export async function GET(request: Request) {
 		const {searchParams} = new URL(request.url);
 		const residentId = searchParams.get('residentId');
 		const location = searchParams.get('location');
+		const search = searchParams.get('search')?.trim();
+		const limitParam = searchParams.get('limit');
+		const offsetParam = searchParams.get('offset');
+		const parsedLimit = limitParam ? parseInt(limitParam, 10) : undefined;
+		const limit = parsedLimit !== undefined && Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
+		const parsedOffset = offsetParam ? parseInt(offsetParam, 10) : 0;
+		const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
 
-		const conditions = [];
-		if (residentId) {
-			conditions.push(eq(incidentReports.residentId, residentId));
-		}
+		const conditions: SQL[] = [];
+		if (residentId) conditions.push(eq(incidentReports.residentId, residentId));
+		const searchClause = searchCondition(search, [
+			incidentReports.description,
+			incidentReports.incidentType,
+			incidentReports.actionTaken,
+			incidentReports.reportedByName,
+		]);
+		if (searchClause) conditions.push(searchClause);
 
 		// Non-admins are scoped to their assigned locations -- a client-supplied
 		// `location` param is only honored when it's one of theirs, otherwise
@@ -58,9 +71,15 @@ export async function GET(request: Request) {
 			with: {
 				resident: true,
 			},
+			...(limit !== undefined ? {limit: limit + 1, offset} : {}),
 		});
 
-		return NextResponse.json(reports);
+		const {items: pageReports, hasMore} =
+			limit !== undefined ? paginatePage(reports, limit) : {items: reports, hasMore: false};
+
+		const response = NextResponse.json(pageReports);
+		response.headers.set('X-Has-More', String(hasMore));
+		return response;
 	} catch (error: any) {
 		console.error('Error fetching incident reports:', error);
 		return NextResponse.json({error: error.message}, {status: 500});

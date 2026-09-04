@@ -1,18 +1,17 @@
 'use client';
 
-import React, {useState, useEffect} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {toast} from 'sonner';
 import DocumentViewerModal from '../shared/DocumentViewerModal';
+import {usePaginatedSearch} from './usePaginatedSearch';
 
-export default function ResidentDocuments({ 
+export default function ResidentDocuments({
   residentId,
   filterSource
-}: { 
+}: {
   residentId: string;
   filterSource?: 'generic' | 'isp' | 'fire_evac';
 }) {
-  const [documents, setDocuments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadForm, setUploadForm] = useState({
@@ -27,31 +26,27 @@ export default function ResidentDocuments({
     contentType?: string;
   } | null>(null);
 
-  const fetchDocuments = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/care/resident-documents?residentId=${residentId}`);
-      if (!res.ok) throw new Error("Failed to fetch documents");
-      const data = await res.json();
-      
-      // Filter by source if specified
-      const filteredData = filterSource 
-        ? data.filter((doc: any) => doc.source === filterSource)
-        : data.filter((doc: any) => doc.source === 'generic' || !doc.source); // Default to generic docs only
-      
-      setDocuments(filteredData);
-    } catch (error) {
-      console.error("Error fetching documents:", error);
-      toast.error("Failed to load documents");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const extraParams = useMemo(
+    () => ({residentId, source: filterSource || 'generic'}), // Default to generic docs only
+    [residentId, filterSource]
+  );
+  const onError = useCallback(() => toast.error('Failed to load documents'), []);
 
-  useEffect(() => {
-    fetchDocuments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [residentId, filterSource]);
+  const {
+    items: documents,
+    loading,
+    loadingMore,
+    hasMore,
+    search,
+    setSearch,
+    debouncedSearch,
+    loadMore,
+    reload,
+  } = usePaginatedSearch<any>({
+    endpoint: '/api/care/resident-documents',
+    extraParams,
+    onError,
+  });
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -89,7 +84,7 @@ export default function ResidentDocuments({
 
       if (!uploadRes.ok) throw new Error("File upload failed");
       const uploadData = await uploadRes.json();
-      
+
       // 2. Create document record
       const res = await fetch('/api/care/resident-documents', {
         method: 'POST',
@@ -107,7 +102,7 @@ export default function ResidentDocuments({
       });
 
       if (!res.ok) throw new Error("Failed to save document record");
-      
+
       toast.success("Document uploaded successfully");
       setShowUploadForm(false);
       setUploadForm({
@@ -116,7 +111,7 @@ export default function ResidentDocuments({
         description: "",
         file: null,
       });
-      await fetchDocuments();
+      await reload();
     } catch (error: any) {
       console.error("Upload error:", error);
       toast.error(error.message || "Upload failed");
@@ -137,7 +132,7 @@ export default function ResidentDocuments({
 
       if (!res.ok) throw new Error("Failed to delete document");
       toast.success("Document deleted");
-      await fetchDocuments();
+      await reload();
     } catch (error: any) {
       toast.error(error.message);
     }
@@ -155,7 +150,7 @@ export default function ResidentDocuments({
             {filterSource === 'isp' ? 'ISP Documents' : filterSource === 'fire_evac' ? 'Fire Evacuation Plans' : 'Other Documents'}
           </h3>
           <p className="text-sm text-gray-600">
-            {filterSource === 'isp' 
+            {filterSource === 'isp'
               ? 'View Individual Support Plans for this resident.'
               : filterSource === 'fire_evac'
               ? 'View Fire Evacuation Plans for this resident.'
@@ -172,14 +167,22 @@ export default function ResidentDocuments({
         )}
       </div>
 
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search documents by title or description..."
+        className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+      />
+
       {showUploadForm && (
         <div className="bg-white rounded-lg shadow-sm border p-6">
              <h4 className="text-md font-semibold mb-4">Upload New Document</h4>
              <form onSubmit={handleUpload} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={uploadForm.title}
                     onChange={e => setUploadForm(prev => ({...prev, title: e.target.value}))}
                     className="w-full border rounded p-2"
@@ -203,8 +206,8 @@ export default function ResidentDocuments({
                     </div>
                      <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">File *</label>
-                        <input 
-                            type="file" 
+                        <input
+                            type="file"
                             onChange={handleFileSelect}
                             className="w-full border rounded p-2"
                             required
@@ -213,7 +216,7 @@ export default function ResidentDocuments({
                 </div>
                 <div>
                      <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
-                     <textarea 
+                     <textarea
                         value={uploadForm.description}
                         onChange={e => setUploadForm(prev => ({...prev, description: e.target.value}))}
                         className="w-full border rounded p-2"
@@ -221,15 +224,15 @@ export default function ResidentDocuments({
                      />
                 </div>
                 <div className="flex justify-end gap-2">
-                    <button 
-                        type="button" 
+                    <button
+                        type="button"
                         onClick={() => setShowUploadForm(false)}
                         className="px-3 py-1 border rounded text-gray-600"
                     >
                         Cancel
                     </button>
-                    <button 
-                        type="submit" 
+                    <button
+                        type="submit"
                         disabled={uploading}
                         className="px-3 py-1 bg-blue-600 text-white rounded disabled:opacity-50"
                     >
@@ -244,7 +247,7 @@ export default function ResidentDocuments({
         <div>Loading documents...</div>
       ) : documents.length === 0 ? (
         <div className="text-center py-8 text-gray-500 bg-gray-50 rounded border border-dashed">
-            No documents found.
+            {debouncedSearch ? 'No documents match your search.' : 'No documents found.'}
         </div>
       ) : (
         <div className="grid gap-3">
@@ -291,7 +294,19 @@ export default function ResidentDocuments({
         </div>
       )}
 
-      <DocumentViewerModal 
+      {hasMore && (
+        <div className="flex justify-center pt-2">
+            <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="px-4 py-2 text-sm font-medium border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+                {loadingMore ? 'Loading...' : 'View More'}
+            </button>
+        </div>
+      )}
+
+      <DocumentViewerModal
         isOpen={!!activeDocument}
         onClose={() => setActiveDocument(null)}
         document={activeDocument}
