@@ -159,7 +159,7 @@ export function SignInForm() {
 						<>
 							<SignUp
 								routing="hash"
-								signInUrl="/sign-in"
+								signInUrl="/"
 								appearance={clerkAppearance}
 							/>
 							{/* Admin Privileges Info Banner */}
@@ -181,7 +181,7 @@ export function SignInForm() {
 						<>
 							<SignIn
 								routing="hash"
-								signInUrl="/sign-in"
+								signInUrl="/"
 								appearance={clerkAppearance}
 							/>
 							{/* Enhanced Employee Login Banner */}

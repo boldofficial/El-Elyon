@@ -22,7 +22,6 @@ export async function updateUser(
 		updatedAt?: Date;
 		resetToken?: string | null;
 		resetTokenExpiry?: Date | null;
-		passwordHash?: string; // Add for password reset
 	}
 ) {
 	await db.update(users).set(data).where(eq(users.clerkUserId, clerkUserId)); // ✅ Fixed
