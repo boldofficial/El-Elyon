@@ -1001,7 +1001,21 @@ export const fireDrillReports = pgTable(
 			length: 255
 		}).notNull(),
 		reportYear: integer('report_year').notNull(),
-		sequence: integer('sequence').notNull(),
+		// 'scheduled' drills are the semiannual pair identified by sequence 1|2.
+		// 'admission' drills are held within 3 days of a resident's placement and
+		// are identified by the resident instead; sequence is null for them.
+		drillType: varchar('drill_type', {length: 20}).notNull().default('scheduled'),
+		sequence: integer('sequence'),
+		// SET NULL (not cascade): the drill report and its revision history must
+		// outlive the resident. admission_resident_name_snapshot keeps the record
+		// readable after the resident row is gone.
+		admissionResidentId: uuid('admission_resident_id').references(
+			() => residents.id,
+			{onDelete: 'set null'}
+		),
+		admissionResidentNameSnapshot: varchar('admission_resident_name_snapshot', {
+			length: 255
+		}),
 		drillDate: date('drill_date', {mode: 'string'}).notNull(),
 		drillTime: time('drill_time', {precision: 0}).notNull(),
 		staffNames: jsonb('staff_names').$type<string[]>().notNull(),
@@ -1021,14 +1035,25 @@ export const fireDrillReports = pgTable(
 		),
 		activeIdentityIdx: uniqueIndex('fire_drill_reports_active_identity_uidx')
 			.on(table.locationId, table.reportYear, table.sequence)
-			.where(sql`${table.voidedAt} is null`),
+			.where(sql`${table.voidedAt} is null and ${table.drillType} = 'scheduled'`),
+		admissionResidentIdx: index('fire_drill_reports_admission_resident_idx')
+			.on(table.admissionResidentId)
+			.where(sql`${table.admissionResidentId} is not null`),
 		yearCheck: check(
 			'fire_drill_reports_year_check',
 			sql`${table.reportYear} between 2020 and 2100`
 		),
 		sequenceCheck: check(
 			'fire_drill_reports_sequence_check',
-			sql`${table.sequence} in (1, 2)`
+			sql`${table.sequence} is null or ${table.sequence} in (1, 2)`
+		),
+		drillTypeCheck: check(
+			'fire_drill_reports_drill_type_check',
+			sql`${table.drillType} in ('scheduled', 'admission')`
+		),
+		drillTypeIdentityCheck: check(
+			'fire_drill_reports_drill_type_identity_check',
+			sql`(${table.drillType} = 'scheduled' and ${table.sequence} is not null and ${table.admissionResidentId} is null and ${table.admissionResidentNameSnapshot} is null) or (${table.drillType} = 'admission' and ${table.sequence} is null and coalesce(length(btrim(${table.admissionResidentNameSnapshot})), 0) > 0)`
 		),
 		dateIdentityCheck: check(
 			'fire_drill_reports_date_identity_check',
@@ -1463,7 +1488,8 @@ export const residentsRelations = relations(residents, ({many}) => ({
 	ispAcknowledgments: many(ispAcknowledgments),
 	incidentReports: many(incidentReports),
 	documents: many(residentDocuments),
-	fireDrillParticipants: many(fireDrillParticipants)
+	fireDrillParticipants: many(fireDrillParticipants),
+	admissionFireDrills: many(fireDrillReports)
 }));
 
 export const locationsRelations = relations(locations, ({many}) => ({
@@ -1492,6 +1518,10 @@ export const fireDrillReportsRelations = relations(
 		location: one(locations, {
 			fields: [fireDrillReports.locationId],
 			references: [locations.id]
+		}),
+		admissionResident: one(residents, {
+			fields: [fireDrillReports.admissionResidentId],
+			references: [residents.id]
 		}),
 		participants: many(fireDrillParticipants),
 		revisions: many(lifeSafetyReportRevisions, {

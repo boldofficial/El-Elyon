@@ -1,0 +1,12 @@
+ALTER TABLE "fire_drill_reports" DROP CONSTRAINT "fire_drill_reports_sequence_check";--> statement-breakpoint
+DROP INDEX "fire_drill_reports_active_identity_uidx";--> statement-breakpoint
+ALTER TABLE "fire_drill_reports" ALTER COLUMN "sequence" DROP NOT NULL;--> statement-breakpoint
+ALTER TABLE "fire_drill_reports" ADD COLUMN "drill_type" varchar(20) DEFAULT 'scheduled' NOT NULL;--> statement-breakpoint
+ALTER TABLE "fire_drill_reports" ADD COLUMN "admission_resident_id" uuid;--> statement-breakpoint
+ALTER TABLE "fire_drill_reports" ADD COLUMN "admission_resident_name_snapshot" varchar(255);--> statement-breakpoint
+ALTER TABLE "fire_drill_reports" ADD CONSTRAINT "fire_drill_reports_admission_resident_id_residents_id_fk" FOREIGN KEY ("admission_resident_id") REFERENCES "public"."residents"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "fire_drill_reports_admission_resident_idx" ON "fire_drill_reports" USING btree ("admission_resident_id") WHERE "fire_drill_reports"."admission_resident_id" is not null;--> statement-breakpoint
+CREATE UNIQUE INDEX "fire_drill_reports_active_identity_uidx" ON "fire_drill_reports" USING btree ("location_id","report_year","sequence") WHERE "fire_drill_reports"."voided_at" is null and "fire_drill_reports"."drill_type" = 'scheduled';--> statement-breakpoint
+ALTER TABLE "fire_drill_reports" ADD CONSTRAINT "fire_drill_reports_drill_type_check" CHECK ("fire_drill_reports"."drill_type" in ('scheduled', 'admission'));--> statement-breakpoint
+ALTER TABLE "fire_drill_reports" ADD CONSTRAINT "fire_drill_reports_drill_type_identity_check" CHECK (("fire_drill_reports"."drill_type" = 'scheduled' and "fire_drill_reports"."sequence" is not null and "fire_drill_reports"."admission_resident_id" is null and "fire_drill_reports"."admission_resident_name_snapshot" is null) or ("fire_drill_reports"."drill_type" = 'admission' and "fire_drill_reports"."sequence" is null and coalesce(length(btrim("fire_drill_reports"."admission_resident_name_snapshot")), 0) > 0));--> statement-breakpoint
+ALTER TABLE "fire_drill_reports" ADD CONSTRAINT "fire_drill_reports_sequence_check" CHECK ("fire_drill_reports"."sequence" is null or "fire_drill_reports"."sequence" in (1, 2));

@@ -20,6 +20,7 @@ import {
 	formatInspectorDuration,
 	formatInspectorLocalDate,
 	formatInspectorLocalTime,
+	inspectorAdmissionFireDrills,
 	inspectorFireDrillForSequence,
 	inspectorYears,
 } from './lifeSafetyPresentation';
@@ -462,10 +463,16 @@ function InspectorLifeSafetyPanel({
 					})),
 				});
 			} else {
+				// The annual sheet carries only the two scheduled slots; admission
+				// drills print on their own per-resident sheet.
 				await printFireDrillReport({
 					houseName: data.houseName,
 					year,
-					reports: selected.fireDrills,
+					reports: selected.fireDrills.flatMap((report) =>
+						report.drillType === 'scheduled' && report.sequence !== null
+							? [{...report, sequence: report.sequence}]
+							: []
+					),
 				});
 			}
 		} catch (printError) {
@@ -579,6 +586,7 @@ function InspectorFireDrillView({
 	reports: InspectorFireDrillReport[];
 	legacyRows: InspectorLifeSafetyData['legacyFireDrills'];
 }) {
+	const admissionDrills = inspectorAdmissionFireDrills(reports);
 	return (
 		<>
 			<section className="rounded-lg border border-gray-200 bg-white" aria-labelledby="inspector-normalized-drills-heading">
@@ -592,6 +600,22 @@ function InspectorFireDrillView({
 				</div>
 			</section>
 
+			<section className="rounded-lg border border-gray-200 bg-white" aria-labelledby="inspector-admission-drills-heading">
+				<div className="border-b border-gray-200 px-4 py-3">
+					<h3 id="inspector-admission-drills-heading" className="font-semibold text-gray-900">Admission/placement drills ({admissionDrills.length})</h3>
+					<p className="mt-1 text-sm text-gray-600">One drill per newly placed resident, held within 3 days of placement.</p>
+				</div>
+				{admissionDrills.length === 0 ? (
+					<p className="p-4 text-sm text-gray-600">No admission drills were recorded for this reporting year.</p>
+				) : (
+					<div className="grid gap-4 p-4 lg:grid-cols-2">
+						{admissionDrills.map((report) => (
+							<InspectorFireDrillCard key={`${report.admissionResidentName}-${report.drillDate}`} label={`Admission drill — ${report.admissionResidentName}`} report={report} />
+						))}
+					</div>
+				)}
+			</section>
+
 			<details className="rounded-lg border border-gray-200 bg-white">
 				<summary className="cursor-pointer px-4 py-3 font-semibold text-gray-900">Original legacy fire drill rows ({legacyRows.length})</summary>
 				<div className="border-t border-gray-200 p-4">
@@ -603,11 +627,12 @@ function InspectorFireDrillView({
 	);
 }
 
-function InspectorFireDrillCard({label, sequence, report}: {label: string; sequence: 1 | 2; report?: InspectorFireDrillReport}) {
+function InspectorFireDrillCard({label, sequence, report}: {label: string; sequence?: 1 | 2; report?: InspectorFireDrillReport}) {
+	const headingId = sequence ? `inspector-fire-drill-${sequence}` : `inspector-admission-drill-${report?.admissionResidentName ?? ''}-${report?.drillDate ?? ''}`;
 	return (
-		<article className={`rounded-lg border p-4 ${report ? 'border-gray-200' : 'border-dashed border-gray-300 bg-gray-50'}`} aria-labelledby={`inspector-fire-drill-${sequence}`}>
-			<p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Sequence {sequence}</p>
-			<h4 id={`inspector-fire-drill-${sequence}`} className="mt-1 font-semibold text-gray-900">{label}</h4>
+		<article className={`rounded-lg border p-4 ${report ? 'border-gray-200' : 'border-dashed border-gray-300 bg-gray-50'}`} aria-labelledby={headingId}>
+			<p className="text-xs font-semibold uppercase tracking-wide text-blue-700">{sequence ? `Sequence ${sequence}` : 'Admission/placement'}</p>
+			<h4 id={headingId} className="mt-1 font-semibold text-gray-900">{label}</h4>
 			{!report ? <p className="mt-4 text-sm text-gray-600">No normalized event was recorded for this slot.</p> : (
 				<div className="mt-4 space-y-3 text-sm">
 					<p><span className="font-medium text-gray-700">Date/time:</span> {formatInspectorLocalDate(report.drillDate)} · {formatInspectorLocalTime(report.drillTime)}</p>
