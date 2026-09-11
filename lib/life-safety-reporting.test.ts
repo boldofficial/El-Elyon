@@ -3,6 +3,10 @@ import test from "node:test";
 
 import {
   MAX_FIRE_DRILL_DURATION_MINUTES,
+  admissionDrillAnchorDate,
+  admissionDrillDeadline,
+  differenceInLocalDays,
+  evaluateAdmissionDrill,
   fireDrillParticipantInputSchema,
   fireDrillReportInputSchema,
   isValidLocalDate,
@@ -237,6 +241,105 @@ test("fire drill dates, times, sequence, and collection bounds are enforced", ()
       false,
     );
   }
+});
+
+test("a payload without drillType is a scheduled drill (pre-admission contract)", () => {
+  const parsed = fireDrillReportInputSchema.parse(report());
+  assert.equal(parsed.drillType, "scheduled");
+  assert.equal(parsed.sequence, 1);
+  assert.equal(parsed.admissionResidentId, null);
+});
+
+test("scheduled drills need a sequence and must not name an admission resident", () => {
+  for (const candidate of [
+    report({ drillType: "scheduled", sequence: null }),
+    report({ drillType: "scheduled", admissionResidentId: RESIDENT_ID }),
+  ]) {
+    assert.equal(fireDrillReportInputSchema.safeParse(candidate).success, false);
+  }
+});
+
+test("admission drills are keyed by the admitted resident, who must be a participant", () => {
+  const admission = (overrides: Record<string, unknown> = {}) =>
+    report({
+      drillType: "admission",
+      sequence: null,
+      admissionResidentId: RESIDENT_ID,
+      ...overrides,
+    });
+
+  assert.equal(fireDrillReportInputSchema.safeParse(admission()).success, true);
+  // Other residents present may be added alongside the admitted one.
+  assert.equal(
+    fireDrillReportInputSchema.safeParse(
+      admission({
+        participants: [
+          participant(),
+          participant({
+            position: 1,
+            residentId: null,
+            participantSource: "manual",
+            residentNameSnapshot: "Housemate",
+          }),
+        ],
+      }),
+    ).success,
+    true,
+  );
+  for (const candidate of [
+    admission({ sequence: 1 }),
+    admission({ admissionResidentId: null }),
+    // Admitted resident missing from the sheet.
+    admission({
+      participants: [
+        participant({
+          residentId: null,
+          participantSource: "manual",
+          residentNameSnapshot: "Someone else",
+        }),
+      ],
+    }),
+  ]) {
+    assert.equal(fireDrillReportInputSchema.safeParse(candidate).success, false);
+  }
+});
+
+test("admission drill anchor prefers the placement date and falls back to creation", () => {
+  assert.equal(
+    admissionDrillAnchorDate({
+      placementDate: new Date(2026, 8, 3, 15, 0),
+      createdAt: new Date(2026, 8, 1),
+    }),
+    "2026-09-03",
+  );
+  assert.equal(
+    admissionDrillAnchorDate({ placementDate: null, createdAt: "2026-09-01" }),
+    "2026-09-01",
+  );
+  assert.equal(admissionDrillAnchorDate({ placementDate: null, createdAt: null }), null);
+  assert.equal(admissionDrillDeadline("2026-09-03"), "2026-09-06");
+  // Month and year boundaries roll correctly.
+  assert.equal(admissionDrillDeadline("2026-12-30"), "2027-01-02");
+  assert.equal(differenceInLocalDays("2026-09-03", "2026-09-06"), 3);
+  assert.equal(differenceInLocalDays("2026-09-08", "2026-09-06"), -2);
+});
+
+test("admission drill evaluation states", () => {
+  const anchorDate = "2026-09-03"; // deadline 2026-09-06
+  const evaluate = (today: string, drillDate: string | null) =>
+    evaluateAdmissionDrill({ anchorDate, drillDate, today });
+
+  assert.equal(evaluate("2026-09-01", null).state, "not_started");
+  assert.equal(evaluate("2026-09-03", null).state, "due");
+  assert.equal(evaluate("2026-09-06", null).state, "due"); // deadline day still counts
+  assert.equal(evaluate("2026-09-06", null).daysRemaining, 0);
+  assert.equal(evaluate("2026-09-07", null).state, "overdue");
+  assert.equal(evaluate("2026-09-07", null).daysRemaining, -1);
+  assert.equal(evaluate("2026-09-10", "2026-09-05").state, "completed");
+  assert.equal(evaluate("2026-09-10", "2026-09-06").state, "completed");
+  assert.equal(evaluate("2026-09-10", "2026-09-08").state, "completed_late");
+  // A drill from before this placement does not satisfy it.
+  assert.equal(evaluate("2026-09-10", "2026-08-20").state, "overdue");
 });
 
 test("void input requires a positive version and a bounded reason", () => {

@@ -278,7 +278,7 @@ export async function internalListAdmins() {
 
 // Compliance alert types whose reminders are shown to EVERY user (all roles).
 // The remaining types (isp, fire_evac) are shown only to supervisors + admins.
-export const ALL_USER_ALERT_TYPES = ['smoke_detector', 'fire_drill'] as const;
+export const ALL_USER_ALERT_TYPES = ['smoke_detector', 'fire_drill', 'admission_drill'] as const;
 
 // Reminders to show in a user's dashboard notification feed, honoring both
 // location scope and per-type audience rules.

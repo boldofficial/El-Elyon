@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+	DRILL_TYPE_OPTIONS,
 	FIRE_DRILL_SLOTS,
+	admissionReports,
+	buildAdmissionDrillRows,
+	drillTypeKeyForReport,
 	moveParticipant,
 	preserveUnavailableRosterSnapshots,
 	reportForSequence,
@@ -20,6 +24,46 @@ test('the reporting workspace exposes exactly the semi-annual and annual sequenc
 	const annual = report({sequence: 2});
 	assert.equal(reportForSequence([annual], 1), undefined);
 	assert.equal(reportForSequence([annual], 2), annual);
+});
+
+test('the drill-type dropdown maps onto the scheduled slots plus admission', () => {
+	assert.deepEqual(DRILL_TYPE_OPTIONS.map((option) => [option.key, option.drillType, option.sequence]), [
+		['semi_annual', 'scheduled', 1],
+		['annual', 'scheduled', 2],
+		['admission', 'admission', null],
+	]);
+	assert.equal(drillTypeKeyForReport(report({sequence: 1})), 'semi_annual');
+	assert.equal(drillTypeKeyForReport(report({sequence: 2})), 'annual');
+	assert.equal(drillTypeKeyForReport(report({drillType: 'admission', sequence: null})), 'admission');
+});
+
+test('admission drills never occupy a scheduled slot and list in date order', () => {
+	const admissionB = report({id: 'b', drillType: 'admission', sequence: null, admissionResidentId: 'r2', admissionResidentNameSnapshot: 'Bravo', drillDate: '2026-05-01'});
+	const admissionA = report({id: 'a', drillType: 'admission', sequence: null, admissionResidentId: 'r1', admissionResidentNameSnapshot: 'Alpha', drillDate: '2026-02-01'});
+	const voided = report({id: 'v', drillType: 'admission', sequence: null, admissionResidentId: 'r3', admissionResidentNameSnapshot: 'Voided', voidedAt: '2026-03-01T00:00:00Z'});
+	const semi = report({sequence: 1});
+	assert.equal(reportForSequence([admissionA, semi], 1), semi);
+	assert.equal(reportForSequence([admissionA], 1), undefined);
+	assert.deepEqual(admissionReports([admissionB, voided, semi, admissionA]).map((entry) => entry.id), ['a', 'b']);
+});
+
+test('admission countdown rows skip residents without an anchor and sort open items first', () => {
+	const rows = buildAdmissionDrillRows(
+		[
+			{residentId: 'done', residentName: 'Done', placementDate: '2026-09-01', createdAt: null, latestAdmissionDrill: {id: 'd', drillDate: '2026-09-02', reportYear: 2026}},
+			{residentId: 'late', residentName: 'Late', placementDate: '2026-09-01', createdAt: null, latestAdmissionDrill: null},
+			{residentId: 'soon', residentName: 'Soon', placementDate: '2026-09-09', createdAt: null, latestAdmissionDrill: null},
+			{residentId: 'none', residentName: 'No anchor', placementDate: null, createdAt: null, latestAdmissionDrill: null},
+			{residentId: 'created', residentName: 'Created only', placementDate: null, createdAt: '2026-09-10T08:00:00', latestAdmissionDrill: null},
+		],
+		'2026-09-10'
+	);
+	assert.deepEqual(rows.map((row) => [row.residentId, row.state, row.deadline]), [
+		['late', 'overdue', '2026-09-04'],
+		['soon', 'due', '2026-09-12'],
+		['created', 'due', '2026-09-13'],
+		['done', 'completed', '2026-09-04'],
+	]);
 });
 
 test('participant validation preserves order and requires a comment for a missing duration', () => {
@@ -133,7 +177,10 @@ function report(overrides: Partial<FireDrillReportRecord>): FireDrillReportRecor
 		locationId: '0f7f58ef-d1a6-4dd7-a2ca-d4b2bf5a15f8',
 		houseNameSnapshot: 'House A',
 		reportYear: 2026,
+		drillType: 'scheduled',
 		sequence: 1,
+		admissionResidentId: null,
+		admissionResidentNameSnapshot: null,
 		drillDate: '2026-01-01',
 		drillTime: '09:00',
 		staffNames: ['Staff One'],

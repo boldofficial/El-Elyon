@@ -3,16 +3,25 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
 import {
+	ADMISSION_STATE_LABELS,
+	DRILL_TYPE_OPTIONS,
 	FIRE_DRILL_SLOTS,
+	admissionReports,
+	buildAdmissionDrillRows,
+	drillTypeOption,
 	formatGatheringDuration,
 	formatLocalFireDrillDate,
 	formatLocalFireDrillTime,
+	isOpenAdmissionState,
 	moveParticipant,
 	participantDraftsFromReport,
 	preserveUnavailableRosterSnapshots,
 	reportForSequence,
 	validateParticipantDrafts,
 	validateStaffNames,
+	type AdmissionDrillFact,
+	type AdmissionDrillRow,
+	type DrillTypeKey,
 	type FireDrillReportRecord,
 	type ParticipantDraft,
 	type ParticipantSource,
@@ -22,7 +31,8 @@ import {
 	lifeSafetyErrorMessage,
 	readLifeSafetyResponse,
 } from './lifeSafetyWorkspace';
-import {printFireDrillReport} from './printLifeSafetyReports';
+import {printAdmissionDrillReport, printFireDrillReport} from './printLifeSafetyReports';
+import {ADMISSION_DRILL_DEADLINE_DAYS, toLocalDate} from '@/lib/life-safety-reporting';
 
 type LocationOption = {id: string; name: string};
 type ResidentOption = {id: string; name: string};
@@ -40,11 +50,12 @@ type LegacyFireDrill = {
 };
 
 type EditorState = {
-	sequence: 1 | 2;
+	typeKey: DrillTypeKey;
 	report?: FireDrillReportRecord;
 };
 
 type EditorForm = {
+	admissionResidentId: string;
 	drillDate: string;
 	drillTime: string;
 	staffNames: string[];
@@ -67,6 +78,7 @@ export default function FireDrillWorkspace() {
 	const [reports, setReports] = useState<FireDrillReportRecord[]>([]);
 	const [residents, setResidents] = useState<ResidentOption[]>([]);
 	const [legacyRows, setLegacyRows] = useState<LegacyFireDrill[]>([]);
+	const [admissionFacts, setAdmissionFacts] = useState<AdmissionDrillFact[]>([]);
 	const [locationsState, setLocationsState] = useState<'loading' | 'ready' | 'error'>('loading');
 	const [recordsState, setRecordsState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
 	const [recordsError, setRecordsError] = useState('');
@@ -84,6 +96,8 @@ export default function FireDrillWorkspace() {
 	const selectedLocation = locations.find((location) => location.id === selectedLocationId);
 	const validYear = Number.isInteger(year) && year >= 2020 && year <= 2100;
 	const residentIds = useMemo(() => new Set(residents.map((resident) => resident.id)), [residents]);
+	const today = toLocalDate(new Date());
+	const admissionRows = useMemo(() => buildAdmissionDrillRows(admissionFacts, today), [admissionFacts, today]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -117,6 +131,7 @@ export default function FireDrillWorkspace() {
 			setReports([]);
 			setResidents([]);
 			setLegacyRows([]);
+			setAdmissionFacts([]);
 			setRecordsState('idle');
 			return;
 		}
@@ -128,16 +143,19 @@ export default function FireDrillWorkspace() {
 			setReports([]);
 			setResidents([]);
 			setLegacyRows([]);
+			setAdmissionFacts([]);
 			try {
-				const [currentReports, authorizedResidents, legacy] = await Promise.all([
+				const [currentReports, authorizedResidents, legacy, facts] = await Promise.all([
 					fetchFireDrillReports(location.id, year),
 					fetchResidents(location.id),
 					fetchAllLegacyDrills(location.name, year),
+					fetchAdmissionFacts(location.id),
 				]);
 				if (cancelled) return;
 				setReports(currentReports);
 				setResidents(authorizedResidents);
 				setLegacyRows(legacy);
+				setAdmissionFacts(facts);
 				setRecordsState('ready');
 			} catch (error) {
 				if (cancelled) return;
@@ -151,21 +169,83 @@ export default function FireDrillWorkspace() {
 		};
 	}, [selectedLocation, validYear, year, reloadToken]);
 
-	function openEditor(sequence: 1 | 2, report?: FireDrillReportRecord) {
-		setEditor({sequence, report});
+	function openEditor(typeKey: DrillTypeKey, report?: FireDrillReportRecord, admissionResidentId = '') {
+		setEditor({typeKey, report});
+		const participants = report
+			? preserveUnavailableRosterSnapshots(participantDraftsFromReport(report), residentIds)
+			: [];
 		setEditorForm({
+			admissionResidentId: report?.admissionResidentId ?? admissionResidentId,
 			drillDate: report?.drillDate ?? '',
 			drillTime: report?.drillTime?.slice(0, 5) ?? '',
 			staffNames: report ? [...report.staffNames] : [''],
-			participants: report
-				? preserveUnavailableRosterSnapshots(participantDraftsFromReport(report), residentIds)
-				: [],
+			participants:
+				!report && admissionResidentId
+					? withAdmissionResident(participants, admissionResidentId)
+					: participants,
 		});
 		setResidentToAdd('');
 		setFormErrors([]);
 		setConflict(false);
 		setVoiding(false);
 		setVoidReason('');
+	}
+
+	// Opens the single "record a drill" form, defaulting to the first
+	// scheduled slot still empty this year, else an admission drill.
+	function openNewDrill() {
+		const slot = FIRE_DRILL_SLOTS.find((candidate) => !reportForSequence(reports, candidate.sequence));
+		openEditor(slot ? (slot.sequence === 1 ? 'semi_annual' : 'annual') : 'admission');
+	}
+
+	// Switching type inside the form. A scheduled slot already recorded this
+	// year cannot be duplicated (DB constraint), so choosing it opens that
+	// report for correction instead.
+	function changeDrillType(typeKey: DrillTypeKey) {
+		if (!editorForm || editor?.report) return;
+		const option = drillTypeOption(typeKey);
+		const existing = option.sequence ? reportForSequence(reports, option.sequence) : undefined;
+		if (existing) {
+			openEditor(typeKey, existing);
+			return;
+		}
+		setEditor({typeKey});
+		setEditorForm({
+			...editorForm,
+			admissionResidentId: typeKey === 'admission' ? editorForm.admissionResidentId : '',
+		});
+		setFormErrors([]);
+	}
+
+	function changeAdmissionResident(residentId: string) {
+		if (!editorForm) return;
+		setEditorForm({
+			...editorForm,
+			admissionResidentId: residentId,
+			participants: residentId
+				? withAdmissionResident(editorForm.participants, residentId)
+				: editorForm.participants,
+		});
+	}
+
+	// The admitted resident is the reason the drill exists, so their result
+	// column is always present on the sheet.
+	function withAdmissionResident(participants: ParticipantDraft[], residentId: string): ParticipantDraft[] {
+		if (participants.some((participant) => participant.residentId === residentId)) return participants;
+		const resident = residents.find((candidate) => candidate.id === residentId);
+		if (!resident) return participants;
+		return [
+			{
+				key: newDraftKey(),
+				residentId: resident.id,
+				residentNameSnapshot: resident.name,
+				participantSource: 'roster',
+				durationMinutes: '',
+				durationSeconds: '',
+				comment: '',
+			},
+			...participants,
+		];
 	}
 
 	function closeEditor() {
@@ -257,6 +337,18 @@ export default function FireDrillWorkspace() {
 		const participantResult = validateParticipantDrafts(editorForm.participants);
 		const staffResult = validateStaffNames(editorForm.staffNames);
 		const errors = [...staffResult.errors, ...participantResult.errors];
+		const option = drillTypeOption(editor.typeKey);
+		if (option.drillType === 'admission') {
+			if (!editorForm.admissionResidentId) {
+				errors.unshift('Choose the newly placed resident this admission drill is for.');
+			} else if (
+				!participantResult.participants.some(
+					(participant) => participant.residentId === editorForm.admissionResidentId
+				)
+			) {
+				errors.unshift('The newly placed resident must be included in the resident results.');
+			}
+		}
 		if (!/^\d{4}-\d{2}-\d{2}$/.test(editorForm.drillDate) || Number(editorForm.drillDate.slice(0, 4)) !== year) {
 			errors.unshift('The actual drill date must be in the selected reporting year.');
 		}
@@ -271,7 +363,9 @@ export default function FireDrillWorkspace() {
 		const report = {
 			locationId: selectedLocation.id,
 			reportYear: year,
-			sequence: editor.sequence,
+			drillType: option.drillType,
+			sequence: option.sequence,
+			admissionResidentId: option.drillType === 'admission' ? editorForm.admissionResidentId : null,
 			drillDate: editorForm.drillDate,
 			drillTime: editorForm.drillTime,
 			staffNames: staffResult.staffNames,
@@ -343,8 +437,8 @@ export default function FireDrillWorkspace() {
 			await printFireDrillReport({
 				houseName: selectedLocation.name,
 				year,
-				reports: reports.map((report) => ({
-					sequence: report.sequence,
+				reports: reports.filter((report) => report.drillType === 'scheduled' && report.sequence !== null).map((report) => ({
+					sequence: report.sequence as 1 | 2,
 					drillDate: report.drillDate,
 					drillTime: report.drillTime,
 					staffNames: report.staffNames,
@@ -359,6 +453,32 @@ export default function FireDrillWorkspace() {
 			});
 		} catch (error) {
 			toast.error(lifeSafetyErrorMessage(error, 'Could not open the fire drill report'));
+		} finally {
+			setPrinting(false);
+		}
+	}
+
+	async function printAdmissionSheet(report: FireDrillReportRecord) {
+		if (!selectedLocation || printing) return;
+		setPrinting(true);
+		try {
+			await printAdmissionDrillReport({
+				houseName: selectedLocation.name,
+				year: report.reportYear,
+				residentName: report.admissionResidentNameSnapshot ?? '',
+				drillDate: report.drillDate,
+				drillTime: report.drillTime,
+				staffNames: report.staffNames,
+				participants: report.participants.map((participant) => ({
+					residentNameSnapshot: participant.residentNameSnapshot,
+					durationMinutes: participant.durationMinutes,
+					durationSeconds: participant.durationSeconds,
+					comment: participant.comment,
+					position: participant.position,
+				})),
+			});
+		} catch (error) {
+			toast.error(lifeSafetyErrorMessage(error, 'Could not open the admission drill sheet'));
 		} finally {
 			setPrinting(false);
 		}
@@ -407,9 +527,14 @@ export default function FireDrillWorkspace() {
 			)}
 
 			<section className="rounded-lg border border-gray-200 bg-white shadow-sm" aria-busy={recordsState === 'loading'} aria-labelledby="fire-drill-events-heading">
-				<div className="border-b border-gray-200 px-4 py-3">
-					<h3 id="fire-drill-events-heading" className="font-semibold text-gray-900">Fire drill events</h3>
-					<p className="mt-1 text-sm text-gray-600">Record the actual event facts once, including everyone present and each resident result.</p>
+				<div className="flex flex-col gap-3 border-b border-gray-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+					<div>
+						<h3 id="fire-drill-events-heading" className="font-semibold text-gray-900">Fire drill events</h3>
+						<p className="mt-1 text-sm text-gray-600">Record the actual event facts once, including everyone present and each resident result.</p>
+					</div>
+					<button type="button" onClick={openNewDrill} disabled={recordsState !== 'ready'} className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-300">
+						+ Record a drill
+					</button>
 				</div>
 				{recordsState === 'loading' ? (
 					<div className="p-8 text-center text-sm text-gray-600" role="status">Loading both fire drill slots and the full legacy history…</div>
@@ -421,11 +546,23 @@ export default function FireDrillWorkspace() {
 					<div className="grid gap-4 p-4 lg:grid-cols-2">
 						{FIRE_DRILL_SLOTS.map((slot) => {
 							const report = reportForSequence(reports, slot.sequence);
-							return <FireDrillSlot key={slot.sequence} sequence={slot.sequence} label={slot.label} report={report} onOpen={() => openEditor(slot.sequence, report)} />;
+							return <FireDrillSlot key={slot.sequence} sequence={slot.sequence} label={slot.label} report={report} onOpen={() => openEditor(slot.sequence === 1 ? 'semi_annual' : 'annual', report)} />;
 						})}
 					</div>
 				)}
 			</section>
+
+			{recordsState === 'ready' && (
+				<AdmissionDrillPanel
+					rows={admissionRows}
+					reports={admissionReports(reports)}
+					year={year}
+					printing={printing}
+					onRecord={(residentId) => openEditor('admission', undefined, residentId)}
+					onCorrect={(report) => openEditor('admission', report)}
+					onPrint={(report) => void printAdmissionSheet(report)}
+				/>
+			)}
 
 			{recordsState !== 'error' && <LegacyHistory rows={legacyRows} loading={recordsState === 'loading'} />}
 
@@ -443,6 +580,8 @@ export default function FireDrillWorkspace() {
 					voiding={voiding}
 					voidReason={voidReason}
 					onFormChange={setEditorForm}
+					onChangeDrillType={changeDrillType}
+					onChangeAdmissionResident={changeAdmissionResident}
 					onResidentToAddChange={setResidentToAdd}
 					onAddResident={addResident}
 					onAddManualParticipant={() => addNamedParticipant('manual')}
@@ -523,6 +662,8 @@ function FireDrillEditor(props: {
 	voiding: boolean;
 	voidReason: string;
 	onFormChange: (form: EditorForm) => void;
+	onChangeDrillType: (typeKey: DrillTypeKey) => void;
+	onChangeAdmissionResident: (residentId: string) => void;
 	onResidentToAddChange: (id: string) => void;
 	onAddResident: () => void;
 	onAddManualParticipant: () => void;
@@ -537,7 +678,8 @@ function FireDrillEditor(props: {
 	onVoidReasonChange: (reason: string) => void;
 	onVoid: () => void;
 }) {
-	const slot = FIRE_DRILL_SLOTS.find((candidate) => candidate.sequence === props.editor.sequence)!;
+	const option = drillTypeOption(props.editor.typeKey);
+	const isAdmission = option.drillType === 'admission';
 	const selectedRosterIds = new Set(
 		props.form.participants
 			.filter((participant) => participant.participantSource === 'roster' && participant.residentId)
@@ -568,8 +710,8 @@ function FireDrillEditor(props: {
 			<div className="max-h-[96vh] w-full overflow-y-auto rounded-t-xl bg-white p-5 shadow-xl sm:max-w-4xl sm:rounded-xl" role="dialog" aria-modal="true" aria-labelledby="fire-drill-editor-title">
 				<div className="flex items-start justify-between gap-4">
 					<div>
-						<h3 id="fire-drill-editor-title" className="text-lg font-semibold text-gray-900">{props.editor.report ? 'Correct' : 'Record'} {slot.label.toLowerCase()}</h3>
-						<p className="mt-1 text-sm text-gray-600">{props.houseName} · {props.year} · Sequence {props.editor.sequence}</p>
+						<h3 id="fire-drill-editor-title" className="text-lg font-semibold text-gray-900">{props.editor.report ? 'Correct' : 'Record'} {option.label.toLowerCase()}</h3>
+						<p className="mt-1 text-sm text-gray-600">{props.houseName} · {props.year}{option.sequence ? ` · Sequence ${option.sequence}` : ''}</p>
 					</div>
 					<button type="button" onClick={props.onClose} disabled={props.saving} className="rounded px-2 py-1 text-sm text-gray-600 hover:bg-gray-100">Close</button>
 				</div>
@@ -590,6 +732,27 @@ function FireDrillEditor(props: {
 				)}
 
 				<form className="mt-5 space-y-6" onSubmit={props.onSave}>
+					<fieldset className="grid gap-4 sm:grid-cols-2">
+						<legend className="col-span-full text-sm font-semibold text-gray-900">Type of drill</legend>
+						<div>
+							<label htmlFor="fire-drill-type" className="mb-1 block text-sm font-medium text-gray-700">Drill type</label>
+							<select id="fire-drill-type" className={inputClass} value={props.editor.typeKey} disabled={Boolean(props.editor.report)} onChange={(event) => props.onChangeDrillType(event.target.value as DrillTypeKey)}>
+								{DRILL_TYPE_OPTIONS.map((candidate) => <option key={candidate.key} value={candidate.key}>{candidate.label}</option>)}
+							</select>
+							{props.editor.report && <p className="mt-1 text-xs text-gray-500">The type cannot change on a correction. Void this drill and record a new one instead.</p>}
+						</div>
+						{isAdmission && (
+							<div>
+								<label htmlFor="fire-drill-admission-resident" className="mb-1 block text-sm font-medium text-gray-700">Newly placed resident</label>
+								<select id="fire-drill-admission-resident" className={inputClass} value={props.form.admissionResidentId} required disabled={Boolean(props.editor.report)} onChange={(event) => props.onChangeAdmissionResident(event.target.value)}>
+									<option value="">Choose the admitted resident…</option>
+									{props.residents.map((resident) => <option key={resident.id} value={resident.id}>{resident.name}</option>)}
+								</select>
+								<p className="mt-1 text-xs text-gray-500">Must be completed within {ADMISSION_DRILL_DEADLINE_DAYS} days after placement. Other residents who took part can be added below.</p>
+							</div>
+						)}
+					</fieldset>
+
 					<fieldset className="grid gap-4 sm:grid-cols-2">
 						<legend className="col-span-full text-sm font-semibold text-gray-900">Actual event date and time</legend>
 						<div>
@@ -726,7 +889,7 @@ function FireDrillEditor(props: {
 					<div className="mt-5 border-t border-gray-200 pt-4">
 						{props.voiding ? (
 							<div className="rounded-md border border-red-200 bg-red-50 p-3">
-								<p className="text-sm font-semibold text-red-900">Void Sequence {props.editor.sequence} with {props.editor.report.participants.length} resident result{props.editor.report.participants.length === 1 ? '' : 's'}?</p>
+								<p className="text-sm font-semibold text-red-900">Void this {option.label.toLowerCase()} with {props.editor.report.participants.length} resident result{props.editor.report.participants.length === 1 ? '' : 's'}?</p>
 								<label htmlFor="fire-drill-void-reason" className="mt-3 block text-sm font-medium text-red-900">Reason for voiding</label>
 								<textarea id="fire-drill-void-reason" rows={3} maxLength={1000} className={`${inputClass} mt-1`} value={props.voidReason} onChange={(event) => props.onVoidReasonChange(event.target.value)} required />
 								<p className="mt-2 text-xs text-red-800">The event, participants, and revision history will be retained. A replacement may be recorded afterward.</p>
@@ -741,6 +904,86 @@ function FireDrillEditor(props: {
 			</div>
 		</div>
 	);
+}
+
+function AdmissionDrillPanel({rows, reports, year, printing, onRecord, onCorrect, onPrint}: {
+	rows: AdmissionDrillRow[];
+	reports: FireDrillReportRecord[];
+	year: number;
+	printing: boolean;
+	onRecord: (residentId: string) => void;
+	onCorrect: (report: FireDrillReportRecord) => void;
+	onPrint: (report: FireDrillReportRecord) => void;
+}) {
+	const open = rows.filter((row) => isOpenAdmissionState(row.state));
+	return (
+		<section className="rounded-lg border border-gray-200 bg-white shadow-sm" aria-labelledby="admission-drill-heading">
+			<div className="border-b border-gray-200 px-4 py-3">
+				<h3 id="admission-drill-heading" className="font-semibold text-gray-900">Admission/placement drills</h3>
+				<p className="mt-1 text-sm text-gray-600">Every newly placed resident needs a drill within {ADMISSION_DRILL_DEADLINE_DAYS} days of placement. The countdown starts from the placement date on the resident profile (or the day the resident was added, if none is set).</p>
+			</div>
+			<div className="space-y-4 p-4">
+				<div>
+					<h4 className="text-sm font-semibold text-gray-900">Countdown ({open.length} open)</h4>
+					{rows.length === 0 ? (
+						<p className="mt-2 text-sm text-gray-600">No active residents with a placement date at this house.</p>
+					) : (
+						<ul className="mt-2 divide-y divide-gray-100 rounded-md border border-gray-200">
+							{rows.map((row) => (
+								<li key={row.residentId} className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+									<div>
+										<p className="font-medium text-gray-900">{row.residentName}</p>
+										<p className="text-xs text-gray-600">Placed {formatLocalFireDrillDate(row.anchorDate)} · deadline {formatLocalFireDrillDate(row.deadline)}{row.drill ? ` · drilled ${formatLocalFireDrillDate(row.drill.drillDate)}` : ''}</p>
+									</div>
+									<div className="flex items-center gap-2">
+										<AdmissionStateBadge row={row} />
+										{isOpenAdmissionState(row.state) && (
+											<button type="button" onClick={() => onRecord(row.residentId)} className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">Record drill</button>
+										)}
+									</div>
+								</li>
+							))}
+						</ul>
+					)}
+				</div>
+				<div>
+					<h4 className="text-sm font-semibold text-gray-900">Recorded in {year} ({reports.length})</h4>
+					{reports.length === 0 ? (
+						<p className="mt-2 text-sm text-gray-600">No admission drills are recorded for this reporting year.</p>
+					) : (
+						<ul className="mt-2 divide-y divide-gray-100 rounded-md border border-gray-200">
+							{reports.map((report) => (
+								<li key={report.id} className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+									<div>
+										<p className="font-medium text-gray-900">{report.admissionResidentNameSnapshot}</p>
+										<p className="text-xs text-gray-600">{formatLocalFireDrillDate(report.drillDate)} · {formatLocalFireDrillTime(report.drillTime)} · {report.participants.length} resident result{report.participants.length === 1 ? '' : 's'} · staff: {report.staffNames.join(', ')}</p>
+									</div>
+									<div className="flex items-center gap-2">
+										<button type="button" onClick={() => onPrint(report)} disabled={printing} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-800 hover:bg-gray-50 disabled:text-gray-400">Print sheet</button>
+										<button type="button" onClick={() => onCorrect(report)} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-800 hover:bg-gray-50">Correct</button>
+									</div>
+								</li>
+							))}
+						</ul>
+					)}
+				</div>
+			</div>
+		</section>
+	);
+}
+
+function AdmissionStateBadge({row}: {row: AdmissionDrillRow}) {
+	const tone =
+		row.state === 'overdue' ? 'bg-red-100 text-red-900'
+		: row.state === 'due' ? 'bg-amber-100 text-amber-900'
+		: row.state === 'completed_late' ? 'bg-orange-100 text-orange-900'
+		: row.state === 'completed' ? 'bg-green-100 text-green-900'
+		: 'bg-gray-100 text-gray-800';
+	const detail =
+		row.state === 'due' ? (row.daysRemaining === 0 ? ' · today' : ` · ${row.daysRemaining} day${row.daysRemaining === 1 ? '' : 's'} left`)
+		: row.state === 'overdue' ? ` · ${-row.daysRemaining} day${row.daysRemaining === -1 ? '' : 's'} past`
+		: '';
+	return <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${tone}`}>{ADMISSION_STATE_LABELS[row.state]}{detail}</span>;
 }
 
 function OrderButtons({label, index, count, onMove}: {label: string; index: number; count: number; onMove: (from: number, to: number) => void}) {
@@ -787,6 +1030,13 @@ async function fetchResidents(locationId: string) {
 	const params = new URLSearchParams({locationId});
 	const response = await fetch(`/api/documents/life-safety-residents?${params}`, {cache: 'no-store'});
 	const payload = await readLifeSafetyResponse<{data: ResidentOption[]}>(response);
+	return payload.data;
+}
+
+async function fetchAdmissionFacts(locationId: string) {
+	const params = new URLSearchParams({locationId});
+	const response = await fetch(`/api/documents/admission-drill-status?${params}`, {cache: 'no-store'});
+	const payload = await readLifeSafetyResponse<{data: AdmissionDrillFact[]}>(response);
 	return payload.data;
 }
 

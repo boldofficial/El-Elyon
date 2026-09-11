@@ -113,6 +113,13 @@
       "when": 1788480000000,
       "tag": "0015_add_isp_signature_packets",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1789071962266,
+      "tag": "0016_add_admission_fire_drills",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@
 	"crons": [
 		{
 			"path": "/api/cron/generate-compliance-alerts",
-			"schedule": "0 9 * * 1"
+			"schedule": "0 9 * * *"
 		},
 		{
 			"path": "/api/cron/send-compliance-alert-emails",
