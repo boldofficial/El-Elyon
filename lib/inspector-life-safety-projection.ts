@@ -19,9 +19,15 @@ export interface InspectorFireDrillParticipant {
 	position: number;
 }
 
+export type InspectorFireDrillType = 'scheduled' | 'admission';
+
 export interface InspectorFireDrillReport {
 	reportYear: number;
-	sequence: 1 | 2;
+	drillType: InspectorFireDrillType;
+	/** 1 = semi-annual, 2 = annual; null for admission drills. */
+	sequence: 1 | 2 | null;
+	/** Name of the newly placed resident; null for scheduled drills. */
+	admissionResidentName: string | null;
 	drillDate: string;
 	drillTime: string;
 	staffNames: string[];
@@ -75,9 +81,14 @@ type RawInspection = Omit<InspectorLifeSafetyInspection, 'equipmentType' | 'outc
 	equipmentType: string;
 	outcome: string;
 } & Record<string, unknown>;
-type RawFireDrill = Omit<InspectorFireDrillReport, 'participants' | 'sequence'> & {
+type RawFireDrill = Omit<
+	InspectorFireDrillReport,
+	'participants' | 'sequence' | 'drillType' | 'admissionResidentName'
+> & {
 	id: string;
-	sequence: number;
+	drillType: string;
+	sequence: number | null;
+	admissionResidentNameSnapshot: string | null;
 } & Record<string, unknown>;
 type RawParticipant = InspectorFireDrillParticipant & {fireDrillReportId: string} & Record<string, unknown>;
 type RawLegacySmoke = Omit<InspectorLegacySmokeCheck, 'date'> & {date: string | Date} & Record<string, unknown>;
@@ -104,7 +115,7 @@ export function projectInspectorLifeSafetyData(args: {
 		})),
 		fireDrills: args.fireDrills.map((report) => ({
 			reportYear: report.reportYear,
-			sequence: requireFireDrillSequence(report.sequence),
+			...requireFireDrillIdentity(report),
 			drillDate: report.drillDate,
 			drillTime: report.drillTime,
 			staffNames: [...report.staffNames],
@@ -152,7 +163,24 @@ function requireInspectionOutcome(value: string): InspectorInspectionOutcome {
 	throw new TypeError('Invalid life-safety inspection outcome');
 }
 
-function requireFireDrillSequence(value: number): 1 | 2 {
-	if (value === 1 || value === 2) return value;
-	throw new TypeError('Invalid fire drill sequence');
+function requireFireDrillIdentity(report: {
+	drillType: string;
+	sequence: number | null;
+	admissionResidentNameSnapshot: string | null;
+}): Pick<InspectorFireDrillReport, 'drillType' | 'sequence' | 'admissionResidentName'> {
+	if (report.drillType === 'scheduled' && (report.sequence === 1 || report.sequence === 2)) {
+		return {drillType: 'scheduled', sequence: report.sequence, admissionResidentName: null};
+	}
+	if (
+		report.drillType === 'admission' &&
+		report.sequence === null &&
+		report.admissionResidentNameSnapshot
+	) {
+		return {
+			drillType: 'admission',
+			sequence: null,
+			admissionResidentName: report.admissionResidentNameSnapshot,
+		};
+	}
+	throw new TypeError('Invalid fire drill identity');
 }

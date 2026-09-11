@@ -46,6 +46,7 @@ const REMINDER_ICONS: Record<string, string> = {
 	fire_evac: '🚪',
 	smoke_detector: '🚨',
 	fire_drill: '🧯',
+	admission_drill: '🏠',
 };
 
 const SEVERITY_BORDER: Record<string, string> = {

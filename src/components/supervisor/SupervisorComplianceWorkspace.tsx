@@ -2,12 +2,14 @@
 
 import React, {useState, useEffect} from 'react';
 import ResidentCase from '../care/ResidentCase';
+import ISPWorkspace from '../admin/ISPWorkspace';
 
 export default function SupervisorComplianceWorkspace() {
 	const [activeTab, setActiveTab] = useState('residents');
 	const [selectedResident, setSelectedResident] = useState<string | null>(null);
 	const [residents, setResidents] = useState<any[]>([]);
 	const [ispAcknowledgments, setIspAcknowledgments] = useState<any[]>([]);
+	const [managingISP, setManagingISP] = useState(false);
 
 	useEffect(() => {
 		async function fetchData() {
@@ -29,6 +31,7 @@ export default function SupervisorComplianceWorkspace() {
 
 	const renderResidentsList = () => {
 		if (selectedResident) {
+			if (managingISP) return <ISPWorkspace residentId={selectedResident} residentName={residents.find(r => r.id === selectedResident)?.name || 'Selected resident'} onClose={() => setManagingISP(false)} />;
 			return (
 				<div className="space-y-4">
 					<button
@@ -48,6 +51,7 @@ export default function SupervisorComplianceWorkspace() {
 						</svg>
 						Back to Residents List
 					</button>
+					<button onClick={() => setManagingISP(true)} className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Prepare ISP & collect signatures</button>
 					<ResidentCase
 						residentId={selectedResident}
 						onBack={() => setSelectedResident(null)}

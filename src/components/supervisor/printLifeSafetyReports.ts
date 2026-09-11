@@ -48,6 +48,17 @@ export interface PrintableFireDrillReport {
 	reports: PrintableFireDrillSection[];
 }
 
+// One sheet per admission drill: "DRILL REPORT — ADMISSION/PLACEMENT DRILL".
+export interface PrintableAdmissionDrillReport {
+	houseName: string;
+	year: number;
+	residentName: string;
+	drillDate: string;
+	drillTime: string;
+	staffNames: string[];
+	participants: PrintableFireDrillParticipant[];
+}
+
 export function buildAnnualInspectionPrintHtml(report: PrintableAnnualInspectionReport): string {
 	validateAnnualInspectionReport(report);
 	const entries = new Map(
@@ -128,6 +139,42 @@ export function buildFireDrillPrintHtml(report: PrintableFireDrillReport): strin
 	});
 }
 
+export function buildAdmissionDrillPrintHtml(report: PrintableAdmissionDrillReport): string {
+	validateAdmissionDrillReport(report);
+	const section: PrintableFireDrillSection = {
+		sequence: 1,
+		drillDate: report.drillDate,
+		drillTime: report.drillTime,
+		staffNames: report.staffNames,
+		participants: report.participants
+	};
+	const chunks = chunk(report.participants, 4);
+	const pages = (chunks.length > 0 ? chunks : [[]]).map((participants, index) =>
+		`<main class="drill-page admission-page">
+			${brandHeader()}
+			<h1>DRILL REPORT<br />ADMISSION/PLACEMENT DRILL</h1>
+			<p class="drill-instruction">To be completed within 3 days after placement/admission.</p>
+			<div class="drill-meta"><strong>House:</strong> ${escapePrintHtml(report.houseName)} <strong>Resident:</strong> ${escapePrintHtml(report.residentName)}</div>
+			${fireDrillSection(1, section, participants, index > 0, 'ADMISSION/PLACEMENT DRILL')}
+		</main>`
+	);
+
+	return documentShell({
+		title: `Admission Drill Report — ${report.residentName} — ${report.houseName}`,
+		orientation: 'landscape',
+		bodyClass: 'fire-drill-document',
+		styles: fireDrillStyles,
+		body: pages.join('')
+	});
+}
+
+export function printAdmissionDrillReport(
+	report: PrintableAdmissionDrillReport,
+	options?: PrintDocumentOptions
+): Promise<boolean> {
+	return printDocument(buildAdmissionDrillPrintHtml(report), options);
+}
+
 export function printAnnualInspectionReport(
 	report: PrintableAnnualInspectionReport,
 	options?: PrintDocumentOptions
@@ -155,9 +202,10 @@ function fireDrillSection(
 	sequence: 1 | 2,
 	report: PrintableFireDrillSection | undefined,
 	participants: PrintableFireDrillParticipant[],
-	continuation: boolean
+	continuation: boolean,
+	labelOverride?: string
 ): string {
-	const label = sequence === 1 ? 'SEMI-ANNUAL FIRE DRILL' : 'ANNUAL FIRE DRILL';
+	const label = labelOverride ?? (sequence === 1 ? 'SEMI-ANNUAL FIRE DRILL' : 'ANNUAL FIRE DRILL');
 	const padded = [...participants, ...Array.from({length: 4 - participants.length}, () => null)];
 	const valueCells = (render: (participant: PrintableFireDrillParticipant) => string) =>
 		padded.map((participant) => `<td>${participant ? render(participant) : ''}</td>`).join('');
@@ -167,7 +215,9 @@ function fireDrillSection(
 	const staff = report?.staffNames.join(', ') ?? '';
 
 	return `<section class="drill-section${continuation ? ' continuation' : ''}">
-		<h2>${label}${continuation ? ' — CONTINUED' : ''}</h2>
+		${labelOverride
+			? (continuation ? '<h2>CONTINUED</h2>' : '')
+			: `<h2>${label}${continuation ? ' — CONTINUED' : ''}</h2>`}
 		<table aria-label="${label}${continuation ? ' continuation' : ''}">
 			<tbody>
 				<tr class="event-row"><th>DATE/TIME:</th><td colspan="2">${escapePrintHtml(dateTime)}</td><th>STAFF PRESENT:</th><td>${escapePrintHtml(staff)}</td></tr>
@@ -235,6 +285,25 @@ function validateAnnualInspectionReport(report: PrintableAnnualInspectionReport)
 	}
 }
 
+function validateAdmissionDrillReport(report: PrintableAdmissionDrillReport): void {
+	validateBase(report.houseName, report.year);
+	validateText(report.residentName, 255, 'Resident name');
+	validateFireDrillSection({
+		sequence: 1,
+		drillDate: report.drillDate,
+		drillTime: report.drillTime,
+		staffNames: report.staffNames,
+		participants: report.participants
+	});
+	if (
+		!report.participants.some(
+			(participant) => participant.residentNameSnapshot === report.residentName
+		)
+	) {
+		throw new TypeError('Admission drill sheets must include the admitted resident');
+	}
+}
+
 function validateFireDrillReport(report: PrintableFireDrillReport): void {
 	validateBase(report.houseName, report.year);
 	if (!Array.isArray(report.reports) || report.reports.length > 2) {
@@ -245,22 +314,26 @@ function validateFireDrillReport(report: PrintableFireDrillReport): void {
 		if (section.sequence !== 1 && section.sequence !== 2) throw new TypeError('Invalid fire drill sequence');
 		if (sequences.has(section.sequence)) throw new TypeError('Duplicate fire drill sequence');
 		sequences.add(section.sequence);
-		validateText(section.drillDate, 10, 'Fire drill date');
-		validateText(section.drillTime, 8, 'Fire drill time');
-		if (!Array.isArray(section.staffNames) || section.staffNames.length > MAX_STAFF) {
-			throw new TypeError(`Fire drill reports may contain at most ${MAX_STAFF} staff members`);
+		validateFireDrillSection(section);
+	}
+}
+
+function validateFireDrillSection(section: PrintableFireDrillSection): void {
+	validateText(section.drillDate, 10, 'Fire drill date');
+	validateText(section.drillTime, 8, 'Fire drill time');
+	if (!Array.isArray(section.staffNames) || section.staffNames.length > MAX_STAFF) {
+		throw new TypeError(`Fire drill reports may contain at most ${MAX_STAFF} staff members`);
+	}
+	section.staffNames.forEach((name) => validateText(name, 255, 'Staff name'));
+	if (!Array.isArray(section.participants) || section.participants.length > MAX_PARTICIPANTS) {
+		throw new TypeError(`Fire drill reports may contain at most ${MAX_PARTICIPANTS} participants`);
+	}
+	for (const participant of section.participants) {
+		validateText(participant.residentNameSnapshot, 255, 'Resident name');
+		if (participant.comment !== null && participant.comment !== undefined) {
+			validateText(participant.comment, MAX_TEXT, 'Participant comment', true);
 		}
-		section.staffNames.forEach((name) => validateText(name, 255, 'Staff name'));
-		if (!Array.isArray(section.participants) || section.participants.length > MAX_PARTICIPANTS) {
-			throw new TypeError(`Fire drill reports may contain at most ${MAX_PARTICIPANTS} participants`);
-		}
-		for (const participant of section.participants) {
-			validateText(participant.residentNameSnapshot, 255, 'Resident name');
-			if (participant.comment !== null && participant.comment !== undefined) {
-				validateText(participant.comment, MAX_TEXT, 'Participant comment', true);
-			}
-			validateDuration(participant);
-		}
+		validateDuration(participant);
 	}
 }
 
@@ -360,6 +433,10 @@ const fireDrillStyles = `
 	.drill-section .comments-row { height: 35mm; }
 	.drill-section .comments-row td { text-align: left; vertical-align: top; }
 	.drill-section .no-time { font-style: italic; color: #444; }
+	.admission-page h1 { line-height: 1.25; }
+	.drill-instruction { margin: 0.5mm 0 0; text-align: center; font-size: 9pt; }
+	.admission-page .drill-section table { height: 120mm; }
+	.admission-page .drill-section .comments-row { height: 70mm; }
 	.drill-section.continuation table { height: 150mm; }
 	.drill-section.continuation .comments-row { height: 90mm; }
 	.drill-page:has(.drill-section.continuation + .drill-section.continuation) .drill-section.continuation table { height: 70mm; }

@@ -35,7 +35,8 @@ test('projection allowlists recorded facts and strips identifiers and mutation m
 		}],
 		fireDrills: [{
 			id: 'report-secret', locationId: 'location-secret', createdBy: 'clerk-secret', version: 4,
-			reportYear: 2026, sequence: 1, drillDate: '2026-02-03', drillTime: '09:15:00', staffNames: ['Morgan'],
+			reportYear: 2026, drillType: 'scheduled', sequence: 1, admissionResidentId: 'resident-secret',
+			admissionResidentNameSnapshot: null, drillDate: '2026-02-03', drillTime: '09:15:00', staffNames: ['Morgan'],
 		}],
 		participants: [{
 			id: 'participant-secret', fireDrillReportId: 'report-secret', residentId: 'resident-secret',
@@ -58,8 +59,11 @@ test('projection allowlists recorded facts and strips identifiers and mutation m
 		'equipmentType', 'inspectionDate', 'notes', 'outcome', 'reportMonth', 'reportYear', 'staffInitials',
 	].sort());
 	assert.deepEqual(Object.keys(data.fireDrills[0]!).sort(), [
-		'drillDate', 'drillTime', 'participants', 'reportYear', 'sequence', 'staffNames',
+		'admissionResidentName', 'drillDate', 'drillTime', 'drillType', 'participants', 'reportYear', 'sequence', 'staffNames',
 	].sort());
+	// The admission resident's *name* is on the sheet; their id never leaves.
+	assert.equal(data.fireDrills[0]!.admissionResidentName, null);
+	assert.equal(data.fireDrills[0]!.drillType, 'scheduled');
 	assert.deepEqual(Object.keys(data.fireDrills[0]!.participants[0]!).sort(), [
 		'comment', 'durationMinutes', 'durationSeconds', 'position', 'residentNameSnapshot',
 	].sort());

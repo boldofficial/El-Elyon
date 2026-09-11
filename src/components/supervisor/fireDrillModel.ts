@@ -1,9 +1,38 @@
-import {MAX_FIRE_DRILL_DURATION_MINUTES} from '@/lib/life-safety-reporting';
+import {
+	MAX_FIRE_DRILL_DURATION_MINUTES,
+	admissionDrillAnchorDate,
+	evaluateAdmissionDrill,
+	type AdmissionDrillEvaluation,
+	type AdmissionDrillState,
+	type FireDrillType,
+} from '@/lib/life-safety-reporting';
 
 export const FIRE_DRILL_SLOTS = [
 	{sequence: 1 as const, label: 'Semi-Annual Fire Drill'},
 	{sequence: 2 as const, label: 'Annual Fire Drill'},
 ] as const;
+
+// The single "type of drill" dropdown. The two scheduled kinds map onto the
+// once-per-year sequence slots; admission drills are per resident.
+export type DrillTypeKey = 'semi_annual' | 'annual' | 'admission';
+
+export const DRILL_TYPE_OPTIONS: ReadonlyArray<
+	| {key: 'semi_annual' | 'annual'; label: string; drillType: 'scheduled'; sequence: 1 | 2}
+	| {key: 'admission'; label: string; drillType: 'admission'; sequence: null}
+> = [
+	{key: 'semi_annual', label: 'Semi-Annual Fire Drill', drillType: 'scheduled', sequence: 1},
+	{key: 'annual', label: 'Annual Fire Drill', drillType: 'scheduled', sequence: 2},
+	{key: 'admission', label: 'Admission/Placement Drill', drillType: 'admission', sequence: null},
+];
+
+export function drillTypeOption(key: DrillTypeKey) {
+	return DRILL_TYPE_OPTIONS.find((option) => option.key === key)!;
+}
+
+export function drillTypeKeyForReport(report: Pick<FireDrillReportRecord, 'drillType' | 'sequence'>): DrillTypeKey {
+	if (report.drillType === 'admission') return 'admission';
+	return report.sequence === 2 ? 'annual' : 'semi_annual';
+}
 
 export type ParticipantSource = 'roster' | 'manual';
 
@@ -23,7 +52,10 @@ export interface FireDrillReportRecord {
 	locationId: string;
 	houseNameSnapshot: string;
 	reportYear: number;
-	sequence: 1 | 2;
+	drillType: FireDrillType;
+	sequence: 1 | 2 | null;
+	admissionResidentId: string | null;
+	admissionResidentNameSnapshot: string | null;
 	drillDate: string;
 	drillTime: string;
 	staffNames: string[];
@@ -56,7 +88,76 @@ export function reportForSequence(
 	reports: FireDrillReportRecord[],
 	sequence: 1 | 2
 ): FireDrillReportRecord | undefined {
-	return reports.find((report) => report.sequence === sequence && !report.voidedAt);
+	return reports.find(
+		(report) => report.drillType === 'scheduled' && report.sequence === sequence && !report.voidedAt
+	);
+}
+
+export function admissionReports(reports: FireDrillReportRecord[]): FireDrillReportRecord[] {
+	return reports
+		.filter((report) => report.drillType === 'admission' && !report.voidedAt)
+		.sort((left, right) => left.drillDate.localeCompare(right.drillDate));
+}
+
+// Shape returned by GET /api/documents/admission-drill-status.
+export interface AdmissionDrillFact {
+	residentId: string;
+	residentName: string;
+	placementDate: string | null;
+	createdAt: string | null;
+	latestAdmissionDrill: {id: string; drillDate: string; reportYear: number} | null;
+}
+
+export interface AdmissionDrillRow extends AdmissionDrillEvaluation {
+	residentId: string;
+	residentName: string;
+	drill: AdmissionDrillFact['latestAdmissionDrill'];
+}
+
+export const ADMISSION_STATE_LABELS: Record<AdmissionDrillState, string> = {
+	not_started: 'Placement upcoming',
+	due: 'Drill due',
+	overdue: 'Overdue',
+	completed: 'Completed',
+	completed_late: 'Completed late',
+};
+
+// Countdown rows for the workspace panel. Residents without any placement
+// anchor are skipped rather than shown with a bogus deadline. Open items sort
+// first (most overdue at the top), then completed ones by resident name.
+export function buildAdmissionDrillRows(facts: AdmissionDrillFact[], today: string): AdmissionDrillRow[] {
+	const rows: AdmissionDrillRow[] = [];
+	for (const fact of facts) {
+		const anchorDate = admissionDrillAnchorDate(fact);
+		if (!anchorDate) continue;
+		rows.push({
+			residentId: fact.residentId,
+			residentName: fact.residentName,
+			drill: fact.latestAdmissionDrill,
+			...evaluateAdmissionDrill({
+				anchorDate,
+				drillDate: fact.latestAdmissionDrill?.drillDate ?? null,
+				today,
+			}),
+		});
+	}
+	const rank: Record<AdmissionDrillState, number> = {
+		overdue: 0,
+		due: 1,
+		not_started: 2,
+		completed_late: 3,
+		completed: 4,
+	};
+	return rows.sort(
+		(left, right) =>
+			rank[left.state] - rank[right.state] ||
+			left.daysRemaining - right.daysRemaining ||
+			left.residentName.localeCompare(right.residentName)
+	);
+}
+
+export function isOpenAdmissionState(state: AdmissionDrillState): boolean {
+	return state === 'due' || state === 'overdue';
 }
 
 export function participantDraftsFromReport(report?: FireDrillReportRecord): ParticipantDraft[] {

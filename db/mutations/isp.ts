@@ -1,6 +1,6 @@
 import {db} from '../index';
 import {isp, ispFiles, ispFileAcknowledgments, complianceAlerts, residents} from '../schema';
-import {eq, and, sql, InferInsertModel, InferSelectModel, isNull, or} from 'drizzle-orm';
+import {eq, and, sql, InferInsertModel, InferSelectModel, isNull, or, inArray} from 'drizzle-orm';
 import {requireCareAccess, logAudit} from '@/lib/db-helpers';
 
 type IspInsert = InferInsertModel<typeof isp>;
@@ -31,6 +31,7 @@ export async function listISPFiles(clerkUserId: string, residentId?: string) {
     }
     // Return all files with resident details
     return await db.query.ispFiles.findMany({
+        where: userRole.role === 'admin' ? undefined : inArray(ispFiles.residentId, db.select({id: residents.id}).from(residents).where(inArray(residents.location, userRole.locations || []))),
         with: {
             resident: true,
         },
