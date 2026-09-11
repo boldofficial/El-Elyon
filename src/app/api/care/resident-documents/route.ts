@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireCareAccess } from '@/lib/db-helpers';
+import { requireCareAccess, residentInScope } from '@/lib/db-helpers';
 import { db } from '../../../../../db';
 import { residentDocuments, residents, ispFiles, fireEvac } from '../../../../../db/schema';
 import { auth, currentUser } from '@clerk/nextjs/server';
@@ -25,6 +25,22 @@ export async function GET(req: NextRequest) {
     const limit = parsedLimit !== undefined && Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : undefined;
     const parsedOffset = offsetParam ? parseInt(offsetParam, 10) : 0;
     const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
+
+    // A client-supplied residentId is an explicit request for one resident's
+    // records, so an out-of-scope one is denied outright rather than being left
+    // to the location filter below, which would return an indistinguishable
+    // empty list. The filter still applies as defence in depth.
+    if (residentId) {
+        const allowed = await residentInScope({
+            clerkUserId: userId,
+            userRole,
+            residentId,
+            auditDetail: 'resident_documents_cross_location',
+        });
+        if (!allowed) {
+            return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+        }
+    }
 
     // 1. Generic Documents
     let docsQuery = db
@@ -89,23 +105,23 @@ export async function GET(req: NextRequest) {
     const ispConditions: SQL[] = [];
     const fireEvacConditions: SQL[] = [];
 
+    // Non-admins are scoped to their assigned locations regardless of whether
+    // residentId is present -- otherwise a caller could pass another facility's
+    // residentId and read that resident's documents/ISP/fire-evac files.
+    if (userRole.role !== 'admin') {
+        const userLocations = userRole.locations || [];
+        const locationCondition = userLocations.length > 0
+            ? inArray(residents.location, userLocations)
+            : eq(residents.id, 'impossible');
+        docsConditions.push(locationCondition);
+        ispConditions.push(locationCondition);
+        fireEvacConditions.push(locationCondition);
+    }
+
     if (residentId) {
         docsConditions.push(eq(residentDocuments.residentId, residentId));
         ispConditions.push(eq(ispFiles.residentId, residentId));
         fireEvacConditions.push(eq(fireEvac.residentId, residentId));
-    } else {
-         if (userRole.role !== 'admin') {
-             const userLocations = userRole.locations || [];
-             if (userLocations.length > 0) {
-                 docsConditions.push(inArray(residents.location, userLocations));
-                 ispConditions.push(inArray(residents.location, userLocations));
-                 fireEvacConditions.push(inArray(residents.location, userLocations));
-             } else {
-                 docsConditions.push(eq(residents.id, 'impossible'));
-                 ispConditions.push(eq(residents.id, 'impossible'));
-                 fireEvacConditions.push(eq(residents.id, 'impossible'));
-             }
-         }
     }
 
     const docsSearchClause = searchCondition(search, [

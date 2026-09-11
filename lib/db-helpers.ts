@@ -1,7 +1,7 @@
 // lib/db-helpers.ts
 
 import {db} from '../db/index';
-import {roles, auditLogs} from '../db/schema'; // Import auditLogs schema
+import {roles, auditLogs, residents} from '../db/schema'; // Import auditLogs schema
 import {eq} from 'drizzle-orm';
 import {type AdminPrivilege} from '@/lib/admin-privileges';
 import {hasAdminPrivilege} from '@/db/queries/admin-privileges';
@@ -86,6 +86,50 @@ export async function requireCareAccess(clerkUserId: string) {
 		throw new AccessDeniedError('Care access required');
 	}
 	return userRole;
+}
+
+/**
+ * Non-admins may only reach residents in one of their assigned locations.
+ *
+ * Any handler that accepts a client-supplied `residentId` must call this before
+ * returning anything about that resident. Filtering the resident out of the
+ * result set is not enough on its own: an empty list is indistinguishable from
+ * "this resident has no records", and that ambiguity is exactly why an earlier
+ * IDOR in the care routes went unnoticed. Denials are audited here so the next
+ * regression shows up in `auditLogs` instead of silently succeeding.
+ *
+ * A resident that does not exist is reported as denied rather than missing, so
+ * a caller cannot use the 403/404 split to probe which resident ids are real.
+ *
+ * Returns true when the caller may read this resident.
+ */
+export async function residentInScope(args: {
+	clerkUserId: string;
+	userRole: {role: string | null; locations?: string[] | null};
+	residentId: string;
+	auditDetail: string;
+}) {
+	if ((args.userRole.role || '').toLowerCase() === 'admin') return true;
+
+	const resident = await db.query.residents.findFirst({
+		where: eq(residents.id, args.residentId),
+		columns: {location: true},
+	});
+
+	const allowed =
+		!!resident && (args.userRole.locations || []).includes(resident.location);
+
+	if (!allowed) {
+		await logAudit({
+			clerkUserId: args.clerkUserId,
+			event: 'access_denied',
+			details: `${args.auditDetail}_${args.residentId}`,
+			deviceId: 'system',
+			location: resident?.location ?? '',
+		});
+	}
+
+	return allowed;
 }
 
 // Helper: Check supervisor access

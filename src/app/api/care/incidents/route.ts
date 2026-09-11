@@ -2,7 +2,7 @@
 
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireCareAccess, logAudit} from '@/lib/db-helpers';
+import {requireCareAccess, logAudit, residentInScope} from '@/lib/db-helpers';
 import {
 	createIncidentReport,
 	updateIncidentReport,
@@ -10,7 +10,7 @@ import {
 } from '@/db/mutations/incident-reports';
 import {db} from '@/db/index';
 import {incidentReports} from '@/db/schema';
-import {eq, and, SQL} from 'drizzle-orm';
+import {eq, and, inArray, SQL} from 'drizzle-orm';
 import {searchCondition, paginatePage} from '@/db/query-helpers';
 
 // GET - List incident reports
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
 	}
 
 	try {
-		await requireCareAccess(userId);
+		const userRole = await requireCareAccess(userId);
 
 		const {searchParams} = new URL(request.url);
 		const residentId = searchParams.get('residentId');
@@ -34,9 +34,22 @@ export async function GET(request: Request) {
 		const parsedOffset = offsetParam ? parseInt(offsetParam, 10) : 0;
 		const offset = Number.isFinite(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
 
+		// An out-of-scope residentId is denied outright rather than being filtered
+		// down to an empty list, which reads the same as "no incidents on file".
+		if (residentId) {
+			const allowed = await residentInScope({
+				clerkUserId: userId,
+				userRole,
+				residentId,
+				auditDetail: 'incidents_cross_location',
+			});
+			if (!allowed) {
+				return NextResponse.json({error: 'Access denied'}, {status: 403});
+			}
+		}
+
 		const conditions: SQL[] = [];
 		if (residentId) conditions.push(eq(incidentReports.residentId, residentId));
-		if (location) conditions.push(eq(incidentReports.location, location));
 		const searchClause = searchCondition(search, [
 			incidentReports.description,
 			incidentReports.incidentType,
@@ -44,6 +57,33 @@ export async function GET(request: Request) {
 			incidentReports.reportedByName,
 		]);
 		if (searchClause) conditions.push(searchClause);
+
+		// Non-admins are scoped to their assigned locations -- a client-supplied
+		// `location` param is only honored when it's one of theirs, otherwise
+		// they'd be able to pull reports for a facility they aren't assigned to.
+		if (userRole.role !== 'admin') {
+			const userLocations = userRole.locations || [];
+			if (location) {
+				if (!userLocations.includes(location)) {
+					await logAudit({
+						clerkUserId: userId,
+						event: 'access_denied',
+						details: `incidents_cross_location_param_${location}`,
+						deviceId: 'system',
+						location,
+					});
+					return NextResponse.json({error: 'Access denied'}, {status: 403});
+				}
+				conditions.push(eq(incidentReports.location, location));
+			} else if (userLocations.length > 0) {
+				conditions.push(inArray(incidentReports.location, userLocations));
+			} else {
+				conditions.push(eq(incidentReports.location, '__no_access__'));
+			}
+		} else if (location) {
+			conditions.push(eq(incidentReports.location, location));
+		}
+
 		const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
 		const reports = await db.query.incidentReports.findMany({
