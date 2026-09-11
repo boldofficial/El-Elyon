@@ -10,7 +10,7 @@ import {
 	smokeDetectorChecks,
 } from '@/db/schema';
 import {requireCareAccess} from '@/lib/db-helpers';
-import {and, asc, eq, gt, gte, inArray, isNull, lte} from 'drizzle-orm';
+import {and, asc, desc, eq, gt, gte, inArray, isNull, lte} from 'drizzle-orm';
 import {groupFireDrillJoinRows} from './fire-drill-aggregate';
 import {
 	aliasesAreUnambiguous,
@@ -255,11 +255,85 @@ export async function listFireDrillReports(args: {
 		)
 		.where(and(...conditions))
 		.orderBy(
+			asc(fireDrillReports.drillType),
 			asc(fireDrillReports.sequence),
+			asc(fireDrillReports.drillDate),
 			asc(fireDrillReports.createdAt),
 			asc(fireDrillParticipants.position)
 		);
 	return groupFireDrillJoinRows(rows);
+}
+
+export type ResidentAdmissionDrillFact = {
+	residentId: string;
+	residentName: string;
+	locationName: string;
+	placementDate: Date | null;
+	createdAt: Date | null;
+	/** Latest active admission drill for the resident, any report year. */
+	latestAdmissionDrill: {id: string; drillDate: string; reportYear: number} | null;
+};
+
+/**
+ * Active residents paired with their most recent (non-voided) admission drill.
+ * Deliberately not year-scoped: a resident placed on 30 December is drilled in
+ * January, and the countdown must see across that boundary. `locationName`
+ * narrows to one house; omit it for the compliance cron's all-houses sweep.
+ */
+export async function listResidentAdmissionDrillFacts(args?: {
+	locationName?: string;
+}): Promise<ResidentAdmissionDrillFact[]> {
+	const conditions = [eq(residents.status, 'active')];
+	if (args?.locationName) conditions.push(eq(residents.location, args.locationName));
+	const rows = await db
+		.select({
+			residentId: residents.id,
+			residentName: residents.name,
+			locationName: residents.location,
+			placementDate: residents.placementDate,
+			createdAt: residents.createdAt,
+			drill: {
+				id: fireDrillReports.id,
+				drillDate: fireDrillReports.drillDate,
+				reportYear: fireDrillReports.reportYear,
+			},
+		})
+		.from(residents)
+		.leftJoin(
+			fireDrillReports,
+			and(
+				eq(fireDrillReports.admissionResidentId, residents.id),
+				eq(fireDrillReports.drillType, 'admission'),
+				isNull(fireDrillReports.voidedAt)
+			)
+		)
+		.where(and(...conditions))
+		.orderBy(asc(residents.name), asc(residents.id), desc(fireDrillReports.drillDate));
+
+	const facts = new Map<string, ResidentAdmissionDrillFact>();
+	for (const row of rows) {
+		// Rows arrive newest-drill-first per resident; keep the first one seen.
+		if (!facts.has(row.residentId)) {
+			facts.set(row.residentId, {
+				residentId: row.residentId,
+				residentName: row.residentName,
+				locationName: row.locationName,
+				placementDate: row.placementDate,
+				createdAt: row.createdAt,
+				latestAdmissionDrill: row.drill?.id ? row.drill : null,
+			});
+		}
+	}
+	return Array.from(facts.values());
+}
+
+export async function listAdmissionDrillFactsForLocation(args: {
+	clerkUserId: string;
+	locationId: string;
+}) {
+	const context = await getLifeSafetyAccessContext(args.clerkUserId);
+	const location = await resolveAuthorizedLifeSafetyLocation(context, args.locationId);
+	return listResidentAdmissionDrillFacts({locationName: location.name});
 }
 
 export async function getFireDrillReport(args: {

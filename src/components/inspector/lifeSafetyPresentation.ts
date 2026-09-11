@@ -67,7 +67,13 @@ export function inspectorFireDrillForSequence(
 	reports: InspectorFireDrillReport[],
 	sequence: 1 | 2
 ) {
-	return reports.find((report) => report.sequence === sequence);
+	return reports.find((report) => report.drillType === 'scheduled' && report.sequence === sequence);
+}
+
+export function inspectorAdmissionFireDrills(reports: InspectorFireDrillReport[]) {
+	return reports
+		.filter((report) => report.drillType === 'admission')
+		.sort((left, right) => left.drillDate.localeCompare(right.drillDate));
 }
 
 export const formatInspectorLocalDate = formatLocalInspectionDate;
