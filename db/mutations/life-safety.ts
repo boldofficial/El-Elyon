@@ -1,5 +1,6 @@
 import {db} from '@/db/index';
 import {
+	complianceAlerts,
 	employees,
 	fireDrillParticipants,
 	fireDrillReports,
@@ -22,7 +23,7 @@ import type {
 	LifeSafetyInspectionInput,
 } from '@/lib/life-safety-reporting';
 import {selectFireDrillResidentNameSnapshot} from '@/lib/life-safety-reporting';
-import {and, asc, eq, inArray, isNull} from 'drizzle-orm';
+import {and, asc, eq, inArray, isNull, sql} from 'drizzle-orm';
 
 type AuditActor = {id: string; name: string | null};
 
@@ -168,11 +169,13 @@ export async function createFireDrillReport(args: {
 		const actor = await resolveAuditActor(args.clerkUserId);
 
 		const participants = await resolveParticipants(location.name, args.input.participants);
+		const admission = resolveAdmissionResident(args.input, participants);
 
 		const [report] = await db
 			.insert(fireDrillReports)
 			.values({
 				...fireDrillValues(args.input),
+				...admission,
 				houseNameSnapshot: location.name,
 				createdBy: actor.id,
 			})
@@ -185,6 +188,7 @@ export async function createFireDrillReport(args: {
 
 		const aggregate = {...report, participants: savedParticipants};
 		await insertFireDrillRevision(aggregate, 'create', actor);
+		if (report.admissionResidentId) await clearAdmissionDrillAlert(report.admissionResidentId);
 		return aggregate;
 	} catch (error) {
 		throw translateMutationError(error);
@@ -211,11 +215,13 @@ export async function updateFireDrillReport(args: {
 			args.input.participants,
 			current.participants
 		);
+		const admission = resolveAdmissionResident(args.input, participants, current);
 
 		const [report] = await db
 			.update(fireDrillReports)
 			.set({
 				...fireDrillValues(args.input),
+				...admission,
 				houseNameSnapshot: destination.name,
 				version: args.expectedVersion + 1,
 				updatedBy: actor.id,
@@ -315,11 +321,62 @@ function fireDrillValues(input: FireDrillReportInput) {
 	return {
 		locationId: input.locationId,
 		reportYear: input.reportYear,
+		drillType: input.drillType,
 		sequence: input.sequence,
 		drillDate: input.drillDate,
 		drillTime: input.drillTime,
 		staffNames: input.staffNames,
 	};
+}
+
+// The admission resident's name snapshot is taken from their participant row
+// (validation guarantees the resident is a roster participant), so the report
+// header and the result column can never disagree. On correction, an
+// unchanged resident keeps the snapshot already on the report.
+function resolveAdmissionResident(
+	input: FireDrillReportInput,
+	participants: {residentId: string | null; residentNameSnapshot: string}[],
+	current?: Pick<
+		typeof fireDrillReports.$inferSelect,
+		'admissionResidentId' | 'admissionResidentNameSnapshot'
+	>
+) {
+	if (input.drillType !== 'admission' || !input.admissionResidentId) {
+		return {admissionResidentId: null, admissionResidentNameSnapshot: null};
+	}
+	if (
+		current?.admissionResidentId === input.admissionResidentId &&
+		current.admissionResidentNameSnapshot
+	) {
+		return {
+			admissionResidentId: current.admissionResidentId,
+			admissionResidentNameSnapshot: current.admissionResidentNameSnapshot,
+		};
+	}
+	const participant = participants.find(
+		(candidate) => candidate.residentId === input.admissionResidentId
+	);
+	if (!participant) throw new LifeSafetyNotFoundError('Resident not found');
+	return {
+		admissionResidentId: participant.residentId,
+		admissionResidentNameSnapshot: participant.residentNameSnapshot,
+	};
+}
+
+// Recording the admission drill satisfies the reminder, so resolve it now
+// rather than leaving it on dashboards until the next cron sweep (mirrors
+// activateISPFile). The cron re-creates it if the drill is later voided.
+async function clearAdmissionDrillAlert(residentId: string) {
+	await db
+		.update(complianceAlerts)
+		.set({active: false, status: 'resolved'})
+		.where(
+			and(
+				eq(complianceAlerts.type, 'admission_drill'),
+				eq(complianceAlerts.active, true),
+				sql`${complianceAlerts.metadata}->>'residentId' = ${residentId}`
+			)
+		);
 }
 
 async function resolveAuditActor(clerkUserId: string): Promise<AuditActor> {

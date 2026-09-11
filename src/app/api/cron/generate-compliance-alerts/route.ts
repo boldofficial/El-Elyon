@@ -10,18 +10,30 @@ import {
 	locations,
 	smokeDetectorChecks,
 	fireDrills,
+	fireDrillReports,
 } from '@/db/schema';
-import {eq, desc} from 'drizzle-orm';
+import {and, eq, desc, isNull} from 'drizzle-orm';
+import {listResidentAdmissionDrillFacts} from '@/db/queries/life-safety';
+import {
+	admissionDrillAnchorDate,
+	evaluateAdmissionDrill,
+	toLocalDate,
+} from '@/lib/life-safety-reporting';
 
 /**
  * CRON JOB: Generates (and clears) compliance reminders.
- * Runs: Every Monday at 9 AM (0 9 * * 1)
+ * Runs: Daily at 9 AM (0 9 * * *). It was weekly until admission drills
+ * arrived; a 3-day deadline cannot be caught by a Monday-only sweep.
  *
  * Reminders covered:
- *   - ISP:            due = effectiveDate + 6 months; alert within 30 days   (supervisors + admins)
- *   - Fire evac:      due = createdAt + 12 months;   alert within 30 days   (supervisors + admins)
- *   - Smoke detector: due = last check + 1 month;    alert within 7 days    (all users)
- *   - Fire drill:     due = last drill + 6 months;   alert within 7 days    (all users)
+ *   - ISP:             due = effectiveDate + 6 months; alert within 30 days   (supervisors + admins)
+ *   - Fire evac:       due = createdAt + 12 months;   alert within 30 days   (supervisors + admins)
+ *   - Smoke detector:  due = last check + 1 month;    alert within 7 days    (all users)
+ *   - Fire drill:      due = last scheduled drill + 6 months; alert within 7 days (all users)
+ *   - Admission drill: due = placement + 3 days; alert from placement day    (all users)
+ *
+ * Admission drills never satisfy the semiannual cadence and vice versa: the
+ * fire-drill pass reads only drill_type = 'scheduled' reports.
  *
  * Each pass is idempotent: it ensures exactly one active alert per subject while
  * the item is due, and deactivates the alert once the item is updated (the
@@ -54,9 +66,10 @@ export async function GET(req: NextRequest) {
 
 		console.log('🔔 Starting compliance alert generation...');
 
-		const generated = {isp: 0, fireEvac: 0, smoke: 0, fireDrill: 0};
-		const cleared = {isp: 0, fireEvac: 0, smoke: 0, fireDrill: 0};
+		const generated = {isp: 0, fireEvac: 0, smoke: 0, fireDrill: 0, admissionDrill: 0};
+		const cleared = {isp: 0, fireEvac: 0, smoke: 0, fireDrill: 0, admissionDrill: 0};
 		const now = Date.now();
+		const today = toLocalDate(new Date(now));
 
 		const allAlerts = await db.query.complianceAlerts.findMany();
 		const activeAlerts = allAlerts.filter((a) => a.active);
@@ -214,15 +227,31 @@ export async function GET(req: NextRequest) {
 				if (res === 'created') generated.smoke++;
 			}
 
-			// Fire drill — every 6 months
-			const lastDrill = await db.query.fireDrills.findMany({
+			// Fire drill — every 6 months. The supervisor workspace writes to
+			// fire_drill_reports (v2); the legacy fire_drills rows are read-only
+			// history, so take the most recent scheduled drill across both.
+			const [lastV2Drill] = await db
+				.select({drillDate: fireDrillReports.drillDate})
+				.from(fireDrillReports)
+				.where(
+					and(
+						eq(fireDrillReports.locationId, loc.id),
+						eq(fireDrillReports.drillType, 'scheduled'),
+						isNull(fireDrillReports.voidedAt)
+					)
+				)
+				.orderBy(desc(fireDrillReports.drillDate))
+				.limit(1);
+			const lastLegacyDrill = await db.query.fireDrills.findMany({
 				where: eq(fireDrills.location, loc.name),
 				orderBy: [desc(fireDrills.date)],
 				limit: 1,
 			});
-			const drillDue = lastDrill[0]
-				? lastDrill[0].date.getTime() + FIRE_DRILL_PERIOD
-				: now;
+			const lastDrillAt = Math.max(
+				lastV2Drill ? new Date(`${lastV2Drill.drillDate}T12:00:00`).getTime() : 0,
+				lastLegacyDrill[0]?.date.getTime() ?? 0
+			);
+			const drillDue = lastDrillAt > 0 ? lastDrillAt + FIRE_DRILL_PERIOD : now;
 			if (drillDue - now <= SAFETY_LEAD) {
 				fireDrillDueLocations.add(loc.name);
 				const res = await ensureAlert(
@@ -230,8 +259,8 @@ export async function GET(req: NextRequest) {
 					{
 						type: 'fire_drill',
 						title: 'Fire Drill Due',
-						description: lastDrill[0]
-							? `Semiannual fire drill for ${loc.name} is due (last held ${lastDrill[0].date.toLocaleDateString()})`
+						description: lastDrillAt > 0
+							? `Semiannual fire drill for ${loc.name} is due (last held ${new Date(lastDrillAt).toLocaleDateString()})`
 							: `Fire drill for ${loc.name} has never been recorded`,
 						location: loc.name,
 						severity: drillDue < now ? 'high' : 'medium',
@@ -245,6 +274,42 @@ export async function GET(req: NextRequest) {
 		);
 		cleared.fireDrill = await clearStale('fire_drill', (a) =>
 			fireDrillDueLocations.has(a.location)
+		);
+
+		// ---------- Admission drill (placement + 3 days) ----------
+		// Same evaluation the supervisor workspace uses, so the dashboard
+		// reminder and the countdown panel can never disagree.
+		const admissionDueResidentIds = new Set<string>();
+		for (const fact of await listResidentAdmissionDrillFacts()) {
+			const anchorDate = admissionDrillAnchorDate(fact);
+			if (!anchorDate) continue;
+			const evaluation = evaluateAdmissionDrill({
+				anchorDate,
+				drillDate: fact.latestAdmissionDrill?.drillDate ?? null,
+				today,
+			});
+			if (evaluation.state !== 'due' && evaluation.state !== 'overdue') continue;
+
+			admissionDueResidentIds.add(fact.residentId);
+			const deadline = new Date(`${evaluation.deadline}T12:00:00`).toLocaleDateString();
+			const res = await ensureAlert(
+				(a) => a.type === 'admission_drill' && a.metadata?.residentId === fact.residentId,
+				{
+					type: 'admission_drill',
+					title: 'Admission Fire Drill Due',
+					description:
+						evaluation.state === 'overdue'
+							? `Admission drill for ${fact.residentName} was due by ${deadline} and has not been recorded`
+							: `Admission drill for ${fact.residentName} must be held by ${deadline}`,
+					location: fact.locationName,
+					severity: evaluation.state === 'overdue' ? 'high' : 'medium',
+					metadata: {residentId: fact.residentId},
+				}
+			);
+			if (res === 'created') generated.admissionDrill++;
+		}
+		cleared.admissionDrill = await clearStale('admission_drill', (a) =>
+			a.metadata?.residentId ? admissionDueResidentIds.has(a.metadata.residentId) : true
 		);
 
 		console.log('✅ Compliance alert generation completed', {generated, cleared});

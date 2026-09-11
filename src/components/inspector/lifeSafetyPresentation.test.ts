@@ -42,8 +42,8 @@ function data(): InspectorLifeSafetyData {
 			staffInitials: 'MS', outcome: 'pass', notes: null,
 		}],
 		fireDrills: [{
-			reportYear: 2026, sequence: 1, drillDate: '2026-03-01', drillTime: '09:00:00',
-			staffNames: ['Morgan'], participants: [],
+			reportYear: 2026, drillType: 'scheduled', sequence: 1, admissionResidentName: null,
+			drillDate: '2026-03-01', drillTime: '09:00:00', staffNames: ['Morgan'], participants: [],
 		}],
 		legacySmokeChecks: [
 			{date: '2026-02-01T00:00:00.000Z', smokeStatus: 'Pass', coStatus: 'Pass', staffInitials: 'MS', notes: null},

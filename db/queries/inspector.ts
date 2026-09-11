@@ -200,7 +200,9 @@ export async function getInspectorLifeSafetyData(locationId: string) {
 				report: {
 					id: fireDrillReports.id,
 					reportYear: fireDrillReports.reportYear,
+					drillType: fireDrillReports.drillType,
 					sequence: fireDrillReports.sequence,
+					admissionResidentNameSnapshot: fireDrillReports.admissionResidentNameSnapshot,
 					drillDate: fireDrillReports.drillDate,
 					drillTime: fireDrillReports.drillTime,
 					staffNames: fireDrillReports.staffNames,
@@ -225,7 +227,9 @@ export async function getInspectorLifeSafetyData(locationId: string) {
 			))
 			.orderBy(
 				desc(fireDrillReports.reportYear),
+				asc(fireDrillReports.drillType),
 				asc(fireDrillReports.sequence),
+				asc(fireDrillReports.drillDate),
 				asc(fireDrillParticipants.position)
 			),
 		db

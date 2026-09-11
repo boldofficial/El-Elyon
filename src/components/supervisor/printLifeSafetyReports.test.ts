@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+	buildAdmissionDrillPrintHtml,
 	buildAnnualInspectionPrintHtml,
 	buildFireDrillPrintHtml,
 	type PrintableFireDrillParticipant
@@ -47,6 +48,34 @@ test('fire drill sheet renders a populated semi-annual section and blank annual 
 	assert.match(html, /02\/01\/2026 1:05 PM/);
 	assert.match(html, /Resident One/);
 	assert.equal((html.match(/class="drill-page"/g) ?? []).length, 1);
+});
+
+test('admission drill sheet follows the placement template and requires the admitted resident', () => {
+	const sheet = {
+		houseName: 'Cedar House',
+		year: 2026,
+		residentName: 'Resident One',
+		drillDate: '2026-09-04',
+		drillTime: '10:30:00',
+		staffNames: ['Morgan Smith', 'Tia Jones'],
+		participants: [participant('Resident One', 0), participant('Housemate', 1)]
+	};
+	const html = buildAdmissionDrillPrintHtml(sheet);
+
+	assert.match(html, /size: Letter landscape/);
+	assert.match(html, /DRILL REPORT<br \/>ADMISSION\/PLACEMENT DRILL/);
+	assert.match(html, /To be completed within 3 days after placement\/admission\./);
+	assert.match(html, /09\/04\/2026 10:30 AM/);
+	assert.match(html, /Morgan Smith, Tia Jones/);
+	assert.match(html, /Housemate/);
+	assert.doesNotMatch(html, />SEMI-ANNUAL FIRE DRILL</);
+	assert.doesNotMatch(html, />ANNUAL FIRE DRILL</);
+	assert.equal((html.match(/class="drill-page admission-page"/g) ?? []).length, 1);
+
+	assert.throws(
+		() => buildAdmissionDrillPrintHtml({...sheet, participants: [participant('Housemate', 0)]}),
+		/must include the admitted resident/
+	);
 });
 
 test('five residents create one continuation page without dropping or duplicating anyone', () => {
