@@ -32,7 +32,7 @@ import {
 	readLifeSafetyResponse,
 } from './lifeSafetyWorkspace';
 import {printAdmissionDrillReport, printFireDrillReport} from './printLifeSafetyReports';
-import {ADMISSION_DRILL_DEADLINE_DAYS, toLocalDate} from '@/lib/life-safety-reporting';
+import {ADMISSION_DRILL_DEADLINE_DAYS, ADMISSION_DRILL_TRACKING_START, toLocalDate} from '@/lib/life-safety-reporting';
 
 type LocationOption = {id: string; name: string};
 type ResidentOption = {id: string; name: string};
@@ -920,13 +920,13 @@ function AdmissionDrillPanel({rows, reports, year, printing, onRecord, onCorrect
 		<section className="rounded-lg border border-gray-200 bg-white shadow-sm" aria-labelledby="admission-drill-heading">
 			<div className="border-b border-gray-200 px-4 py-3">
 				<h3 id="admission-drill-heading" className="font-semibold text-gray-900">Admission/placement drills</h3>
-				<p className="mt-1 text-sm text-gray-600">Every newly placed resident needs a drill within {ADMISSION_DRILL_DEADLINE_DAYS} days of placement. The countdown starts from the placement date on the resident profile (or the day the resident was added, if none is set).</p>
+				<p className="mt-1 text-sm text-gray-600">Every newly placed resident needs a drill within {ADMISSION_DRILL_DEADLINE_DAYS} days of placement. The countdown starts from the placement date on the resident profile (or the day the resident was added, if none is set). Applies to residents placed on or after {formatLocalFireDrillDate(ADMISSION_DRILL_TRACKING_START)}.</p>
 			</div>
 			<div className="space-y-4 p-4">
 				<div>
 					<h4 className="text-sm font-semibold text-gray-900">Countdown ({open.length} open)</h4>
 					{rows.length === 0 ? (
-						<p className="mt-2 text-sm text-gray-600">No active residents with a placement date at this house.</p>
+						<p className="mt-2 text-sm text-gray-600">No residents placed at this house since {formatLocalFireDrillDate(ADMISSION_DRILL_TRACKING_START)}.</p>
 					) : (
 						<ul className="mt-2 divide-y divide-gray-100 rounded-md border border-gray-200">
 							{rows.map((row) => (

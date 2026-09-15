@@ -23,6 +23,12 @@ export const FIRE_DRILL_TYPES = ["scheduled", "admission"] as const;
 // placement/admission."
 export const ADMISSION_DRILL_DEADLINE_DAYS = 3;
 
+// The day admission drills started being tracked in the system (PR #21
+// merged). Residents placed before this were admitted under the paper
+// process and owe nothing here; without the cutoff every existing resident
+// showed as overdue the day the feature shipped.
+export const ADMISSION_DRILL_TRACKING_START = "2026-09-11";
+
 // Fire drills record resident evacuation results only, so there is no
 // "external" (non-resident) source: the drill sheet has no column for one and
 // no requirement asks for it. "manual" covers the real gap -- a resident who
@@ -326,6 +332,11 @@ export function admissionDrillAnchorDate(resident: {
   const source = resident.placementDate ?? resident.createdAt;
   if (!source) return null;
   return toLocalDate(source);
+}
+
+/** Whether a placement on `anchorDate` falls under the tracked requirement. */
+export function isAdmissionDrillRequired(anchorDate: string): boolean {
+  return anchorDate >= ADMISSION_DRILL_TRACKING_START;
 }
 
 export function admissionDrillDeadline(anchorDate: string): string {

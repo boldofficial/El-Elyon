@@ -47,22 +47,24 @@ test('admission drills never occupy a scheduled slot and list in date order', ()
 	assert.deepEqual(admissionReports([admissionB, voided, semi, admissionA]).map((entry) => entry.id), ['a', 'b']);
 });
 
-test('admission countdown rows skip residents without an anchor and sort open items first', () => {
+test('admission countdown rows skip residents without an anchor or placed before tracking began, and sort open items first', () => {
 	const rows = buildAdmissionDrillRows(
 		[
-			{residentId: 'done', residentName: 'Done', placementDate: '2026-09-01', createdAt: null, latestAdmissionDrill: {id: 'd', drillDate: '2026-09-02', reportYear: 2026}},
-			{residentId: 'late', residentName: 'Late', placementDate: '2026-09-01', createdAt: null, latestAdmissionDrill: null},
-			{residentId: 'soon', residentName: 'Soon', placementDate: '2026-09-09', createdAt: null, latestAdmissionDrill: null},
+			{residentId: 'done', residentName: 'Done', placementDate: '2026-09-12', createdAt: null, latestAdmissionDrill: {id: 'd', drillDate: '2026-09-13', reportYear: 2026}},
+			{residentId: 'late', residentName: 'Late', placementDate: '2026-09-12', createdAt: null, latestAdmissionDrill: null},
+			{residentId: 'soon', residentName: 'Soon', placementDate: '2026-09-20', createdAt: null, latestAdmissionDrill: null},
 			{residentId: 'none', residentName: 'No anchor', placementDate: null, createdAt: null, latestAdmissionDrill: null},
-			{residentId: 'created', residentName: 'Created only', placementDate: null, createdAt: '2026-09-10T08:00:00', latestAdmissionDrill: null},
+			{residentId: 'legacy', residentName: 'Placed before tracking', placementDate: '2025-03-01', createdAt: null, latestAdmissionDrill: null},
+			{residentId: 'legacy-created', residentName: 'Created before tracking', placementDate: null, createdAt: '2026-09-10T23:00:00', latestAdmissionDrill: null},
+			{residentId: 'created', residentName: 'Created only', placementDate: null, createdAt: '2026-09-21T08:00:00', latestAdmissionDrill: null},
 		],
-		'2026-09-10'
+		'2026-09-21'
 	);
 	assert.deepEqual(rows.map((row) => [row.residentId, row.state, row.deadline]), [
-		['late', 'overdue', '2026-09-04'],
-		['soon', 'due', '2026-09-12'],
-		['created', 'due', '2026-09-13'],
-		['done', 'completed', '2026-09-04'],
+		['late', 'overdue', '2026-09-15'],
+		['soon', 'due', '2026-09-23'],
+		['created', 'due', '2026-09-24'],
+		['done', 'completed', '2026-09-15'],
 	]);
 });
 

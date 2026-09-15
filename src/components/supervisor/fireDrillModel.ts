@@ -2,6 +2,7 @@ import {
 	MAX_FIRE_DRILL_DURATION_MINUTES,
 	admissionDrillAnchorDate,
 	evaluateAdmissionDrill,
+	isAdmissionDrillRequired,
 	type AdmissionDrillEvaluation,
 	type AdmissionDrillState,
 	type FireDrillType,
@@ -123,13 +124,14 @@ export const ADMISSION_STATE_LABELS: Record<AdmissionDrillState, string> = {
 };
 
 // Countdown rows for the workspace panel. Residents without any placement
-// anchor are skipped rather than shown with a bogus deadline. Open items sort
-// first (most overdue at the top), then completed ones by resident name.
+// anchor, or placed before tracking began, are skipped rather than shown
+// with a bogus deadline. Open items sort first (most overdue at the top),
+// then completed ones by resident name.
 export function buildAdmissionDrillRows(facts: AdmissionDrillFact[], today: string): AdmissionDrillRow[] {
 	const rows: AdmissionDrillRow[] = [];
 	for (const fact of facts) {
 		const anchorDate = admissionDrillAnchorDate(fact);
-		if (!anchorDate) continue;
+		if (!anchorDate || !isAdmissionDrillRequired(anchorDate)) continue;
 		rows.push({
 			residentId: fact.residentId,
 			residentName: fact.residentName,
