@@ -17,6 +17,7 @@ import {listResidentAdmissionDrillFacts} from '@/db/queries/life-safety';
 import {
 	admissionDrillAnchorDate,
 	evaluateAdmissionDrill,
+	isAdmissionDrillRequired,
 	toLocalDate,
 } from '@/lib/life-safety-reporting';
 
@@ -31,6 +32,7 @@ import {
  *   - Smoke detector:  due = last check + 1 month;    alert within 7 days    (all users)
  *   - Fire drill:      due = last scheduled drill + 6 months; alert within 7 days (all users)
  *   - Admission drill: due = placement + 3 days; alert from placement day    (all users)
+ *                      (only placements on/after ADMISSION_DRILL_TRACKING_START)
  *
  * Admission drills never satisfy the semiannual cadence and vice versa: the
  * fire-drill pass reads only drill_type = 'scheduled' reports.
@@ -282,7 +284,7 @@ export async function GET(req: NextRequest) {
 		const admissionDueResidentIds = new Set<string>();
 		for (const fact of await listResidentAdmissionDrillFacts()) {
 			const anchorDate = admissionDrillAnchorDate(fact);
-			if (!anchorDate) continue;
+			if (!anchorDate || !isAdmissionDrillRequired(anchorDate)) continue;
 			const evaluation = evaluateAdmissionDrill({
 				anchorDate,
 				drillDate: fact.latestAdmissionDrill?.drillDate ?? null,

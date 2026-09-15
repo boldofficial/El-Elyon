@@ -6,6 +6,7 @@ import {
   admissionDrillAnchorDate,
   admissionDrillDeadline,
   differenceInLocalDays,
+  isAdmissionDrillRequired,
   evaluateAdmissionDrill,
   fireDrillParticipantInputSchema,
   fireDrillReportInputSchema,
@@ -322,6 +323,13 @@ test("admission drill anchor prefers the placement date and falls back to creati
   assert.equal(admissionDrillDeadline("2026-12-30"), "2027-01-02");
   assert.equal(differenceInLocalDays("2026-09-03", "2026-09-06"), 3);
   assert.equal(differenceInLocalDays("2026-09-08", "2026-09-06"), -2);
+});
+
+test("placements before tracking began are exempt; the start day itself is tracked", () => {
+  assert.equal(isAdmissionDrillRequired("2025-03-01"), false);
+  assert.equal(isAdmissionDrillRequired("2026-09-10"), false);
+  assert.equal(isAdmissionDrillRequired("2026-09-11"), true);
+  assert.equal(isAdmissionDrillRequired("2026-12-31"), true);
 });
 
 test("admission drill evaluation states", () => {
