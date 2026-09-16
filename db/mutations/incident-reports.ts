@@ -5,6 +5,10 @@ import {requireCareAccess} from '@/lib/db-helpers';
 import {getClerkUser} from '@/lib/clerk';
 import {logAudit} from './audit';
 import {InferSelectModel} from 'drizzle-orm';
+import {
+	canEditIncidentReport,
+	IncidentEditNotAllowedError,
+} from '@/lib/incident-edit-policy';
 
 type IncidentReportSelect = InferSelectModel<typeof incidentReports>;
 type IncidentReportInsert = typeof incidentReports.$inferInsert;
@@ -97,16 +101,27 @@ export async function updateIncidentReport(
 		throw new Error('Incident report not found');
 	}
 
-	// Optional: Add location-based access check if needed, similar to create
-	// const userRole = await getUserRoleDoc(clerkUserId);
-	// if (userRole.role !== 'admin' && !userRole.locations.includes(existingReport.location)) {
-	// 	throw new Error('Access denied to update incident report at this location');
-	// }
+	// Incident reports are compliance records: only the author may edit, and
+	// only inside the window defined in lib/incident-edit-policy.ts. The client
+	// hides the Edit button using the same rule, but this is the enforcement.
+	if (!canEditIncidentReport(existingReport, clerkUserId)) {
+		await logAudit({
+			clerkUserId,
+			event: 'access_denied',
+			details: `incident_edit_denied incidentId=${incidentId}`,
+			deviceId: 'system',
+			location: existingReport.location,
+		});
+		throw new IncidentEditNotAllowedError();
+	}
+
+	// Authorship and filing time are immutable regardless of what the client sends.
+	const {reportedBy: _reportedBy, reportedByName: _reportedByName, createdAt: _createdAt, id: _id, ...editable} = data;
 
 	const [updatedIncident] = await db
 		.update(incidentReports)
 		.set({
-			...data,
+			...editable,
 			updatedAt: new Date(),
 		})
 		.where(eq(incidentReports.id, incidentId))

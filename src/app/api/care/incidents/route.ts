@@ -12,6 +12,7 @@ import {db} from '@/db/index';
 import {incidentReports} from '@/db/schema';
 import {eq, and, inArray, SQL} from 'drizzle-orm';
 import {searchCondition, paginatePage} from '@/db/query-helpers';
+import {IncidentEditNotAllowedError} from '@/lib/incident-edit-policy';
 
 // GET - List incident reports
 export async function GET(request: Request) {
@@ -191,6 +192,9 @@ export async function PATCH(request: Request) {
 
 		return NextResponse.json(updatedIncident);
 	} catch (error: any) {
+		if (error instanceof IncidentEditNotAllowedError) {
+			return NextResponse.json({error: error.message}, {status: 403});
+		}
 		console.error('Error updating incident report:', error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}
