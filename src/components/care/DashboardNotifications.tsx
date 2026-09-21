@@ -31,6 +31,14 @@ interface Memo {
 	createdAt: string;
 }
 
+interface CarbLogReminder {
+	residentId: string;
+	residentName: string;
+	location: string;
+	operationalDate: string;
+	slots: Array<{slot: {key: string; label: string}; status: 'open' | 'missed'}>;
+}
+
 interface ComplianceReminder {
 	id: string;
 	type: string;
@@ -66,6 +74,7 @@ export default function DashboardNotifications() {
 	const [pendingIspAcks, setPendingIspAcks] = useState<PendingIspAck[]>([]);
 	const [unreadMemos, setUnreadMemos] = useState<Memo[]>([]);
 	const [reminders, setReminders] = useState<ComplianceReminder[]>([]);
+	const [carbReminders, setCarbReminders] = useState<CarbLogReminder[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [acking, setAcking] = useState<string | null>(null);
 	const [viewingIsp, setViewingIsp] = useState<PendingIspAck | null>(null);
@@ -78,6 +87,7 @@ export default function DashboardNotifications() {
 			setPendingIspAcks(data.pendingIspAcks || []);
 			setUnreadMemos(data.unreadMemos || []);
 			setReminders(data.complianceReminders || []);
+			setCarbReminders(data.carbLogReminders || []);
 		} catch (error) {
 			console.error('Error loading dashboard notifications:', error);
 		} finally {
@@ -126,12 +136,56 @@ export default function DashboardNotifications() {
 	if (
 		pendingIspAcks.length === 0 &&
 		unreadMemos.length === 0 &&
-		reminders.length === 0
+		reminders.length === 0 &&
+		carbReminders.length === 0
 	)
 		return null;
 
 	return (
 		<div className="space-y-4">
+			{/* Carb log meals still to record today (non-blocking) */}
+			{carbReminders.length > 0 && (
+				<div className="bg-white rounded-lg shadow-sm border">
+					<div className="px-4 py-3 border-b bg-gray-50 rounded-t-lg flex items-center gap-2">
+						<span className="text-lg">🍞</span>
+						<h3 className="font-semibold text-gray-900">Carb logs to complete</h3>
+						<span className="ml-auto text-xs font-medium bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full">
+							{carbReminders.length}
+						</span>
+					</div>
+					<ul className="divide-y">
+						{carbReminders.map((r) => {
+							const missed = r.slots.filter((s) => s.status === 'missed');
+							const open = r.slots.filter((s) => s.status === 'open');
+							return (
+								<li
+									key={r.residentId}
+									className={`px-4 py-3 border-l-4 ${
+										missed.length > 0 ? 'border-red-400' : 'border-amber-400'
+									}`}>
+									<p className="text-sm font-medium text-gray-900">
+										{r.residentName}
+										<span className="text-gray-400 font-normal"> · {r.location}</span>
+									</p>
+									<p className="text-sm text-gray-600 mt-0.5">
+										{missed.length > 0 && (
+											<span className="text-red-700">
+												Missed: {missed.map((s) => s.slot.label).join(', ')}
+											</span>
+										)}
+										{missed.length > 0 && open.length > 0 && ' · '}
+										{open.length > 0 && (
+											<span>Due now: {open.map((s) => s.slot.label).join(', ')}</span>
+										)}
+										<span className="text-gray-400"> — open the resident&apos;s Carb Log tab</span>
+									</p>
+								</li>
+							);
+						})}
+					</ul>
+				</div>
+			)}
+
 			{/* Compliance deadline reminders */}
 			{reminders.length > 0 && (
 				<div className="bg-white rounded-lg shadow-sm border">

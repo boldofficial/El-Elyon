@@ -30,6 +30,7 @@ interface Resident {
 	location?: string;
 	guardianIds?: string[];
 	emergencyContact?: string;
+	carbTrackingEnabled?: boolean;
 }
 
 interface RelationshipContact {
@@ -616,6 +617,33 @@ export default function ResidentProfileManagement({
 					className="w-full border rounded px-3 py-2"
 					placeholder="Emergency contact name, phone number, relationship, and any notes..."
 				/>
+			</div>
+
+			{/* Care tracking */}
+			<div className="bg-white rounded-lg shadow p-6">
+				<h2 className="text-xl font-bold mb-4">Care Tracking</h2>
+				<label className="flex items-start gap-3 cursor-pointer">
+					<input
+						type="checkbox"
+						name="carbTrackingEnabled"
+						checked={resident.carbTrackingEnabled ?? false}
+						onChange={(e) =>
+							setResident((prev) =>
+								prev ? {...prev, carbTrackingEnabled: e.target.checked} : prev
+							)
+						}
+						className="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+					/>
+					<span>
+						<span className="block font-medium text-gray-900">
+							Carb log (per meal)
+						</span>
+						<span className="block text-sm text-gray-600">
+							Staff will see a Carb Log tab for this resident and be reminded on
+							the dashboard when breakfast, lunch or dinner has not been logged.
+						</span>
+					</span>
+				</label>
 			</div>
 
 			{/* Save Button */}

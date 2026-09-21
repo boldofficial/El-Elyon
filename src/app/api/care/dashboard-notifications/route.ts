@@ -4,15 +4,16 @@
 // button. Returns the items the current user needs to see at a glance:
 //   - pendingIspAcks: active ISP files (at their locations) not yet acknowledged
 //   - unreadMemos:    memos targeted at them that they haven't read
-//
-// Compliance deadline reminders (ISP/fire-evac/smoke/fire-drill) are added in a
-// later phase.
+//   - complianceReminders: ISP/fire-evac/smoke/fire-drill deadlines
+//   - carbLogReminders: residents at their locations with an open or missed
+//                       main meal on today's carb log (non-blocking)
 
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
 import {getPendingISPFileAcknowledgments} from '@/db/queries/isp';
 import {getMemos} from '@/db/queries/memos';
 import {getComplianceRemindersForUser} from '@/db/queries/compliance';
+import {getCarbLogRemindersForUser} from '@/db/queries/carb-logs';
 
 export async function GET() {
 	try {
@@ -21,15 +22,22 @@ export async function GET() {
 			return NextResponse.json({error: 'Unauthorized'}, {status: 401});
 		}
 
-		const [pendingIspAcks, memoRows, complianceReminders] = await Promise.all([
-			getPendingISPFileAcknowledgments(userId),
-			getMemos({clerkUserId: userId, unreadOnly: true, limit: 20}),
-			getComplianceRemindersForUser(userId),
-		]);
+		const [pendingIspAcks, memoRows, complianceReminders, carbLogReminders] =
+			await Promise.all([
+				getPendingISPFileAcknowledgments(userId),
+				getMemos({clerkUserId: userId, unreadOnly: true, limit: 20}),
+				getComplianceRemindersForUser(userId),
+				getCarbLogRemindersForUser(userId),
+			]);
 
 		const unreadMemos = memoRows.map((r) => r.memo);
 
-		return NextResponse.json({pendingIspAcks, unreadMemos, complianceReminders});
+		return NextResponse.json({
+			pendingIspAcks,
+			unreadMemos,
+			complianceReminders,
+			carbLogReminders,
+		});
 	} catch (error: any) {
 		console.error('Error building dashboard notifications:', error);
 		return NextResponse.json({error: error.message}, {status: 500});

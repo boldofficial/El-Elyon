@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import ResidentActivityHistory from "./ResidentActivityHistory";
 import IncidentReportsList from "./IncidentReportsList";
 import IncidentReportForm from "./IncidentReportForm";
+import CarbLogWorkspace from "./CarbLogWorkspace";
 
 type Props = {
   residentId: string;
@@ -90,7 +91,12 @@ export default function ResidentCase({ residentId, onBack }: Props) {
       
       {/* Tab Navigation */}
       <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-        {ALL_TABS.map((t) => (
+        {[
+          ...ALL_TABS,
+          ...(resident.carbTrackingEnabled
+            ? [{ key: "carb_log", label: "Carb Log" }]
+            : []),
+        ].map((t) => (
           <button
             key={t.key}
             className={`px-3 py-1 rounded whitespace-nowrap transition-colors ${
@@ -120,6 +126,9 @@ export default function ResidentCase({ residentId, onBack }: Props) {
           />
         )}
         {tab === "documents" && <ResidentDocuments residentId={residentId} />}
+        {tab === "carb_log" && resident.carbTrackingEnabled && (
+          <CarbLogWorkspace residentId={residentId} residentName={resident.name} />
+        )}
       </div>
     </div>
   );

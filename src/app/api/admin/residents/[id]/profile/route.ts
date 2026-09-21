@@ -87,6 +87,9 @@ export async function PATCH(
 			medicalInfo: body.medicalInfo,
 			careNotes: body.careNotes,
 			location: body.location,
+			...(typeof body.carbTrackingEnabled === 'boolean'
+				? {carbTrackingEnabled: body.carbTrackingEnabled}
+				: {}),
 		});
 
 		await logAudit({

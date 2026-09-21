@@ -57,6 +57,11 @@ export const residents = pgTable(
 		medicalInfo: text('medical_info'),
 		careNotes: text('care_notes'),
 		profileImageId: varchar('profile_image_id', {length: 500}),
+		// Per-resident opt-in for the per-meal carbohydrate log (see carbLogs).
+		// Toggled by admins/supervisors from the resident profile.
+		carbTrackingEnabled: boolean('carb_tracking_enabled')
+			.notNull()
+			.default(false),
 		createdAt: timestamp('created_at').defaultNow(),
 		createdBy: varchar('created_by', {length: 255})
 	},
@@ -1478,6 +1483,63 @@ export const incidentReports = pgTable(
 // RELATIONS (Drizzle ORM)
 // ============================
 
+// Carbohydrate Log Table
+//
+// Per-meal carb intake for residents with `residents.carbTrackingEnabled`.
+// Keyed by operational date + meal slot (breakfast/lunch/dinner are one per
+// day; snacks may repeat). Staff identity is snapshotted at write time so
+// the printed sheet stays stable when an employee record later changes.
+// This is the first hand-built instance of what will become admin-defined
+// custom log templates; the columns mirror the planned `custom_log_entries`
+// shape so rows can be migrated with a single INSERT ... SELECT.
+export const carbLogs = pgTable(
+	'carb_logs',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		residentId: uuid('resident_id')
+			.notNull()
+			.references(() => residents.id, {onDelete: 'cascade'}),
+		location: varchar('location', {length: 255}).notNull(),
+		operationalDate: date('operational_date', {mode: 'string'}).notNull(),
+		mealSlot: varchar('meal_slot', {length: 20}).notNull(),
+		carbsGrams: integer('carbs_grams').notNull(),
+		foodDescription: text('food_description'),
+		notes: text('notes'),
+		shiftId: uuid('shift_id').references(() => shifts.id, {
+			onDelete: 'set null'
+		}),
+		staffId: varchar('staff_id', {length: 255}).notNull(),
+		staffNameSnapshot: varchar('staff_name_snapshot', {
+			length: 255
+		}).notNull(),
+		loggedAt: timestamp('logged_at').notNull().defaultNow(),
+		updatedAt: timestamp('updated_at'),
+		updatedBy: varchar('updated_by', {length: 255})
+	},
+	(table) => ({
+		residentDateIdx: index('carb_logs_resident_date_idx').on(
+			table.residentId,
+			table.operationalDate
+		),
+		locationDateIdx: index('carb_logs_location_date_idx').on(
+			table.location,
+			table.operationalDate
+		),
+		// One breakfast/lunch/dinner per resident per day; snacks repeat.
+		mainMealIdentityIdx: uniqueIndex('carb_logs_main_meal_identity_uidx')
+			.on(table.residentId, table.operationalDate, table.mealSlot)
+			.where(sql`${table.mealSlot} <> 'snack'`),
+		mealSlotCheck: check(
+			'carb_logs_meal_slot_check',
+			sql`${table.mealSlot} in ('breakfast', 'lunch', 'dinner', 'snack')`
+		),
+		carbsGramsCheck: check(
+			'carb_logs_carbs_grams_check',
+			sql`${table.carbsGrams} between 0 and 1000`
+		)
+	})
+);
+
 export const residentsRelations = relations(residents, ({many}) => ({
 	logs: many(residentLogs),
 	ispFiles: many(ispFiles),
@@ -1489,7 +1551,19 @@ export const residentsRelations = relations(residents, ({many}) => ({
 	incidentReports: many(incidentReports),
 	documents: many(residentDocuments),
 	fireDrillParticipants: many(fireDrillParticipants),
-	admissionFireDrills: many(fireDrillReports)
+	admissionFireDrills: many(fireDrillReports),
+	carbLogs: many(carbLogs)
+}));
+
+export const carbLogsRelations = relations(carbLogs, ({one}) => ({
+	resident: one(residents, {
+		fields: [carbLogs.residentId],
+		references: [residents.id]
+	}),
+	shift: one(shifts, {
+		fields: [carbLogs.shiftId],
+		references: [shifts.id]
+	})
 }));
 
 export const locationsRelations = relations(locations, ({many}) => ({
