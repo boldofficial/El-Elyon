@@ -10,6 +10,7 @@ import {
 	requireAdminAccess,
 	requireAdminOrSupervisorAccess,
 } from '@/lib/db-helpers';
+import {isInactiveResident} from '@/lib/resident-status';
 import {logAudit} from './audit';
 
 // Create checklist template (admin only)
@@ -151,6 +152,17 @@ export async function sendChecklistToGuardian(
 
 	if (!resident) {
 		throw new Error('Resident not found');
+	}
+
+	// This is the one place a new outbound notice about a resident is created
+	// by hand rather than by the compliance cron. Marking a resident inactive
+	// revokes their open links (retireResidentNotices); blocking creation here
+	// is what stops a new one being sent straight afterwards -- otherwise the
+	// family of someone who has died could still be emailed a care checklist.
+	if (isInactiveResident(resident)) {
+		throw new Error(
+			'This resident is no longer at the facility; guardian checklists cannot be sent'
+		);
 	}
 
 	// Verify template exists and is active

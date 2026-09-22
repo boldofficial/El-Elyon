@@ -10,6 +10,7 @@ import {
 } from '../queries/care';
 import {computeOperationalDate} from '@/lib/operational-time';
 import {shiftSlotSchema, type ShiftSlot} from '@/lib/water-temperature';
+import {isInactiveResident} from '@/lib/resident-status';
 
 export class CareShiftValidationError extends Error {
 	constructor(message: string) {
@@ -68,6 +69,15 @@ export async function createResidentLog(clerkUserId: string, residentId: string,
 		where: eq(residents.id, residentId),
 	});
 	if (!resident) throw new Error('Resident not found');
+
+	// A care log always describes now -- backdating is not supported -- so
+	// there is no such thing as a legitimate new log for someone who has left
+	// the facility. Their existing logs stay readable; only writing stops.
+	if (isInactiveResident(resident)) {
+		throw new Error(
+			'This resident is no longer at the facility; their record is read-only'
+		);
+	}
 
 	const userLocations =
 		userRole.role === 'admin' ? [] : userRole.locations || [];
@@ -133,6 +143,15 @@ export async function editResidentLog(args: {
     where: eq(residents.id, residentId),
   });
   if (!resident) throw new Error('Resident not found');
+
+  // Editing inserts a NEW versioned row rather than updating in place (see
+  // below), so an "edit" after a resident has left would append to a record
+  // that should be closed. The prior versions remain readable either way.
+  if (isInactiveResident(resident)) {
+    throw new Error(
+      'This resident is no longer at the facility; their record is read-only'
+    );
+  }
 
   // Carry the original log's shift link forward so an edited log stays
   // associated with the shift it was written during (each edit inserts a
