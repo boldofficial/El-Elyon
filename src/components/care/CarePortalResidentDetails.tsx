@@ -8,6 +8,7 @@ import ResidentActivityHistory from './ResidentActivityHistory';
 import IncidentReportForm from './IncidentReportForm';
 import IncidentReportsList from './IncidentReportsList';
 import ResidentDocuments from './ResidentDocuments';
+import CarbLogWorkspace from './CarbLogWorkspace';
 
 interface Resident {
 	id: string;
@@ -35,6 +36,7 @@ interface Resident {
 	medicalInfo?: string;
 	careNotes?: string;
 	profileImageId?: string;
+	carbTrackingEnabled?: boolean;
 	createdAt?: Date;
 	createdBy?: string;
 }
@@ -46,7 +48,14 @@ interface CarePortalResidentDetailsProps {
 	shiftId?: string;
 }
 
-type TabType = 'log' | 'incidents' | 'history' | 'documents' | 'isp' | 'fire-evac';
+type TabType =
+	| 'log'
+	| 'carb-log'
+	| 'incidents'
+	| 'history'
+	| 'documents'
+	| 'isp'
+	| 'fire-evac';
 
 function formatImportantRelationships(value?: string) {
 	if (!value?.trim()) return '';
@@ -108,6 +117,10 @@ export default function CarePortalResidentDetails({
 
 	const tabs = [
 		{id: 'log' as TabType, label: 'Activity Log', icon: '📋'},
+		// Only residents opted in by an admin/supervisor get the carb log tab.
+		...(resident.carbTrackingEnabled
+			? [{id: 'carb-log' as TabType, label: 'Carb Log', icon: '🍞'}]
+			: []),
 		{id: 'incidents' as TabType, label: 'Incident Reports', icon: '⚠️'},
 		{id: 'history' as TabType, label: 'Log History', icon: '📜'},
 		{id: 'documents' as TabType, label: 'Documents', icon: '📁'},
@@ -252,6 +265,13 @@ export default function CarePortalResidentDetails({
 							shiftId={shiftId}
 							// authorName={userName} // No longer needed
 							onSuccess={() => setRefreshTrigger((prev) => prev + 1)}
+						/>
+					)}
+
+					{activeTab === 'carb-log' && resident.carbTrackingEnabled && (
+						<CarbLogWorkspace
+							residentId={resident.id}
+							residentName={resident.name}
 						/>
 					)}
 
