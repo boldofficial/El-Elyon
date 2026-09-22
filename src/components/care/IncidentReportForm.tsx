@@ -5,10 +5,29 @@
 import React, {useState} from 'react';
 import {toast} from 'sonner';
 
+/**
+ * An existing report to edit. Shape matches what /api/care/incidents returns
+ * (dates arrive as ISO strings after JSON serialisation).
+ */
+export interface EditableIncidentReport {
+	id: string;
+	incidentDate: Date | string;
+	incidentType: string;
+	severity: string;
+	description: string;
+	actionTaken?: string | null;
+	witnessNames?: string | null;
+	followUpRequired?: boolean | null;
+	followUpNotes?: string | null;
+	attachments?: string[] | null;
+}
+
 interface IncidentReportFormProps {
 	residentId: string;
 	residentName: string;
 	location: string;
+	/** When set, the form pre-fills and PATCHes this report instead of creating one. */
+	existingReport?: EditableIncidentReport;
 	onSuccess?: () => void;
 	onCancel?: () => void;
 }
@@ -25,36 +44,72 @@ const INCIDENT_TYPES = [
 	'Other',
 ];
 
+// Classes are spelled out in full: Tailwind only emits classes it can find as
+// literal strings, so `border-${color}-500` never made it into the stylesheet.
 const SEVERITY_LEVELS = [
-	{value: 'low', label: 'Low', color: 'green'},
-	{value: 'medium', label: 'Medium', color: 'yellow'},
-	{value: 'high', label: 'High', color: 'orange'},
-	{value: 'critical', label: 'Critical', color: 'red'},
+	{value: 'low', label: 'Low', selected: 'border-green-500 bg-green-50 text-green-800'},
+	{value: 'medium', label: 'Medium', selected: 'border-yellow-500 bg-yellow-50 text-yellow-800'},
+	{value: 'high', label: 'High', selected: 'border-orange-500 bg-orange-50 text-orange-800'},
+	{value: 'critical', label: 'Critical', selected: 'border-red-500 bg-red-50 text-red-800'},
 ];
+
+/** `datetime-local` wants local wall-clock time, not the UTC ISO string. */
+function toDateTimeLocal(value: Date | string): string {
+	const d = new Date(value);
+	const offsetMs = d.getTimezoneOffset() * 60 * 1000;
+	return new Date(d.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
+/** Recover a readable filename from an upload key like `123-abc-photo.jpg`. */
+function filenameFromKey(fileKey: string): string {
+	const base = fileKey.split('/').pop() || fileKey;
+	return base.replace(/^\d+-[a-z0-9]+-/, '');
+}
 
 export default function IncidentReportForm({
 	residentId,
 	residentName,
 	location,
+	existingReport,
 	onSuccess,
 	onCancel,
 }: IncidentReportFormProps) {
+	const isEditing = Boolean(existingReport);
 	const [submitting, setSubmitting] = useState(false);
 	const [uploading, setUploading] = useState(false);
-	const [formData, setFormData] = useState({
-		incidentDate: new Date().toISOString().slice(0, 16),
-		incidentType: 'Other',
-		severity: 'medium',
-		description: '',
-		actionTaken: '',
-		witnessNames: '',
-		followUpRequired: false,
-		followUpNotes: '',
-		attachments: [] as string[],
-	});
+	const [formData, setFormData] = useState(() =>
+		existingReport
+			? {
+					incidentDate: toDateTimeLocal(existingReport.incidentDate),
+					incidentType: existingReport.incidentType,
+					severity: existingReport.severity,
+					description: existingReport.description,
+					actionTaken: existingReport.actionTaken ?? '',
+					witnessNames: existingReport.witnessNames ?? '',
+					followUpRequired: Boolean(existingReport.followUpRequired),
+					followUpNotes: existingReport.followUpNotes ?? '',
+					attachments: existingReport.attachments ?? [],
+			  }
+			: {
+					incidentDate: toDateTimeLocal(new Date()),
+					incidentType: 'Other',
+					severity: 'medium',
+					description: '',
+					actionTaken: '',
+					witnessNames: '',
+					followUpRequired: false,
+					followUpNotes: '',
+					attachments: [] as string[],
+			  }
+	);
 	const [uploadedFiles, setUploadedFiles] = useState<
 		Array<{name: string; key: string}>
-	>([]);
+	>(() =>
+		(existingReport?.attachments ?? []).map((key) => ({
+			name: filenameFromKey(key),
+			key,
+		}))
+	);
 
 	// ARTIFACT_UPDATE: Use server-side upload to avoid CORS issues
 	const handleFileUpload = async (files: FileList) => {
@@ -147,24 +202,43 @@ export default function IncidentReportForm({
 		setSubmitting(true);
 
 		try {
-			const res = await fetch(`/api/care/incidents`, {
-				method: 'POST',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify({
-					...formData,
-					residentId,
-					location,
-				}),
-			});
+			const res = existingReport
+				? await fetch(`/api/care/incidents/${existingReport.id}`, {
+						method: 'PATCH',
+						headers: {'Content-Type': 'application/json'},
+						body: JSON.stringify(formData),
+				  })
+				: await fetch(`/api/care/incidents`, {
+						method: 'POST',
+						headers: {'Content-Type': 'application/json'},
+						body: JSON.stringify({
+							...formData,
+							residentId,
+							location,
+						}),
+				  });
 
-			if (!res.ok) throw new Error('Failed to create incident report');
+			if (!res.ok) {
+				// A 403 here means the edit window closed while the form was open;
+				// surface the server's reason rather than a generic failure.
+				const err = await res.json().catch(() => ({}));
+				throw new Error(err.error || 'Failed to save incident report');
+			}
 
-			toast.success('Incident report submitted successfully');
+			toast.success(
+				isEditing
+					? 'Incident report updated successfully'
+					: 'Incident report submitted successfully'
+			);
 
 			if (onSuccess) onSuccess();
 		} catch (error) {
 			console.error('Error submitting incident report:', error);
-			toast.error('Failed to submit incident report');
+			toast.error(
+				error instanceof Error && error.message
+					? error.message
+					: 'Failed to submit incident report'
+			);
 		} finally {
 			setSubmitting(false);
 		}
@@ -173,7 +247,7 @@ export default function IncidentReportForm({
 	return (
 		<div className="bg-white rounded-lg border p-6">
 			<h2 className="text-xl font-bold mb-6">
-				New Incident Report - {residentName}
+				{isEditing ? 'Edit Incident Report' : 'New Incident Report'} - {residentName}
 			</h2>
 
 			<form onSubmit={handleSubmit} className="space-y-6">
@@ -218,33 +292,30 @@ export default function IncidentReportForm({
 					<label className="block text-sm font-medium text-gray-700 mb-2">
 						Severity Level <span className="text-red-500">*</span>
 					</label>
-					<div className="grid grid-cols-4 gap-2">
-						{SEVERITY_LEVELS.map((level) => (
-							<label
-								key={level.value}
-								className={`flex items-center justify-center px-4 py-3 rounded border-2 cursor-pointer transition-all ${
-									formData.severity === level.value
-										? `border-${level.color}-500 bg-${level.color}-50`
-										: 'border-gray-300 bg-white hover:border-gray-400'
-								}`}>
-								<input
-									type="radio"
-									name="severity"
-									value={level.value}
-									checked={formData.severity === level.value}
-									onChange={handleChange}
-									className="sr-only"
-								/>
-								<span
-									className={`font-medium ${
-										formData.severity === level.value
-											? `text-${level.color}-800`
-											: 'text-gray-700'
+					{/* Real buttons, not <label> + sr-only radio: clicking a label
+					    focuses the hidden 1px radio and the browser scrolls it into
+					    view, which is what made the page jump. */}
+					<div role="radiogroup" aria-label="Severity Level" className="grid grid-cols-4 gap-2">
+						{SEVERITY_LEVELS.map((level) => {
+							const selected = formData.severity === level.value;
+							return (
+								<button
+									key={level.value}
+									type="button"
+									role="radio"
+									aria-checked={selected}
+									onClick={() =>
+										setFormData((prev) => ({...prev, severity: level.value}))
+									}
+									className={`flex items-center justify-center px-4 py-3 rounded border-2 font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500 ${
+										selected
+											? level.selected
+											: 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
 									}`}>
 									{level.label}
-								</span>
-							</label>
-						))}
+								</button>
+							);
+						})}
 					</div>
 				</div>
 
@@ -394,7 +465,13 @@ export default function IncidentReportForm({
 						type="submit"
 						disabled={submitting || uploading}
 						className="px-6 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">
-						{submitting ? 'Submitting...' : 'Submit Incident Report'}
+						{submitting
+							? isEditing
+								? 'Saving...'
+								: 'Submitting...'
+							: isEditing
+							? 'Save Changes'
+							: 'Submit Incident Report'}
 					</button>
 				</div>
 			</form>

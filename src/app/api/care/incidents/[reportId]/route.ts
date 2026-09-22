@@ -7,6 +7,7 @@ import {auth} from "@clerk/nextjs/server";
 import {requireCareAccess, logAudit} from "@/lib/db-helpers";
 import {getIncidentReport} from "@/db/queries/incident-reports";
 import { deleteIncidentReport, updateIncidentReport } from "@/db/mutations/incident-reports";
+import {IncidentEditNotAllowedError} from "@/lib/incident-edit-policy";
 
 // GET - Get single incident report
 export async function GET(
@@ -73,6 +74,9 @@ export async function PATCH(
 
 		return NextResponse.json(updated);
 	} catch (error: any) {
+		if (error instanceof IncidentEditNotAllowedError) {
+			return NextResponse.json({error: error.message}, {status: 403});
+		}
 		console.error("Error updating incident report:", error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}

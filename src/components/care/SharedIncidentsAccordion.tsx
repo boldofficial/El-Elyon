@@ -16,6 +16,7 @@ interface IncidentReport {
 	incidentType: string;
 	severity: string;
 	description: string;
+	reportedBy?: string;
 	reportedByName?: string | null;
 	resident?: { name: string }; // Optional resident object if available
 	location?: string;
@@ -37,12 +38,21 @@ interface SharedIncidentsAccordionProps {
 	 * use its session-gated download route.
 	 */
 	buildAttachmentUrl?: (fileKey: string) => string;
+	/**
+	 * Decides per report whether to show an Edit action. Callers pass the
+	 * shared edit policy bound to the current user; omit to never show it.
+	 */
+	canEdit?: (report: IncidentReport) => boolean;
+	/** Invoked with the report when its Edit action is clicked. */
+	onEdit?: (report: IncidentReport) => void;
 }
 
 export default function SharedIncidentsAccordion({
 	incidents,
 	allowPrint = false,
 	buildAttachmentUrl = (fileKey) => `/api/uploads?fileId=${fileKey}`,
+	canEdit,
+	onEdit,
 }: SharedIncidentsAccordionProps) {
 	const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
@@ -139,6 +149,23 @@ export default function SharedIncidentsAccordion({
 									</svg>
 								</div>
 							</button>
+
+							{onEdit && canEdit?.(report) && (
+								<button
+									type="button"
+									onClick={() => onEdit(report)}
+									title="Edit this report (available to the author for 24 hours)"
+									className="flex items-center gap-1.5 px-3 sm:px-4 border-l text-gray-500 hover:text-blue-700 hover:bg-blue-50 focus:outline-none transition-colors">
+									<svg
+										className="h-5 w-5"
+										viewBox="0 0 20 20"
+										fill="currentColor"
+										aria-hidden="true">
+										<path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+									</svg>
+									<span className="hidden sm:inline text-xs font-medium">Edit</span>
+								</button>
+							)}
 
 							{allowPrint && (
 								<button
