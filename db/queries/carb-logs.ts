@@ -16,6 +16,10 @@ import {
 	type SlotState,
 } from '@/lib/custom-log-schedule';
 import {CARB_LOG_SCHEDULE, type MealSlot} from '@/lib/carb-log';
+import {
+	summarizeCarbLogDays,
+	type CarbLogDayRow,
+} from '@/lib/carb-log-summary';
 import {getOperationalTimeZone} from './care';
 
 export type CarbLogDto = {
@@ -179,6 +183,102 @@ export async function getCarbLogRemindersForUser(
 		});
 	}
 	return reminders;
+}
+
+export type CarbLogScopeFilters = {
+	/** Location NAME, as stored on residents/carb_logs. */
+	location?: string;
+	residentId?: string;
+	from?: string;
+	to?: string;
+};
+
+export type CarbLogScopeResult = {
+	from: string;
+	to: string;
+	rows: CarbLogDayRow[];
+};
+
+/**
+ * Oversight read: carb entries across residents, grouped into resident-day
+ * rows. Deliberately a SEPARATE function from getCarbLogsForResident rather
+ * than that query with an optional filter -- this one gates on the caller's
+ * location set, while the per-resident one fails closed on a single id via
+ * residentInScope. Collapsing them is how an optional param turns into an
+ * IDOR (see the note on residentInScope in lib/db-helpers.ts).
+ *
+ * Admins see every location; everyone else sees only their assigned ones,
+ * and a `location` filter outside that set is denied rather than silently
+ * widened or emptied.
+ */
+export async function getCarbLogsForScope(
+	clerkUserId: string,
+	filters: CarbLogScopeFilters = {}
+): Promise<CarbLogScopeResult> {
+	const userRole = await requireCareAccess(clerkUserId);
+	const isAdmin = userRole.role === 'admin';
+	const authorizedLocations = userRole.locations ?? [];
+
+	const timeZone = await getOperationalTimeZone();
+	const today = computeOperationalDate(new Date(), timeZone);
+	const to = filters.to ?? today;
+	const from = filters.from ?? shiftDate(to, -13);
+
+	// A resident filter still goes through the per-resident gate, so a
+	// client cannot name someone outside their locations here either.
+	if (filters.residentId) {
+		const allowed = await residentInScope({
+			clerkUserId,
+			userRole,
+			residentId: filters.residentId,
+			auditDetail: 'carb_logs_scope_cross_location',
+		});
+		if (!allowed) throw new AccessDeniedError('Access denied');
+	}
+
+	const conditions = [
+		gte(carbLogs.operationalDate, from),
+		lte(carbLogs.operationalDate, to),
+	];
+
+	if (filters.residentId) {
+		conditions.push(eq(carbLogs.residentId, filters.residentId));
+	}
+
+	if (!isAdmin) {
+		if (authorizedLocations.length === 0) return {from, to, rows: []};
+		if (filters.location) {
+			if (!authorizedLocations.includes(filters.location)) {
+				throw new AccessDeniedError('Access denied');
+			}
+			conditions.push(eq(carbLogs.location, filters.location));
+		} else {
+			conditions.push(inArray(carbLogs.location, authorizedLocations));
+		}
+	} else if (filters.location) {
+		conditions.push(eq(carbLogs.location, filters.location));
+	}
+
+	const rows = await db
+		.select({
+			residentId: carbLogs.residentId,
+			residentName: residents.name,
+			location: carbLogs.location,
+			operationalDate: carbLogs.operationalDate,
+			mealSlot: carbLogs.mealSlot,
+			carbsGrams: carbLogs.carbsGrams,
+		})
+		.from(carbLogs)
+		.innerJoin(residents, eq(residents.id, carbLogs.residentId))
+		.where(and(...conditions));
+
+	return {
+		from,
+		to,
+		rows: summarizeCarbLogDays(
+			rows.map((row) => ({...row, mealSlot: row.mealSlot as MealSlot}))
+		),
+	};
 }
 
 async function loggedSlotKeysByResident(
