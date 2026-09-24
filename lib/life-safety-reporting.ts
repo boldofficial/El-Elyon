@@ -377,6 +377,104 @@ export function evaluateAdmissionDrill(args: {
   return { anchorDate: args.anchorDate, deadline, daysRemaining, state };
 }
 
+// ---------------------------------------------------------------------------
+// Monthly smoke & CO detector check reminder
+// ---------------------------------------------------------------------------
+
+export const DETECTOR_CHECK_INTERVAL_DAYS = 30;
+export const DETECTOR_CHECK_REMINDER_LEAD_DAYS = 7;
+
+export type DetectorKind = "smoke" | "carbon_monoxide";
+
+/** Display order, and the order `outstanding` is reported in. */
+export const DETECTOR_KINDS: readonly DetectorKind[] = ["smoke", "carbon_monoxide"];
+
+export interface DetectorCheckEvaluation {
+  /** Most recent check per detector, from either record system; null if never. */
+  lastChecked: Record<DetectorKind, string | null>;
+  /** Local date each detector's next check is due by. */
+  dueDate: Record<DetectorKind, string>;
+  /** Detectors inside the reminder window or past due, in display order. */
+  outstanding: DetectorKind[];
+  /** Earliest due date among the outstanding detectors; null if none. */
+  earliestDue: string | null;
+  /** True when any outstanding detector is past its due date. */
+  overdue: boolean;
+}
+
+/**
+ * Decide whether a house needs its monthly smoke / CO detector reminder.
+ *
+ * Checks live in two places. The original `smoke_detector_checks` sheet
+ * recorded smoke and CO together on one row; the v2 inspection sheet
+ * (`life_safety_inspection_entries`) records them as separate rows. Every new
+ * check goes to v2 -- nothing writes the legacy table any more -- but houses
+ * whose last check predates v2 still only have a legacy row. So each detector
+ * takes the more recent of its v2 date and the legacy date.
+ *
+ * Reading only the legacy table was the bug this exists to fix: a house could
+ * record every monthly check on time and still be reminded daily, because
+ * the reminder never saw a single one of them.
+ *
+ * The reminder clears only once BOTH detectors are current. The alert is
+ * titled "Smoke & CO", and a house that checked its smoke alarms but not its
+ * CO alarms has not done its monthly check. `outstanding` names which one is
+ * holding it open, so the reminder can say so rather than look stuck.
+ *
+ * A failed inspection still counts as a check having been done. A detector
+ * that fails needs repairing, which is a different problem from a check that
+ * was never carried out, and keeping this reminder open would not signal it.
+ *
+ * @param args.legacyCheckDate  Local date of the latest legacy combined check.
+ * @param args.latestSmokeDate  Local date of the latest non-voided v2 smoke row.
+ * @param args.latestCoDate     Local date of the latest non-voided v2 CO row.
+ * @param args.today            Local date to evaluate against.
+ */
+export function evaluateDetectorCheck(args: {
+  legacyCheckDate: string | null;
+  latestSmokeDate: string | null;
+  latestCoDate: string | null;
+  today: string;
+}): DetectorCheckEvaluation {
+  const latest = (a: string | null, b: string | null) =>
+    a === null ? b : b === null ? a : a > b ? a : b;
+
+  const lastChecked: Record<DetectorKind, string | null> = {
+    smoke: latest(args.latestSmokeDate, args.legacyCheckDate),
+    carbon_monoxide: latest(args.latestCoDate, args.legacyCheckDate),
+  };
+
+  // Never checked is treated as due today, not as exempt: the house has an
+  // outstanding monthly check and the reminder should say so.
+  const dueDate: Record<DetectorKind, string> = {
+    smoke: lastChecked.smoke
+      ? addLocalDays(lastChecked.smoke, DETECTOR_CHECK_INTERVAL_DAYS)
+      : args.today,
+    carbon_monoxide: lastChecked.carbon_monoxide
+      ? addLocalDays(lastChecked.carbon_monoxide, DETECTOR_CHECK_INTERVAL_DAYS)
+      : args.today,
+  };
+
+  const outstanding = DETECTOR_KINDS.filter(
+    (kind) =>
+      differenceInLocalDays(args.today, dueDate[kind]) <=
+      DETECTOR_CHECK_REMINDER_LEAD_DAYS,
+  );
+
+  const earliestDue =
+    outstanding.length === 0
+      ? null
+      : outstanding.map((kind) => dueDate[kind]).sort()[0];
+
+  return {
+    lastChecked,
+    dueDate,
+    outstanding,
+    earliestDue,
+    overdue: outstanding.some((kind) => args.today > dueDate[kind]),
+  };
+}
+
 /** Local calendar date (YYYY-MM-DD) for a Date or ISO/local-date string. */
 export function toLocalDate(value: Date | string): string {
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
