@@ -10,6 +10,7 @@ import {
 	MAX_COMMENT_LENGTH,
 	SAFE_MAX_F,
 	SAFE_MIN_F,
+	describeAttentionReason,
 } from '@/lib/water-temperature';
 import {
 	ABOVE_115_ESCALATION_INSTRUCTIONS,
@@ -128,6 +129,20 @@ export default function WaterTemperatureEntryDialog({
 	const idempotencyRef = useRef<{create?: string; action?: string; recheck?: string}>({});
 
 	const phase = deriveEntryPhase(check);
+	// Named from the readings themselves so the panel says "too high" or "too
+	// low" instead of assuming one direction.
+	// Falls back to the stored status so a flagged row still says so if the
+	// readings could not be loaded.
+	const attentionReason =
+		(check
+			? describeAttentionReason({
+					kitchenTempTenths: Math.round(check.kitchenTempF * 10),
+					bathTempTenths: Math.round(check.bathTempF * 10),
+				})
+			: null) ??
+		(status === 'complete_with_attention'
+			? 'A reading is outside the safe range and is flagged for management review.'
+			: null);
 	const context = useMemo(
 		() => deriveEntryContext({identity, check, sessionUserName}),
 		[identity, check, sessionUserName]
@@ -372,6 +387,7 @@ export default function WaterTemperatureEntryDialog({
 			kitchenTempF: values.kitchenTempF,
 			bathTempF: values.bathTempF,
 			comments: values.comments,
+			action: values.actionTaken,
 			idempotencyKey: keyFor('create'),
 		});
 	};
@@ -536,11 +552,13 @@ export default function WaterTemperatureEntryDialog({
 								<div className="space-y-4">
 									<p
 										role="status"
-										className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-900">
-										This shift’s water temperature check is complete
-										{status === 'complete_with_attention'
-											? '. One or more readings were below 110°F and are flagged for management review.'
-											: '.'}
+										className={`rounded-lg border p-3 text-sm ${
+											attentionReason
+												? 'border-amber-300 bg-amber-50 text-amber-900'
+												: 'border-green-300 bg-green-50 text-green-900'
+										}`}>
+										This shift’s water temperature check is recorded.
+										{attentionReason ? ` ${attentionReason}` : ''}
 									</p>
 									<div className="flex justify-end">
 										<button
@@ -571,7 +589,11 @@ function successNotice(
 		return 'Recorded. Recheck each affected fixture until it reads within ' + SAFE_RANGE_LABEL + '.';
 	}
 	if (result.state === 'complete_with_attention') {
-		return 'Recorded. A reading is below 110°F and is flagged for management review.';
+		const reason = describeAttentionReason({
+			kitchenTempTenths: Math.round(result.kitchenTempF * 10),
+			bathTempTenths: Math.round(result.bathTempF * 10),
+		});
+		return `Your readings were saved exactly as measured. ${reason ?? ''}`.trim();
 	}
 	return operation === 'create'
 		? 'This shift’s water temperature check is complete.'
@@ -761,7 +783,8 @@ function TemperatureField({
 			<p id={helpId(id)} className="mt-1 text-xs text-gray-600">
 				Degrees Fahrenheit, one decimal place. Safe range {SAFE_RANGE_LABEL}.
 				{classification === 'above' &&
-					` This value is above ${SAFE_MAX_F}°F and will require corrective action.`}
+					` This value is above ${SAFE_MAX_F}°F — too high. It will be recorded exactly as` +
+						' measured and flagged for management review.'}
 				{classification === 'below' &&
 					` This value is below ${SAFE_MIN_F}°F and will be flagged for review.`}
 				{/* Advisory only: the posted form is stricter than this system's
@@ -828,7 +851,18 @@ function InitialReadingsForm({
 	onSubmit: (event: React.FormEvent) => void;
 	onCancel: () => void;
 }) {
-	const errors = showErrors ? validation.fieldErrors : {kitchenTempF: null, bathTempF: null, comments: null};
+	const errors = showErrors
+		? validation.fieldErrors
+		: {kitchenTempF: null, bathTempF: null, comments: null, actionTaken: null};
+	// Shown only once a reading is actually out of range: it is the only time
+	// the field has anything to say. It stays optional even then, and whatever
+	// is typed is submitted either way.
+	const showActionTaken =
+		classifyTypedTemperature(draft.initial.kitchenTempF) === 'above' ||
+		classifyTypedTemperature(draft.initial.kitchenTempF) === 'below' ||
+		classifyTypedTemperature(draft.initial.bathTempF) === 'above' ||
+		classifyTypedTemperature(draft.initial.bathTempF) === 'below' ||
+		draft.initial.actionTaken.trim().length > 0;
 	const remaining = remainingNarrativeCharacters(draft.initial.comments, MAX_COMMENT_LENGTH);
 	return (
 		<form onSubmit={onSubmit} noValidate className="space-y-4">
@@ -886,6 +920,40 @@ function InitialReadingsForm({
 				<p className="mt-1 text-xs text-gray-500">{remaining} characters remaining.</p>
 				<FieldError fieldId={IDS.comments} message={errors.comments} />
 			</div>
+
+			{showActionTaken && (
+				<div>
+					<label htmlFor={IDS.action} className="block text-sm font-medium text-gray-700">
+						Action taken (optional)
+					</label>
+					<textarea
+						id={IDS.action}
+						name={IDS.action}
+						rows={3}
+						maxLength={MAX_ACTION_LENGTH}
+						value={draft.initial.actionTaken}
+						disabled={isSubmitting}
+						onChange={(event) =>
+							setDraft((current) => ({
+								...current,
+								initial: {...current.initial, actionTaken: event.target.value},
+							}))
+						}
+						aria-invalid={errors.actionTaken ? true : undefined}
+						aria-describedby={`${helpId(IDS.action)}${errors.actionTaken ? ` ${errorId(IDS.action)}` : ''}`}
+						className={`${FIELD_CLASSES} mt-1 ${errors.actionTaken ? 'border-red-500' : 'border-gray-300'}`}
+					/>
+					<p id={helpId(IDS.action)} className="mt-1 text-xs text-gray-600">
+						A reading is outside {SAFE_RANGE_LABEL}. If you did something about it, describe
+						it here. You can leave this blank and still save.
+					</p>
+					<p className="mt-1 text-xs text-gray-500">
+						{remainingNarrativeCharacters(draft.initial.actionTaken, MAX_ACTION_LENGTH)} characters
+						remaining.
+					</p>
+					<FieldError fieldId={IDS.action} message={errors.actionTaken} />
+				</div>
+			)}
 
 			<p className="text-xs text-gray-600">
 				Record the readings exactly as measured. A value outside {SAFE_RANGE_LABEL} is still

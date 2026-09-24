@@ -120,6 +120,13 @@
       "when": 1790019943416,
       "tag": "0016_add_carb_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1790625600000,
+      "tag": "0017_release_blocked_water_temperature_checks",
+      "breakpoints": true
     }
   ]
 }

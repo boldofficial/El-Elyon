@@ -58,6 +58,7 @@ export async function POST(request: Request) {
 						kitchenTempTenths: input.kitchenTempF,
 						bathTempTenths: input.bathTempF,
 						comments: input.comments,
+						action: input.action,
 						idempotencyKey: input.idempotencyKey,
 					})
 				: await createWaterTemperatureCheckManual({
@@ -72,6 +73,7 @@ export async function POST(request: Request) {
 						staffInitials: input.staffInitials,
 						observedAt: input.observedAt,
 						comments: input.comments,
+						action: input.action,
 						reason: input.reason,
 						idempotencyKey: input.idempotencyKey,
 					});

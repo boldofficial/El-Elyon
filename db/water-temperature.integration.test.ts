@@ -665,6 +665,7 @@ async function exerciseConcurrentCreatesViaMutationLayer(
       bathTempTenths: 1140,
       observedAt: new Date("2026-07-01T08:00:00Z"),
       comments: null,
+      action: null,
       reason: null,
     };
 

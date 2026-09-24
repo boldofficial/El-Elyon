@@ -313,17 +313,18 @@ export async function createWaterTemperatureCheckAggregate(
 		staffInitials: string;
 		observedAt: Date;
 		comments: string | null;
+		action: string | null;
 		actorId: string;
 		actorName: string | null;
 		reason: string | null;
 		idempotencyKey: string;
 	}
 ): Promise<WaterTemperatureCheckDto> {
+	// Deliberately independent of args.action: documenting what was done is
+	// optional and must not change whether the slot is complete or flagged.
 	const state = deriveWaterTemperatureState({
 		kitchenTempTenths: args.kitchenTempTenths,
 		bathTempTenths: args.bathTempTenths,
-		hasAction: false,
-		rechecks: [],
 	});
 
 	const rows = await run<{check_json: Record<string, unknown>}>(
@@ -337,7 +338,7 @@ export async function createWaterTemperatureCheckAggregate(
 				) VALUES (
 					${args.locationId}, ${args.houseName}, ${args.operationalDate}, ${args.shiftSlot}, ${args.shiftId},
 					${args.kitchenTempTenths}, ${args.bathTempTenths}, ${args.staffId}, ${args.staffName}, ${args.staffInitials},
-					${args.observedAt}, ${args.comments}, ${null}, ${state}, 1, ${args.actorId}
+					${args.observedAt}, ${args.comments}, ${args.action}, ${state}, 1, ${args.actorId}
 				)
 				ON CONFLICT (location_id, operational_date, shift_slot) WHERE voided_at IS NULL DO NOTHING
 				RETURNING *
@@ -891,6 +892,7 @@ export async function createWaterTemperatureCheckFromShift(args: {
 	kitchenTempTenths: number;
 	bathTempTenths: number;
 	comments: string | null;
+	action: string | null;
 	idempotencyKey: string;
 }): Promise<WaterTemperatureCheckDto> {
 	const identity = await getActiveShiftIdentity(args.clerkUserId);
@@ -909,6 +911,7 @@ export async function createWaterTemperatureCheckFromShift(args: {
 		staffInitials: staff.staffInitials,
 		observedAt: new Date(),
 		comments: args.comments,
+		action: args.action,
 		actorId: args.clerkUserId,
 		actorName: staff.staffName,
 		reason: null,
@@ -928,6 +931,7 @@ export async function createWaterTemperatureCheckManual(args: {
 	staffInitials: string;
 	observedAt: Date;
 	comments: string | null;
+	action: string | null;
 	reason: string;
 	idempotencyKey: string;
 }): Promise<WaterTemperatureCheckDto> {
@@ -948,6 +952,7 @@ export async function createWaterTemperatureCheckManual(args: {
 		staffInitials: args.staffInitials,
 		observedAt: args.observedAt,
 		comments: args.comments,
+		action: args.action,
 		actorId: args.clerkUserId,
 		actorName: actor.staffName,
 		reason: args.reason,
