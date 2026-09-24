@@ -325,6 +325,7 @@ export const waterTemperatureCheckInputSchema = z
     staffInitials: staffInitialsSchema,
     observedAt: z.coerce.date(),
     comments: optionalText(MAX_COMMENT_LENGTH),
+    action: optionalText(MAX_ACTION_LENGTH),
   })
   .strict();
 

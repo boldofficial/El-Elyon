@@ -490,7 +490,7 @@ test('an unsafe typed value is classified for warning but never blocks submissio
 	// The saved-even-when-unsafe rule (R6): 125/113 is a submittable draft.
 	assert.equal(
 		canSubmitInitialReadings({
-			draft: {kitchenTempF: '125.0', bathTempF: '113.0', comments: ''},
+			draft: {kitchenTempF: '125.0', bathTempF: '113.0', comments: '', actionTaken: ''},
 			isSubmitting: false,
 		}),
 		true
@@ -498,7 +498,7 @@ test('an unsafe typed value is classified for warning but never blocks submissio
 });
 
 test('both readings are required, and each error is associated with its own field', () => {
-	const result = validateInitialReadings({kitchenTempF: '', bathTempF: '112.55', comments: ''});
+	const result = validateInitialReadings({kitchenTempF: '', bathTempF: '112.55', comments: '', actionTaken: ''});
 	assert.equal(result.isValid, false);
 	assert.ok(result.fieldErrors.kitchenTempF);
 	assert.ok(result.fieldErrors.bathTempF);
@@ -520,12 +520,15 @@ test('a valid initial draft yields exactly the numbers and normalized comments t
 		kitchenTempF: '112.0',
 		bathTempF: '114',
 		comments: '  Ran taps for two minutes.  ',
+		actionTaken: '',
 	});
 	assert.equal(result.isValid, true);
 	assert.deepEqual(result.values, {
 		kitchenTempF: 112,
 		bathTempF: 114,
 		comments: 'Ran taps for two minutes.',
+		// Left blank, so it normalizes to null rather than an empty string.
+		actionTaken: null,
 	});
 	assert.deepEqual(result.summary, []);
 });
@@ -535,6 +538,7 @@ test('comments are bounded and reject control characters', () => {
 		kitchenTempF: '112',
 		bathTempF: '114',
 		comments: 'x'.repeat(2001),
+		actionTaken: '',
 	});
 	assert.equal(tooLong.isValid, false);
 	assert.match(tooLong.fieldErrors.comments!, /2000 characters or fewer/);
@@ -543,13 +547,14 @@ test('comments are bounded and reject control characters', () => {
 		kitchenTempF: '112',
 		bathTempF: '114',
 		comments: 'bad\u0000value',
+		actionTaken: '',
 	});
 	assert.equal(controlChars.isValid, false);
 	assert.match(controlChars.fieldErrors.comments!, /unsupported characters/);
 });
 
 test('double-submit is disabled while a request is in flight for every panel', () => {
-	const validInitial = {kitchenTempF: '112', bathTempF: '114', comments: ''};
+	const validInitial = {kitchenTempF: '112', bathTempF: '114', comments: '', actionTaken: ''};
 	assert.equal(canSubmitInitialReadings({draft: validInitial, isSubmitting: false}), true);
 	assert.equal(canSubmitInitialReadings({draft: validInitial, isSubmitting: true}), false);
 
@@ -833,7 +838,7 @@ test('an untouched draft closes silently; a touched one asks before discarding',
 
 	const touched = {
 		...EMPTY_DRAFT_BUNDLE,
-		initial: {kitchenTempF: '112', bathTempF: '', comments: ''},
+		initial: {kitchenTempF: '112', bathTempF: '', comments: '', actionTaken: ''},
 	};
 	assert.equal(hasUnsavedWaterTemperatureEntry(touched), true);
 	assert.equal(
@@ -949,7 +954,7 @@ test('focus returns to the invoking CTA and is trapped inside the dialog while o
 test('Escape routes through the unsaved gate and Ctrl+Enter submits only when submittable', () => {
 	const touched = {
 		...EMPTY_DRAFT_BUNDLE,
-		initial: {kitchenTempF: '112', bathTempF: '114', comments: ''},
+		initial: {kitchenTempF: '112', bathTempF: '114', comments: '', actionTaken: ''},
 	};
 	assert.equal(
 		resolveDialogKeyAction({
@@ -1036,4 +1041,59 @@ test('an existing record supplies the authoritative snapshots over local session
 		sessionUserName: 'Grace Hopper',
 	});
 	assert.equal(context.initials, 'BW');
+});
+
+test('action taken is optional: a scalding reading submits with it blank', () => {
+	// The regression this whole change exists to prevent. A 130°F reading and
+	// an empty "action taken" must be a submittable draft, or staff are back to
+	// being pushed toward typing a cooler number.
+	assert.equal(
+		canSubmitInitialReadings({
+			draft: {kitchenTempF: '130.0', bathTempF: '113.0', comments: '', actionTaken: ''},
+			isSubmitting: false,
+		}),
+		true
+	);
+
+	const blank = validateInitialReadings({
+		kitchenTempF: '130.0',
+		bathTempF: '113.0',
+		comments: '',
+		actionTaken: '   ',
+	});
+	assert.equal(blank.isValid, true);
+	assert.equal(blank.fieldErrors.actionTaken, null);
+	assert.equal(blank.values!.actionTaken, null);
+	assert.deepEqual(blank.summary, []);
+});
+
+test('action taken is carried through and bounded when it is filled in', () => {
+	const filled = validateInitialReadings({
+		kitchenTempF: '130.0',
+		bathTempF: '113.0',
+		comments: '',
+		actionTaken: '  Shut off the tap and told the supervisor.  ',
+	});
+	assert.equal(filled.isValid, true);
+	assert.equal(filled.values!.actionTaken, 'Shut off the tap and told the supervisor.');
+
+	const tooLong = validateInitialReadings({
+		kitchenTempF: '130.0',
+		bathTempF: '113.0',
+		comments: '',
+		actionTaken: 'x'.repeat(2001),
+	});
+	assert.equal(tooLong.isValid, false);
+	assert.match(tooLong.fieldErrors.actionTaken!, /2000 characters or fewer/);
+});
+
+test('an unsaved action note alone blocks a silent discard', () => {
+	assert.equal(
+		hasUnsavedWaterTemperatureEntry({
+			...EMPTY_DRAFT_BUNDLE,
+			initial: {...EMPTY_DRAFT_BUNDLE.initial, actionTaken: 'Shut off the tap'},
+		}),
+		true
+	);
+	assert.equal(hasUnsavedWaterTemperatureEntry(EMPTY_DRAFT_BUNDLE), false);
 });

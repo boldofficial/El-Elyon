@@ -239,6 +239,10 @@ export const waterTemperatureStaffCreateSchema = z
 		kitchenTempF: fahrenheitReadingSchema,
 		bathTempF: fahrenheitReadingSchema,
 		comments: waterTemperatureCommentsSchema,
+		// Optional, and never required by any reading: what the worker did
+		// about an out-of-range temperature, captured in the same submit so
+		// recording it can never gate completion.
+		action: waterTemperatureOptionalActionTextSchema,
 		idempotencyKey: waterTemperatureIdempotencyKeySchema,
 	})
 	.strict();
@@ -256,6 +260,7 @@ export const waterTemperatureManualCreateSchema = z
 		staffInitials: staffInitialsSchema,
 		observedAt: z.coerce.date(),
 		comments: waterTemperatureCommentsSchema,
+		action: waterTemperatureOptionalActionTextSchema,
 		reason: waterTemperatureReasonSchema,
 		idempotencyKey: waterTemperatureIdempotencyKeySchema,
 	})

@@ -387,6 +387,7 @@ export default function WaterTemperatureEntryDialog({
 			kitchenTempF: values.kitchenTempF,
 			bathTempF: values.bathTempF,
 			comments: values.comments,
+			action: values.actionTaken,
 			idempotencyKey: keyFor('create'),
 		});
 	};
@@ -850,7 +851,18 @@ function InitialReadingsForm({
 	onSubmit: (event: React.FormEvent) => void;
 	onCancel: () => void;
 }) {
-	const errors = showErrors ? validation.fieldErrors : {kitchenTempF: null, bathTempF: null, comments: null};
+	const errors = showErrors
+		? validation.fieldErrors
+		: {kitchenTempF: null, bathTempF: null, comments: null, actionTaken: null};
+	// Shown only once a reading is actually out of range: it is the only time
+	// the field has anything to say. It stays optional even then, and whatever
+	// is typed is submitted either way.
+	const showActionTaken =
+		classifyTypedTemperature(draft.initial.kitchenTempF) === 'above' ||
+		classifyTypedTemperature(draft.initial.kitchenTempF) === 'below' ||
+		classifyTypedTemperature(draft.initial.bathTempF) === 'above' ||
+		classifyTypedTemperature(draft.initial.bathTempF) === 'below' ||
+		draft.initial.actionTaken.trim().length > 0;
 	const remaining = remainingNarrativeCharacters(draft.initial.comments, MAX_COMMENT_LENGTH);
 	return (
 		<form onSubmit={onSubmit} noValidate className="space-y-4">
@@ -908,6 +920,40 @@ function InitialReadingsForm({
 				<p className="mt-1 text-xs text-gray-500">{remaining} characters remaining.</p>
 				<FieldError fieldId={IDS.comments} message={errors.comments} />
 			</div>
+
+			{showActionTaken && (
+				<div>
+					<label htmlFor={IDS.action} className="block text-sm font-medium text-gray-700">
+						Action taken (optional)
+					</label>
+					<textarea
+						id={IDS.action}
+						name={IDS.action}
+						rows={3}
+						maxLength={MAX_ACTION_LENGTH}
+						value={draft.initial.actionTaken}
+						disabled={isSubmitting}
+						onChange={(event) =>
+							setDraft((current) => ({
+								...current,
+								initial: {...current.initial, actionTaken: event.target.value},
+							}))
+						}
+						aria-invalid={errors.actionTaken ? true : undefined}
+						aria-describedby={`${helpId(IDS.action)}${errors.actionTaken ? ` ${errorId(IDS.action)}` : ''}`}
+						className={`${FIELD_CLASSES} mt-1 ${errors.actionTaken ? 'border-red-500' : 'border-gray-300'}`}
+					/>
+					<p id={helpId(IDS.action)} className="mt-1 text-xs text-gray-600">
+						A reading is outside {SAFE_RANGE_LABEL}. If you did something about it, describe
+						it here. You can leave this blank and still save.
+					</p>
+					<p className="mt-1 text-xs text-gray-500">
+						{remainingNarrativeCharacters(draft.initial.actionTaken, MAX_ACTION_LENGTH)} characters
+						remaining.
+					</p>
+					<FieldError fieldId={IDS.action} message={errors.actionTaken} />
+				</div>
+			)}
 
 			<p className="text-xs text-gray-600">
 				Record the readings exactly as measured. A value outside {SAFE_RANGE_LABEL} is still

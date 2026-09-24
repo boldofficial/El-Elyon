@@ -562,21 +562,35 @@ export type InitialReadingsDraft = {
 	kitchenTempF: string;
 	bathTempF: string;
 	comments: string;
+	/** Optional: what the worker did about an out-of-range reading. Never
+	 * required, by any reading -- see deriveWaterTemperatureState. */
+	actionTaken: string;
 };
 
 export const EMPTY_INITIAL_READINGS_DRAFT: InitialReadingsDraft = {
 	kitchenTempF: '',
 	bathTempF: '',
 	comments: '',
+	actionTaken: '',
 };
 
 export type InitialReadingsValidation = {
 	isValid: boolean;
-	fieldErrors: {kitchenTempF: string | null; bathTempF: string | null; comments: string | null};
+	fieldErrors: {
+		kitchenTempF: string | null;
+		bathTempF: string | null;
+		comments: string | null;
+		actionTaken: string | null;
+	};
 	/** Ordered error summary rendered above the form and linked to each
 	 * field, so an assistive-technology user gets one landing place. */
 	summary: FieldIssue[];
-	values: {kitchenTempF: number; bathTempF: number; comments: string | null} | null;
+	values: {
+		kitchenTempF: number;
+		bathTempF: number;
+		comments: string | null;
+		actionTaken: string | null;
+	} | null;
 };
 
 export function validateInitialReadings(
@@ -591,11 +605,21 @@ export function validateInitialReadings(
 		maxLength: MAX_COMMENT_LENGTH,
 		required: false,
 	});
+	// required: false is the whole point -- an empty action never blocks a
+	// submit, whatever the readings say.
+	const actionTaken = validateNarrative({
+		fieldId: WATER_TEMPERATURE_ELEMENT_IDS.action,
+		label: 'Action taken',
+		raw: draft.actionTaken,
+		maxLength: MAX_ACTION_LENGTH,
+		required: false,
+	});
 
 	const fieldErrors = {
 		kitchenTempF: kitchen.ok ? null : kitchen.message,
 		bathTempF: bath.ok ? null : bath.message,
 		comments: comments.message,
+		actionTaken: actionTaken.message,
 	};
 
 	const summary: FieldIssue[] = [];
@@ -617,6 +641,12 @@ export function validateInitialReadings(
 			message: fieldErrors.comments,
 		});
 	}
+	if (fieldErrors.actionTaken) {
+		summary.push({
+			fieldId: WATER_TEMPERATURE_ELEMENT_IDS.action,
+			message: fieldErrors.actionTaken,
+		});
+	}
 
 	const isValid = summary.length === 0;
 	return {
@@ -625,7 +655,12 @@ export function validateInitialReadings(
 		summary,
 		values:
 			isValid && kitchen.ok && bath.ok
-				? {kitchenTempF: kitchen.value, bathTempF: bath.value, comments: comments.value}
+				? {
+						kitchenTempF: kitchen.value,
+						bathTempF: bath.value,
+						comments: comments.value,
+						actionTaken: actionTaken.value,
+					}
 				: null,
 	};
 }
@@ -748,6 +783,7 @@ export function hasUnsavedWaterTemperatureEntry(
 		draft.initial.kitchenTempF.trim().length > 0 ||
 		draft.initial.bathTempF.trim().length > 0 ||
 		draft.initial.comments.trim().length > 0 ||
+		draft.initial.actionTaken.trim().length > 0 ||
 		draft.action.action.trim().length > 0 ||
 		draft.recheck.fixture !== '' ||
 		draft.recheck.tempF.trim().length > 0
