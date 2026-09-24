@@ -11,14 +11,17 @@ import {
 	smokeDetectorChecks,
 	fireDrills,
 	fireDrillReports,
+	lifeSafetyInspectionEntries,
 } from '@/db/schema';
-import {and, eq, desc, isNull} from 'drizzle-orm';
+import {and, eq, desc, inArray, isNull, sql} from 'drizzle-orm';
 import {listResidentAdmissionDrillFacts} from '@/db/queries/life-safety';
 import {
 	admissionDrillAnchorDate,
 	evaluateAdmissionDrill,
+	evaluateDetectorCheck,
 	isAdmissionDrillRequired,
 	toLocalDate,
+	type DetectorKind,
 } from '@/lib/life-safety-reporting';
 
 /**
@@ -29,7 +32,10 @@ import {
  * Reminders covered:
  *   - ISP:             due = effectiveDate + 6 months; alert within 30 days   (supervisors + admins)
  *   - Fire evac:       due = createdAt + 12 months;   alert within 30 days   (supervisors + admins)
- *   - Smoke detector:  due = last check + 1 month;    alert within 7 days    (all users)
+ *   - Smoke & CO:      due = last check + 1 month;    alert within 7 days    (all users)
+ *                      (per detector, from the v2 inspection sheet or the
+ *                      legacy combined sheet, whichever is newer; clears
+ *                      only once both smoke AND CO are current)
  *   - Fire drill:      due = last scheduled drill + 6 months; alert within 7 days (all users)
  *   - Admission drill: due = placement + 3 days; alert from placement day    (all users)
  *                      (only placements on/after ADMISSION_DRILL_TRACKING_START)
@@ -47,10 +53,51 @@ import {
 const DAY = 24 * 60 * 60 * 1000;
 const ISP_PERIOD = 6 * 30 * DAY;
 const FIRE_EVAC_PERIOD = 365 * DAY;
-const SMOKE_PERIOD = 30 * DAY;
 const FIRE_DRILL_PERIOD = 182 * DAY; // ~6 months
 const DEADLINE_LEAD = 30 * DAY; // ISP / fire-evac: 1 month before
-const SAFETY_LEAD = 7 * DAY; // smoke / fire-drill: 1 week before
+const SAFETY_LEAD = 7 * DAY; // fire drill: 1 week before
+// Smoke / CO cadence lives with its evaluation, in lib/life-safety-reporting
+// (DETECTOR_CHECK_INTERVAL_DAYS / DETECTOR_CHECK_REMINDER_LEAD_DAYS).
+
+const DETECTOR_LABEL: Record<DetectorKind, string> = {
+	smoke: 'smoke',
+	carbon_monoxide: 'CO',
+};
+
+function formatLocalDate(localDate: string): string {
+	return new Date(`${localDate}T12:00:00`).toLocaleDateString();
+}
+
+/**
+ * Reminder text that names which detector is holding the reminder open. When
+ * only one of the two is outstanding the other is mentioned as done, so a
+ * house that has just checked its smoke alarms can see the reminder is now
+ * about CO -- not that their check went unrecorded.
+ */
+function describeDetectorReminder(
+	house: string,
+	evaluation: ReturnType<typeof evaluateDetectorCheck>
+): string {
+	const {outstanding, lastChecked, earliestDue, overdue} = evaluation;
+	const which = outstanding.map((k) => DETECTOR_LABEL[k]).join(' & ');
+	const neverChecked = outstanding.every((k) => lastChecked[k] === null);
+
+	if (neverChecked) {
+		return `Monthly ${which} detector check for ${house} has never been recorded`;
+	}
+
+	const due = formatLocalDate(earliestDue as string);
+	let text = overdue
+		? `Monthly ${which} detector check for ${house} was due ${due}`
+		: `Monthly ${which} detector check for ${house} is due by ${due}`;
+
+	if (outstanding.length === 1) {
+		const done: DetectorKind = outstanding[0] === 'smoke' ? 'carbon_monoxide' : 'smoke';
+		const doneAt = lastChecked[done];
+		if (doneAt) text += ` (${DETECTOR_LABEL[done]} checked ${formatLocalDate(doneAt)})`;
+	}
+	return text;
+}
 
 export async function GET(req: NextRequest) {
 	try {
@@ -70,6 +117,7 @@ export async function GET(req: NextRequest) {
 
 		const generated = {isp: 0, fireEvac: 0, smoke: 0, fireDrill: 0, admissionDrill: 0};
 		const cleared = {isp: 0, fireEvac: 0, smoke: 0, fireDrill: 0, admissionDrill: 0};
+		let refreshed = 0;
 		const now = Date.now();
 		const today = toLocalDate(new Date(now));
 
@@ -77,6 +125,12 @@ export async function GET(req: NextRequest) {
 		const activeAlerts = allAlerts.filter((a) => a.active);
 
 		// Ensures a single active alert exists for a subject, keyed by a matcher.
+		//
+		// An alert that already exists is refreshed when its wording or severity
+		// has moved on, rather than left frozen at whatever it said the day it
+		// was raised. Without this a "due soon" alert never escalates to high
+		// once it goes overdue, and a reminder whose reason changes (smoke done,
+		// CO still outstanding) keeps describing the old reason.
 		async function ensureAlert(
 			match: (a: (typeof allAlerts)[number]) => boolean,
 			values: {
@@ -88,7 +142,25 @@ export async function GET(req: NextRequest) {
 				metadata?: Record<string, unknown>;
 			}
 		): Promise<'created' | 'exists'> {
-			if (activeAlerts.some(match)) return 'exists';
+			const existing = activeAlerts.find(match);
+			if (existing) {
+				if (
+					existing.title !== values.title ||
+					existing.description !== values.description ||
+					existing.severity !== values.severity
+				) {
+					await db
+						.update(complianceAlerts)
+						.set({
+							title: values.title,
+							description: values.description,
+							severity: values.severity,
+						})
+						.where(eq(complianceAlerts.id, existing.id));
+					refreshed++;
+				}
+				return 'exists';
+			}
 			await db.insert(complianceAlerts).values({
 				type: values.type,
 				title: values.title,
@@ -203,27 +275,59 @@ export async function GET(req: NextRequest) {
 		const fireDrillDueLocations = new Set<string>();
 
 		for (const loc of allLocations) {
-			// Smoke / CO detector — monthly
-			const lastSmoke = await db.query.smokeDetectorChecks.findMany({
+			// Smoke / CO detector — monthly.
+			//
+			// New checks are written to the v2 inspection sheet
+			// (life_safety_inspection_entries), one row per detector type.
+			// Older houses may only have a row on the legacy combined sheet
+			// (smoke_detector_checks), which nothing writes to any more. Read
+			// both: reading only the legacy sheet is what kept this reminder
+			// firing every day at houses that were checking on time.
+			const [legacySmoke] = await db.query.smokeDetectorChecks.findMany({
 				where: eq(smokeDetectorChecks.location, loc.name),
 				orderBy: [desc(smokeDetectorChecks.date)],
 				limit: 1,
 			});
-			const smokeDue = lastSmoke[0]
-				? lastSmoke[0].date.getTime() + SMOKE_PERIOD
-				: now; // never checked → treat as due now
-			if (smokeDue - now <= SAFETY_LEAD) {
+			// ::text so the date arrives as YYYY-MM-DD. An aggregate bypasses
+			// the column's mode:'string' mapping, and a driver-parsed Date
+			// would be shifted by the server's time zone.
+			const v2Latest = await db
+				.select({
+					equipmentType: lifeSafetyInspectionEntries.equipmentType,
+					latest: sql<string>`max(${lifeSafetyInspectionEntries.inspectionDate})::text`,
+				})
+				.from(lifeSafetyInspectionEntries)
+				.where(
+					and(
+						eq(lifeSafetyInspectionEntries.locationId, loc.id),
+						isNull(lifeSafetyInspectionEntries.voidedAt),
+						inArray(lifeSafetyInspectionEntries.equipmentType, [
+							'smoke',
+							'carbon_monoxide',
+						])
+					)
+				)
+				.groupBy(lifeSafetyInspectionEntries.equipmentType);
+			const v2Date = (kind: DetectorKind) =>
+				v2Latest.find((r) => r.equipmentType === kind)?.latest ?? null;
+
+			const detectors = evaluateDetectorCheck({
+				legacyCheckDate: legacySmoke ? toLocalDate(legacySmoke.date) : null,
+				latestSmokeDate: v2Date('smoke'),
+				latestCoDate: v2Date('carbon_monoxide'),
+				today,
+			});
+
+			if (detectors.outstanding.length > 0) {
 				smokeDueLocations.add(loc.name);
 				const res = await ensureAlert(
 					(a) => a.type === 'smoke_detector' && a.location === loc.name,
 					{
 						type: 'smoke_detector',
 						title: 'Smoke & CO Detector Check Due',
-						description: lastSmoke[0]
-							? `Monthly detector check for ${loc.name} is due (last done ${lastSmoke[0].date.toLocaleDateString()})`
-							: `Monthly detector check for ${loc.name} has never been recorded`,
+						description: describeDetectorReminder(loc.name, detectors),
 						location: loc.name,
-						severity: smokeDue < now ? 'high' : 'medium',
+						severity: detectors.overdue ? 'high' : 'medium',
 					}
 				);
 				if (res === 'created') generated.smoke++;
@@ -314,9 +418,13 @@ export async function GET(req: NextRequest) {
 			a.metadata?.residentId ? admissionDueResidentIds.has(a.metadata.residentId) : true
 		);
 
-		console.log('✅ Compliance alert generation completed', {generated, cleared});
+		console.log('✅ Compliance alert generation completed', {
+			generated,
+			cleared,
+			refreshed,
+		});
 
-		return NextResponse.json({success: true, generated, cleared});
+		return NextResponse.json({success: true, generated, cleared, refreshed});
 	} catch (error: any) {
 		console.error('❌ Fatal error in compliance alert generation:', error);
 		return NextResponse.json(

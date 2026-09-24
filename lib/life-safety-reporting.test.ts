@@ -8,6 +8,7 @@ import {
   differenceInLocalDays,
   isAdmissionDrillRequired,
   evaluateAdmissionDrill,
+  evaluateDetectorCheck,
   fireDrillParticipantInputSchema,
   fireDrillReportInputSchema,
   isValidLocalDate,
@@ -371,4 +372,128 @@ test("void input requires a positive version and a bounded reason", () => {
       .success,
     false,
   );
+});
+
+// ---------------------------------------------------------------------------
+// Monthly smoke & CO detector reminder
+// ---------------------------------------------------------------------------
+
+test("detector checks recorded on the v2 sheet clear the reminder even when the legacy sheet is stale", () => {
+  // The reported bug: a house checks on time every month through the v2
+  // inspection sheet, but its last legacy row is from before v2 existed. The
+  // reminder read only the legacy sheet, so it fired every single day.
+  const evaluation = evaluateDetectorCheck({
+    legacyCheckDate: "2026-03-02",
+    latestSmokeDate: "2026-09-10",
+    latestCoDate: "2026-09-10",
+    today: "2026-09-24",
+  });
+
+  assert.deepEqual(evaluation.outstanding, []);
+  assert.equal(evaluation.earliestDue, null);
+  assert.equal(evaluation.overdue, false);
+  assert.equal(evaluation.lastChecked.smoke, "2026-09-10");
+  assert.equal(evaluation.lastChecked.carbon_monoxide, "2026-09-10");
+});
+
+test("a house whose only check is a recent legacy row is still covered", () => {
+  // Houses that last checked before v2 shipped must not suddenly show as due.
+  const evaluation = evaluateDetectorCheck({
+    legacyCheckDate: "2026-09-15",
+    latestSmokeDate: null,
+    latestCoDate: null,
+    today: "2026-09-24",
+  });
+
+  assert.deepEqual(evaluation.outstanding, []);
+});
+
+test("the newer of the legacy and v2 dates wins, per detector", () => {
+  const evaluation = evaluateDetectorCheck({
+    legacyCheckDate: "2026-09-20",
+    latestSmokeDate: "2026-08-01",
+    latestCoDate: "2026-09-22",
+    today: "2026-09-24",
+  });
+
+  assert.equal(evaluation.lastChecked.smoke, "2026-09-20");
+  assert.equal(evaluation.lastChecked.carbon_monoxide, "2026-09-22");
+});
+
+test("smoke checked but CO not keeps the reminder open and names CO", () => {
+  const evaluation = evaluateDetectorCheck({
+    legacyCheckDate: null,
+    latestSmokeDate: "2026-09-20",
+    latestCoDate: null,
+    today: "2026-09-24",
+  });
+
+  assert.deepEqual(evaluation.outstanding, ["carbon_monoxide"]);
+  // Never checked is due today -- outstanding, but not yet overdue.
+  assert.equal(evaluation.earliestDue, "2026-09-24");
+  assert.equal(evaluation.overdue, false);
+});
+
+test("a house with no check anywhere is due today for both detectors", () => {
+  const evaluation = evaluateDetectorCheck({
+    legacyCheckDate: null,
+    latestSmokeDate: null,
+    latestCoDate: null,
+    today: "2026-09-24",
+  });
+
+  assert.deepEqual(evaluation.outstanding, ["smoke", "carbon_monoxide"]);
+  assert.equal(evaluation.earliestDue, "2026-09-24");
+  assert.equal(evaluation.overdue, false);
+});
+
+test("the reminder opens exactly seven days before the 30-day due date", () => {
+  const checkedOn = (date: string, today: string) =>
+    evaluateDetectorCheck({
+      legacyCheckDate: null,
+      latestSmokeDate: date,
+      latestCoDate: date,
+      today,
+    });
+
+  // Checked 22 days ago -> due in 8 days -> not yet.
+  assert.deepEqual(checkedOn("2026-09-02", "2026-09-24").outstanding, []);
+  // Checked 23 days ago -> due in 7 days -> reminder opens.
+  assert.deepEqual(checkedOn("2026-09-01", "2026-09-24").outstanding, [
+    "smoke",
+    "carbon_monoxide",
+  ]);
+});
+
+test("a check more than 30 days old is overdue", () => {
+  const onTime = evaluateDetectorCheck({
+    legacyCheckDate: null,
+    latestSmokeDate: "2026-08-25",
+    latestCoDate: "2026-08-25",
+    today: "2026-09-24",
+  });
+  // Due 2026-09-24, and today is the due date: still on time.
+  assert.equal(onTime.earliestDue, "2026-09-24");
+  assert.equal(onTime.overdue, false);
+
+  const late = evaluateDetectorCheck({
+    legacyCheckDate: null,
+    latestSmokeDate: "2026-08-24",
+    latestCoDate: "2026-08-25",
+    today: "2026-09-24",
+  });
+  assert.equal(late.earliestDue, "2026-09-23");
+  assert.equal(late.overdue, true);
+});
+
+test("detector due dates roll across month ends in local calendar days", () => {
+  const evaluation = evaluateDetectorCheck({
+    legacyCheckDate: null,
+    latestSmokeDate: "2026-01-31",
+    latestCoDate: "2026-01-31",
+    today: "2026-02-24",
+  });
+
+  assert.equal(evaluation.dueDate.smoke, "2026-03-02");
+  assert.deepEqual(evaluation.outstanding, ["smoke", "carbon_monoxide"]);
 });
