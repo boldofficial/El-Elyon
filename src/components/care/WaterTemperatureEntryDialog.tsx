@@ -10,6 +10,7 @@ import {
 	MAX_COMMENT_LENGTH,
 	SAFE_MAX_F,
 	SAFE_MIN_F,
+	describeAttentionReason,
 } from '@/lib/water-temperature';
 import {
 	ABOVE_115_ESCALATION_INSTRUCTIONS,
@@ -128,6 +129,20 @@ export default function WaterTemperatureEntryDialog({
 	const idempotencyRef = useRef<{create?: string; action?: string; recheck?: string}>({});
 
 	const phase = deriveEntryPhase(check);
+	// Named from the readings themselves so the panel says "too high" or "too
+	// low" instead of assuming one direction.
+	// Falls back to the stored status so a flagged row still says so if the
+	// readings could not be loaded.
+	const attentionReason =
+		(check
+			? describeAttentionReason({
+					kitchenTempTenths: Math.round(check.kitchenTempF * 10),
+					bathTempTenths: Math.round(check.bathTempF * 10),
+				})
+			: null) ??
+		(status === 'complete_with_attention'
+			? 'A reading is outside the safe range and is flagged for management review.'
+			: null);
 	const context = useMemo(
 		() => deriveEntryContext({identity, check, sessionUserName}),
 		[identity, check, sessionUserName]
@@ -536,11 +551,13 @@ export default function WaterTemperatureEntryDialog({
 								<div className="space-y-4">
 									<p
 										role="status"
-										className="rounded-lg border border-green-300 bg-green-50 p-3 text-sm text-green-900">
-										This shift’s water temperature check is complete
-										{status === 'complete_with_attention'
-											? '. One or more readings were below 110°F and are flagged for management review.'
-											: '.'}
+										className={`rounded-lg border p-3 text-sm ${
+											attentionReason
+												? 'border-amber-300 bg-amber-50 text-amber-900'
+												: 'border-green-300 bg-green-50 text-green-900'
+										}`}>
+										This shift’s water temperature check is recorded.
+										{attentionReason ? ` ${attentionReason}` : ''}
 									</p>
 									<div className="flex justify-end">
 										<button
@@ -571,7 +588,11 @@ function successNotice(
 		return 'Recorded. Recheck each affected fixture until it reads within ' + SAFE_RANGE_LABEL + '.';
 	}
 	if (result.state === 'complete_with_attention') {
-		return 'Recorded. A reading is below 110°F and is flagged for management review.';
+		const reason = describeAttentionReason({
+			kitchenTempTenths: Math.round(result.kitchenTempF * 10),
+			bathTempTenths: Math.round(result.bathTempF * 10),
+		});
+		return `Your readings were saved exactly as measured. ${reason ?? ''}`.trim();
 	}
 	return operation === 'create'
 		? 'This shift’s water temperature check is complete.'
@@ -761,7 +782,8 @@ function TemperatureField({
 			<p id={helpId(id)} className="mt-1 text-xs text-gray-600">
 				Degrees Fahrenheit, one decimal place. Safe range {SAFE_RANGE_LABEL}.
 				{classification === 'above' &&
-					` This value is above ${SAFE_MAX_F}°F and will require corrective action.`}
+					` This value is above ${SAFE_MAX_F}°F — too high. It will be recorded exactly as` +
+						' measured and flagged for management review.'}
 				{classification === 'below' &&
 					` This value is below ${SAFE_MIN_F}°F and will be flagged for review.`}
 				{/* Advisory only: the posted form is stricter than this system's

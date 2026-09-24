@@ -167,67 +167,87 @@ export interface WaterTemperatureRecheckFact {
 }
 
 /**
- * Computes the derived header state from the immutable initial readings,
- * whether corrective action has been documented, and the currently active
- * (non-superseded, non-voided) rechecks, per KTD4's state machine:
+ * Computes the derived header state from the immutable initial readings:
  *
- *   missing -> complete | complete_with_attention | action_required
- *     -> recheck_required -> complete
+ *   missing -> complete | complete_with_attention
  *
- * "missing" is not returned here: this function only derives the state for a
- * row that already exists. A fixture that started above SAFE_MAX_F keeps that
- * requirement even if the same header also had a below-SAFE_MIN_F fixture;
- * the above-range workflow takes precedence in the state label while the
- * original readings (including any below-range fixture) remain visible on the
- * stored row regardless of state.
+ * Recording a reading always completes the shift's obligation. An
+ * out-of-range reading -- in EITHER direction -- is flagged
+ * (`complete_with_attention`) for management review and nothing more.
+ *
+ * This deliberately no longer returns `action_required` or
+ * `recheck_required`. Those states made an above-SAFE_MAX_F reading block
+ * the worker until they documented a corrective action AND rechecked the
+ * fixture until it read safe, which pressured staff to type a lower number
+ * than the one on the thermometer. A measurement is a fact; the software's
+ * job is to record it truthfully and make the problem visible, not to
+ * withhold completion until the fact changes. Both states remain in
+ * WATER_TEMPERATURE_CHECK_STATES and are still rendered everywhere, because
+ * rows written before this change still carry them (see migration
+ * 0017_release_blocked_water_temperature_checks.sql, which recomputes the
+ * ones that were left stuck).
+ *
+ * The flag is derived from the ORIGINAL readings alone. A later safe recheck
+ * is additional evidence recorded against the row; it does not unflag the
+ * row, because the water genuinely was out of range when it was measured
+ * (R7).
+ *
+ * `rechecks` is still accepted so callers that recompute state after
+ * appending a recheck need no change, and so re-adding a recheck-driven
+ * state later is a one-function edit.
  */
 export function deriveWaterTemperatureState(args: {
   kitchenTempTenths: number;
   bathTempTenths: number;
-  hasAction: boolean;
-  rechecks: readonly WaterTemperatureRecheckFact[];
+  hasAction?: boolean;
+  rechecks?: readonly WaterTemperatureRecheckFact[];
 }): WaterTemperatureCheckState {
+  return hasOutOfRangeReading(args) ? "complete_with_attention" : "complete";
+}
+
+/** True when either initial reading sits outside the safe range. */
+export function hasOutOfRangeReading(args: {
+  kitchenTempTenths: number;
+  bathTempTenths: number;
+}): boolean {
+  return outOfRangeFixtures(args).length > 0;
+}
+
+/** Which fixtures are flagged, and in which direction. Drives the "too high"
+ * / "too low" wording so no surface has to re-derive it from a threshold. */
+export function outOfRangeFixtures(args: {
+  kitchenTempTenths: number;
+  bathTempTenths: number;
+}): Array<{fixture: WaterTemperatureFixture; direction: "above" | "below"}> {
   const classification: Record<WaterTemperatureFixture, FixtureClassification> = {
     kitchen: classifyFixtureReading(args.kitchenTempTenths),
     bath_shower: classifyFixtureReading(args.bathTempTenths),
   };
-
-  const affectedFixtures = WATER_TEMPERATURE_FIXTURES.filter(
-    (fixture) => classification[fixture] === "above",
+  return WATER_TEMPERATURE_FIXTURES.flatMap((fixture) =>
+    classification[fixture] === "safe"
+      ? []
+      : [{fixture, direction: classification[fixture] as "above" | "below"}],
   );
+}
 
-  if (affectedFixtures.length === 0) {
-    const hasBelowRangeFixture = WATER_TEMPERATURE_FIXTURES.some(
-      (fixture) => classification[fixture] === "below",
-    );
-    return hasBelowRangeFixture ? "complete_with_attention" : "complete";
+/**
+ * One sentence naming why a row is flagged, for staff- and supervisor-facing
+ * copy. Returns null for a row with nothing flagged.
+ */
+export function describeAttentionReason(args: {
+  kitchenTempTenths: number;
+  bathTempTenths: number;
+}): string | null {
+  const flagged = outOfRangeFixtures(args);
+  if (flagged.length === 0) return null;
+  const directions = new Set(flagged.map((entry) => entry.direction));
+  if (directions.has("above") && directions.has("below")) {
+    return `One reading is above ${SAFE_MAX_F}°F and another is below ${SAFE_MIN_F}°F. Both are flagged for management review.`;
   }
-
-  if (!args.hasAction) return "action_required";
-
-  const activeRechecks = args.rechecks.filter(
-    (recheck) => !recheck.supersededAt && !recheck.voidedAt,
-  );
-
-  const latestByFixture = new Map<
-    WaterTemperatureFixture,
-    WaterTemperatureRecheckFact
-  >();
-  for (const recheck of activeRechecks) {
-    const existing = latestByFixture.get(recheck.fixture);
-    if (!existing || recheck.sequence > existing.sequence) {
-      latestByFixture.set(recheck.fixture, recheck);
-    }
-  }
-
-  const allAffectedFixturesResolved = affectedFixtures.every((fixture) => {
-    const latest = latestByFixture.get(fixture);
-    return (
-      latest !== undefined && classifyFixtureReading(latest.tempTenths) === "safe"
-    );
-  });
-
-  return allAffectedFixturesResolved ? "complete" : "recheck_required";
+  const count = flagged.length > 1 ? "Both readings are" : "A reading is";
+  return directions.has("above")
+    ? `${count} above ${SAFE_MAX_F}°F — too high. Flagged for management review.`
+    : `${count} below ${SAFE_MIN_F}°F — too low. Flagged for management review.`;
 }
 
 /** Deterministic next sequence number for an append-only recheck fixture. */

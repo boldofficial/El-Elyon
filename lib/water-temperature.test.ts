@@ -8,6 +8,9 @@ import {
   SAFE_MIN_TENTHS,
   classifyFixtureReading,
   deriveWaterTemperatureState,
+  describeAttentionReason,
+  hasOutOfRangeReading,
+  outOfRangeFixtures,
   fahrenheitReadingSchema,
   isAboveFormGuidance,
   isValidIanaTimeZone,
@@ -144,76 +147,125 @@ test("a below-range 108/112 submission derives complete_with_attention, not the 
   assert.equal(state, "complete_with_attention");
 });
 
-test("an above-range kitchen reading requires action before any recheck can resolve it", () => {
+test("an above-range reading is recorded and flagged, never blocked", () => {
+  // The whole point of this change: measuring hot water must not withhold
+  // completion until the worker types a cooler number. Recording the reading
+  // completes the shift's obligation and raises a flag, nothing more.
   const withoutAction = deriveWaterTemperatureState({
     kitchenTempTenths: UNSAFE_TENTHS,
     bathTempTenths: 1130,
     hasAction: false,
     rechecks: [],
   });
-  assert.equal(withoutAction, "action_required");
+  assert.equal(withoutAction, "complete_with_attention");
 
-  const withActionNoRecheck = deriveWaterTemperatureState({
-    kitchenTempTenths: UNSAFE_TENTHS,
-    bathTempTenths: 1130,
-    hasAction: true,
-    rechecks: [],
-  });
-  assert.equal(withActionNoRecheck, "recheck_required");
-});
-
-test("an unsafe kitchen recheck remains pending; a later safe recheck completes without losing the original reading", () => {
-  const stillUnsafe = deriveWaterTemperatureState({
-    kitchenTempTenths: UNSAFE_TENTHS,
-    bathTempTenths: 1130,
-    hasAction: true,
-    rechecks: [recheck({ tempTenths: UNSAFE_RECHECK_TENTHS, sequence: 1 })],
-  });
-  assert.equal(stillUnsafe, "recheck_required");
-
-  const resolved = deriveWaterTemperatureState({
-    kitchenTempTenths: UNSAFE_TENTHS,
-    bathTempTenths: 1130,
-    hasAction: true,
-    rechecks: [
+  // No combination of follow-up evidence -- documented action, a safe
+  // recheck, several rechecks -- can put the row back into a blocking state,
+  // and none of them clears the flag either: the water WAS too hot when it
+  // was measured (R7).
+  for (const rechecks of [
+    [],
+    [recheck({ tempTenths: SAFE_RECHECK_TENTHS, sequence: 1 })],
+    [
       recheck({ tempTenths: UNSAFE_RECHECK_TENTHS, sequence: 1 }),
       recheck({ tempTenths: SAFE_RECHECK_TENTHS, sequence: 2 }),
     ],
-  });
-  assert.equal(resolved, "complete");
-  // The original unsafe reading is a separate, immutable field on the header
-  // and is never mutated by state derivation.
+  ]) {
+    assert.equal(
+      deriveWaterTemperatureState({
+        kitchenTempTenths: UNSAFE_TENTHS,
+        bathTempTenths: 1130,
+        hasAction: true,
+        rechecks,
+      }),
+      "complete_with_attention",
+    );
+  }
 });
 
-test("when both fixtures are above range, a safe recheck for only one does not complete the slot", () => {
-  const bothAffected = deriveWaterTemperatureState({
-    kitchenTempTenths: UNSAFE_TENTHS,
-    bathTempTenths: UNSAFE_TENTHS_HIGHER,
-    hasAction: true,
-    rechecks: [
-      recheck({ fixture: "kitchen", tempTenths: SAFE_RECHECK_TENTHS, sequence: 1 }),
-    ],
-  });
-  assert.equal(bothAffected, "recheck_required");
+test("state derivation never returns a blocking state for any pair of readings", () => {
+  for (const kitchen of [0, SAFE_MIN_TENTHS - 1, SAFE_MIN_TENTHS, 1150, SAFE_MAX_TENTHS, SAFE_MAX_TENTHS + 1, 2500]) {
+    for (const bath of [0, SAFE_MIN_TENTHS - 1, SAFE_MIN_TENTHS, 1150, SAFE_MAX_TENTHS, SAFE_MAX_TENTHS + 1, 2500]) {
+      const state = deriveWaterTemperatureState({
+        kitchenTempTenths: kitchen,
+        bathTempTenths: bath,
+        hasAction: false,
+        rechecks: [],
+      });
+      assert.notEqual(state, "action_required");
+      assert.notEqual(state, "recheck_required");
+      const expectFlag =
+        classifyFixtureReading(kitchen) !== "safe" ||
+        classifyFixtureReading(bath) !== "safe";
+      assert.equal(state, expectFlag ? "complete_with_attention" : "complete");
+    }
+  }
+});
 
-  const bothResolved = deriveWaterTemperatureState({
-    kitchenTempTenths: UNSAFE_TENTHS,
-    bathTempTenths: UNSAFE_TENTHS_HIGHER,
-    hasAction: true,
-    rechecks: [
-      recheck({ fixture: "kitchen", tempTenths: SAFE_RECHECK_TENTHS, sequence: 1 }),
-      recheck({ fixture: "bath_shower", tempTenths: 1130, sequence: 1 }),
-    ],
+test("both fixtures out of range in opposite directions still completes with one flag", () => {
+  const state = deriveWaterTemperatureState({
+    kitchenTempTenths: SAFE_MAX_TENTHS + 50,
+    bathTempTenths: SAFE_MIN_TENTHS - 50,
   });
-  assert.equal(bothResolved, "complete");
+  assert.equal(state, "complete_with_attention");
+});
+
+test("the flag names the direction so staff copy never assumes one", () => {
+  const above = describeAttentionReason({
+    kitchenTempTenths: UNSAFE_TENTHS,
+    bathTempTenths: 1130,
+  });
+  assert.match(above ?? "", /above 121°F/);
+  assert.match(above ?? "", /too high/);
+
+  const below = describeAttentionReason({
+    kitchenTempTenths: 1080,
+    bathTempTenths: 1130,
+  });
+  assert.match(below ?? "", /below 110°F/);
+  assert.match(below ?? "", /too low/);
+
+  const both = describeAttentionReason({
+    kitchenTempTenths: UNSAFE_TENTHS,
+    bathTempTenths: 1080,
+  });
+  assert.match(both ?? "", /above 121°F/);
+  assert.match(both ?? "", /below 110°F/);
+
+  assert.equal(
+    describeAttentionReason({ kitchenTempTenths: 1120, bathTempTenths: 1140 }),
+    null,
+  );
+});
+
+test("outOfRangeFixtures reports which fixture and which direction", () => {
+  assert.deepEqual(
+    outOfRangeFixtures({ kitchenTempTenths: UNSAFE_TENTHS, bathTempTenths: 1080 }),
+    [
+      { fixture: "kitchen", direction: "above" },
+      { fixture: "bath_shower", direction: "below" },
+    ],
+  );
+  assert.deepEqual(
+    outOfRangeFixtures({ kitchenTempTenths: 1120, bathTempTenths: 1140 }),
+    [],
+  );
+  assert.equal(
+    hasOutOfRangeReading({ kitchenTempTenths: 1120, bathTempTenths: 1140 }),
+    false,
+  );
+  assert.equal(
+    hasOutOfRangeReading({ kitchenTempTenths: 1120, bathTempTenths: UNSAFE_TENTHS }),
+    true,
+  );
 });
 
 test("a reading in the form-guidance band completes and raises no corrective workflow", () => {
   // The band the threshold change created: the posted paper form calls 118.0F
   // unsafe, this system does not flag it. The advisory shown to staff is
   // presentation-only and must never reach the state machine, so this has to
-  // complete outright -- not complete_with_attention, and certainly not
-  // action_required.
+  // complete outright -- not complete_with_attention. (No reading blocks any
+  // more, but an unflagged one must not even be flagged.)
   const state = deriveWaterTemperatureState({
     kitchenTempTenths: 1180,
     bathTempTenths: 1130,
@@ -231,43 +283,6 @@ test("a reading in the form-guidance band completes and raises no corrective wor
   assert.equal(isAboveFormGuidance(FORM_GUIDANCE_MAX_TENTHS + 1), true);
   assert.equal(isAboveFormGuidance(SAFE_MIN_TENTHS - 1), false);
   assert.equal(classifyFixtureReading(1180), "safe");
-});
-
-test("a superseded mistyped recheck is ignored; state derives from the latest active ordered recheck", () => {
-  const mistyped = recheck({ tempTenths: 1300, sequence: 1 }); // e.g. fat-fingered
-  const corrected = recheck({ tempTenths: SAFE_RECHECK_TENTHS, sequence: 2 });
-
-  const withMistypeActive = deriveWaterTemperatureState({
-    kitchenTempTenths: UNSAFE_TENTHS,
-    bathTempTenths: 1130,
-    hasAction: true,
-    rechecks: [mistyped],
-  });
-  assert.equal(withMistypeActive, "recheck_required");
-
-  const withMistypeSuperseded = deriveWaterTemperatureState({
-    kitchenTempTenths: UNSAFE_TENTHS,
-    bathTempTenths: 1130,
-    hasAction: true,
-    rechecks: [
-      { ...mistyped, supersededAt: "2026-03-04T09:00:00.000Z" },
-      corrected,
-    ],
-  });
-  assert.equal(withMistypeSuperseded, "complete");
-});
-
-test("a later active unsafe recheck reopens a previously-resolved fixture", () => {
-  const state = deriveWaterTemperatureState({
-    kitchenTempTenths: UNSAFE_TENTHS,
-    bathTempTenths: 1130,
-    hasAction: true,
-    rechecks: [
-      recheck({ tempTenths: SAFE_RECHECK_TENTHS, sequence: 1 }),
-      recheck({ tempTenths: UNSAFE_RECHECK_TENTHS, sequence: 2 }),
-    ],
-  });
-  assert.equal(state, "recheck_required");
 });
 
 test("nextRecheckSequence is deterministic and append-only", () => {
