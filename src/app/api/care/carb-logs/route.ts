@@ -1,13 +1,20 @@
 // src/app/api/care/carb-logs/route.ts
 //
 // Per-meal carbohydrate log for residents with carb tracking enabled.
-//   GET  ?residentId=&from=&to=   -> {entries, today}
+//   GET  ?residentId=&from=&to=          -> {entries, today}  (one resident)
+//   GET  ?scope=days&location=&residentId=&from=&to=
+//        -> {from, to, rows}  (oversight: one row per resident per day,
+//           scoped to the caller's locations; admins see all)
 //   POST {residentId, mealSlot, carbsGrams, foodDescription?, notes?, operationalDate?}
 
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {AccessDeniedError} from '@/lib/db-helpers';
-import {getCarbLogDayStatus, getCarbLogsForResident} from '@/db/queries/carb-logs';
+import {
+	getCarbLogDayStatus,
+	getCarbLogsForResident,
+	getCarbLogsForScope,
+} from '@/db/queries/carb-logs';
 import {
 	CarbLogConflictError,
 	CarbLogValidationError,
@@ -39,13 +46,31 @@ export async function GET(request: Request) {
 
 	const {searchParams} = new URL(request.url);
 	const residentId = searchParams.get('residentId');
-	if (!residentId) {
-		return NextResponse.json({error: 'residentId is required'}, {status: 400});
-	}
 	const from = searchParams.get('from');
 	const to = searchParams.get('to');
 	if ((from && !DATE_RE.test(from)) || (to && !DATE_RE.test(to))) {
 		return NextResponse.json({error: 'Invalid date range'}, {status: 400});
+	}
+
+	// Oversight view: grouped resident-day rows across the caller's locations.
+	// Handled by a separate, location-scoped query rather than by relaxing the
+	// per-resident read below.
+	if (searchParams.get('scope') === 'days') {
+		try {
+			const result = await getCarbLogsForScope(userId, {
+				location: searchParams.get('location') ?? undefined,
+				residentId: residentId ?? undefined,
+				from: from ?? undefined,
+				to: to ?? undefined,
+			});
+			return NextResponse.json(result, {headers: NO_STORE});
+		} catch (error) {
+			return errorResponse(error, 'Error fetching carb log summary:');
+		}
+	}
+
+	if (!residentId) {
+		return NextResponse.json({error: 'residentId is required'}, {status: 400});
 	}
 
 	try {

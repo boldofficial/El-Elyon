@@ -37,6 +37,7 @@ import GuardianChecklistWorkspace from '../guardian/GuardianChecklistWorkspace';
 import {DataCleanupWorkspace} from '../admin/DataCleanupWorkspace';
 import SettingsWorkspace from '../admin/SettingsWorkspace';
 import AdminCareLogsWorkspace from '../admin/CareLogsWorkspace';
+import CarbLogsOverview from '../admin/CarbLogsOverview';
 
 type AdminPrivilege =
 	| 'manage_employees'
@@ -370,6 +371,12 @@ export default function CarePortal() {
 			icon: '📋',
 			description: 'ISPs author/publish',
 		},
+		{
+			id: 'carb-logs',
+			label: 'Carb Logs',
+			icon: '🍞',
+			description: 'Per-meal intake by day',
+		},
 	];
 
 	const delegatedItems = delegatedManagementViews.map((viewId) => ({
@@ -492,6 +499,9 @@ export default function CarePortal() {
 				) : (
 					<div>Access denied</div>
 				);
+			// Location-scoped by the server; this check only hides the nav item.
+			case 'carb-logs':
+				return isSupervisor ? <CarbLogsOverview /> : <div>Access denied</div>;
 			default:
 				return (
 					<CareShiftWorkspace

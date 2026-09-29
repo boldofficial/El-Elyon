@@ -6,8 +6,14 @@ import SharedLogsTable from '../care/SharedLogsTable';
 import SharedIncidentsAccordion from '../care/SharedIncidentsAccordion';
 import CareLogWithActivities from '../care/CareLogWithActivities';
 import IncidentReportForm from '../care/IncidentReportForm';
+import CarbLogsOverview from './CarbLogsOverview';
 
-type TabId = 'logs' | 'log-activity' | 'report-incident' | 'incidents';
+type TabId =
+	| 'logs'
+	| 'log-activity'
+	| 'report-incident'
+	| 'incidents'
+	| 'carb-logs';
 
 interface Resident {
 	id: string;
@@ -177,6 +183,7 @@ export default function CareLogsWorkspace() {
 		{id: 'log-activity', label: 'Log Activity', icon: '✏️'},
 		{id: 'report-incident', label: 'Report Incident', icon: '⚠️'},
 		{id: 'incidents', label: 'Incidents', icon: '🚨'},
+		{id: 'carb-logs', label: 'Carb Logs', icon: '🍞'},
 	];
 
 	return (
@@ -287,6 +294,9 @@ export default function CareLogsWorkspace() {
 					</div>
 				</>
 			)}
+
+			{/* ═══════════ CARB LOGS TAB ═══════════ */}
+			{activeTab === 'carb-logs' && <CarbLogsOverview />}
 
 			{/* ═══════════ LOG ACTIVITY TAB ═══════════ */}
 			{activeTab === 'log-activity' && (
