@@ -154,6 +154,7 @@ function OverviewTab({ resident }: { resident: any }) {
           <InfoField label="Height" value={resident.height} />
           <InfoField label="Weight" value={resident.weight} />
           <InfoField label="Hair Color" value={resident.hairColor} />
+          <InfoField label="Allergies" value={resident.allergies} />
           <InfoField 
             label="Placement Date" 
             value={resident.placementDate ? new Date(resident.placementDate).toLocaleDateString() : null} 

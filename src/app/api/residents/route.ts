@@ -35,6 +35,7 @@ export async function GET() {
 								height: r.height,
 								hairColor: r.hairColor,
 								diagnosis: r.diagnosis,
+								allergies: r.allergies,
 								supportBroker: r.supportBroker,
 								importantRelationships: r.importantRelationships,
 								fundingAgency: r.fundingAgency,

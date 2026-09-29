@@ -19,6 +19,7 @@ interface Resident {
 	height?: string;
 	hairColor?: string;
 	diagnosis?: string;
+	allergies?: string;
 	supportBroker?: string;
 	importantRelationships?: string;
 	fundingAgency?: string;
@@ -383,6 +384,18 @@ export default function ResidentProfileManagement({
 						value={resident.diagnosis || ''}
 						onChange={handleChange}
 						rows={3}
+						className="w-full border rounded px-3 py-2"
+					/>
+				</div>
+
+				<div className="mt-4">
+					<label className="block text-sm font-medium mb-1">Allergies</label>
+					<textarea
+						name="allergies"
+						value={resident.allergies || ''}
+						onChange={handleChange}
+						rows={2}
+						placeholder="Food, medication, environmental... or leave blank if none known"
 						className="w-full border rounded px-3 py-2"
 					/>
 				</div>

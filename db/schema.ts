@@ -38,6 +38,7 @@ export const residents = pgTable(
 		height: varchar('height', {length: 50}),
 		hairColor: varchar('hair_color', {length: 50}),
 		diagnosis: text('diagnosis'),
+		allergies: text('allergies'),
 		supportBroker: varchar('support_broker', {length: 255}),
 		importantRelationships: text('important_relationships'),
 
