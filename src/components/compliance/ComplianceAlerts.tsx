@@ -86,10 +86,6 @@ export default function ComplianceAlerts() {
 	const toggleGroup = (key: string) =>
 		setCollapsed((prev) => ({...prev, [key]: !prev[key]}));
 
-	// Pull "10/5/2026" out of "... is due by 10/5/2026" so rows stay short
-	const getDueDate = (description?: string) =>
-		description?.match(/due by (\S+)/i)?.[1] ?? null;
-
 	if (isFetching) {
 		return (
 			<div className="flex items-center justify-center p-8">
@@ -139,7 +135,7 @@ export default function ComplianceAlerts() {
 										</span>
 										<span className="font-semibold">{first.title}</span>
 										<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white bg-opacity-60">
-											{items.length} {items.length === 1 ? 'home' : 'homes'} ·{' '}
+											{items.length} {items.length === 1 ? 'alert' : 'alerts'} ·{' '}
 											{first.severity}
 										</span>
 										<span className="ml-auto text-sm opacity-60">
@@ -159,17 +155,26 @@ export default function ComplianceAlerts() {
 								{!isCollapsed && (
 									<div className="bg-white text-gray-800">
 										{items.map((alert) => {
-											const due = getDueDate(alert.description);
+											// Resident alerts (ISP, fire evac, admission drill) name the
+											// resident only in the description; show it, plus the home
+											// when the description doesn't already say which one.
+											const namesLocation = alert.description
+												?.toLowerCase()
+												.includes(alert.location?.toLowerCase());
 											return (
 												<div
 													key={alert.id}
-													title={alert.description}
 													className="flex items-center gap-3 px-4 py-2 border-t border-gray-100 text-sm">
-													<span className="flex-1 font-medium">
-														{alert.location}
-													</span>
-													<span className="text-gray-500">
-														{due ? `due ${due}` : formatDate(alert.createdAt)}
+													<div className="flex-1 min-w-0">
+														<p className="font-medium">{alert.description}</p>
+														{!namesLocation && (
+															<p className="text-xs text-gray-500">
+																{alert.location}
+															</p>
+														)}
+													</div>
+													<span className="text-gray-500 text-xs whitespace-nowrap">
+														{formatDate(alert.createdAt)}
 													</span>
 													<button
 														onClick={() => handleDismiss([alert.id])}
