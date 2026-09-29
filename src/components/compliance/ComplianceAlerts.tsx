@@ -5,6 +5,7 @@ export default function ComplianceAlerts() {
 	const [alerts, setAlerts] = useState<any[]>([]);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isFetching, setIsFetching] = useState(true);
+	const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
 	// Fetch active alerts
 	const fetchAlerts = async () => {
@@ -27,28 +28,32 @@ export default function ComplianceAlerts() {
 		fetchAlerts();
 	}, []);
 
-	// Dismiss alert
-	const handleDismiss = async (alertId: string) => {
+	// Dismiss one or more alerts (a group's "Dismiss all" passes several ids)
+	const handleDismiss = async (alertIds: string[]) => {
 		setIsLoading(true);
 		try {
-			const response = await fetch('/api/admin/compliance/dismiss-alert', {
-				method: 'POST',
-				headers: {'Content-Type': 'application/json'},
-				body: JSON.stringify({alertId}),
-			});
+			for (const alertId of alertIds) {
+				const response = await fetch('/api/admin/compliance/dismiss-alert', {
+					method: 'POST',
+					headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({alertId}),
+				});
 
-			if (!response.ok) {
-				const error = await response.json();
-				throw new Error(error.error || 'Failed to dismiss alert');
+				if (!response.ok) {
+					const error = await response.json();
+					throw new Error(error.error || 'Failed to dismiss alert');
+				}
 			}
 
-			toast.success('Alert dismissed successfully');
-			fetchAlerts(); // Refresh alerts list
+			toast.success(
+				alertIds.length > 1 ? 'Alerts dismissed' : 'Alert dismissed successfully',
+			);
 		} catch (error: any) {
 			console.error('Error dismissing alert:', error);
 			toast.error(error.message || 'Failed to dismiss alert');
 		} finally {
 			setIsLoading(false);
+			fetchAlerts(); // Refresh even on partial failure
 		}
 	};
 
@@ -68,6 +73,22 @@ export default function ComplianceAlerts() {
 
 	// Format date
 	const formatDate = (date: Date | string) => new Date(date).toLocaleString();
+
+	// Group alerts of the same type/title/severity under one collapsible header
+	const groups = Object.values(
+		alerts.reduce<Record<string, {key: string; alerts: any[]}>>((acc, alert) => {
+			const key = `${alert.type}|${alert.title}|${alert.severity}`;
+			(acc[key] ??= {key, alerts: []}).alerts.push(alert);
+			return acc;
+		}, {}),
+	);
+
+	const toggleGroup = (key: string) =>
+		setCollapsed((prev) => ({...prev, [key]: !prev[key]}));
+
+	// Pull "10/5/2026" out of "... is due by 10/5/2026" so rows stay short
+	const getDueDate = (description?: string) =>
+		description?.match(/due by (\S+)/i)?.[1] ?? null;
 
 	if (isFetching) {
 		return (
@@ -100,45 +121,70 @@ export default function ComplianceAlerts() {
 					</p>
 				</div>
 			) : (
-				<div className="space-y-4">
-					{alerts.map((alert) => (
-						<div
-							key={alert.id}
-							className={`border rounded-lg p-6 ${getSeverityColor(alert.severity)}`}>
-							<div className="flex items-start justify-between">
-								<div className="flex-1">
-									<div className="flex items-center gap-3 mb-2">
-										<span className="text-2xl">
-											{alert.type === 'isp' ? '📋' : '🔥'}
+				<div className="space-y-3">
+					{groups.map(({key, alerts: items}) => {
+						const first = items[0];
+						const isCollapsed = !!collapsed[key];
+						return (
+							<div
+								key={key}
+								className={`border rounded-lg overflow-hidden ${getSeverityColor(first.severity)}`}>
+								<div className="flex items-center gap-3 px-4 py-3">
+									<button
+										onClick={() => toggleGroup(key)}
+										aria-expanded={!isCollapsed}
+										className="flex flex-1 items-center gap-3 text-left">
+										<span className="text-xl">
+											{first.type === 'isp' ? '📋' : '🔥'}
 										</span>
-										<div>
-											<h4 className="text-lg font-semibold">{alert.title}</h4>
-											<p className="text-sm opacity-75">{alert.location}</p>
-										</div>
-									</div>
-
-									<p className="text-sm mt-2">{alert.description}</p>
-
-									<div className="flex items-center gap-4 mt-4 text-xs opacity-75">
-										<span>Created: {formatDate(alert.createdAt)}</span>
-										<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white bg-opacity-50">
-											{alert.severity} severity
+										<span className="font-semibold">{first.title}</span>
+										<span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-white bg-opacity-60">
+											{items.length} {items.length === 1 ? 'home' : 'homes'} ·{' '}
+											{first.severity}
 										</span>
-									</div>
+										<span className="ml-auto text-sm opacity-60">
+											{isCollapsed ? '▾' : '▴'}
+										</span>
+									</button>
+									{items.length > 1 && (
+										<button
+											onClick={() => handleDismiss(items.map((a) => a.id))}
+											disabled={isLoading}
+											className="px-3 py-1.5 bg-white bg-opacity-80 hover:bg-opacity-100 text-gray-700 rounded-md text-sm font-medium disabled:opacity-50">
+											Dismiss all
+										</button>
+									)}
 								</div>
 
-								<button
-									onClick={() => handleDismiss(alert.id)}
-									disabled={isLoading}
-									className="ml-4 px-4 py-2 bg-white bg-opacity-80 hover:bg-opacity-100 text-gray-700 rounded-md text-sm font-medium disabled:opacity-50 flex items-center gap-2">
-									{isLoading && (
-										<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-700"></div>
-									)}
-									Dismiss
-								</button>
+								{!isCollapsed && (
+									<div className="bg-white text-gray-800">
+										{items.map((alert) => {
+											const due = getDueDate(alert.description);
+											return (
+												<div
+													key={alert.id}
+													title={alert.description}
+													className="flex items-center gap-3 px-4 py-2 border-t border-gray-100 text-sm">
+													<span className="flex-1 font-medium">
+														{alert.location}
+													</span>
+													<span className="text-gray-500">
+														{due ? `due ${due}` : formatDate(alert.createdAt)}
+													</span>
+													<button
+														onClick={() => handleDismiss([alert.id])}
+														disabled={isLoading}
+														className="px-3 py-1 border border-gray-200 hover:bg-gray-50 rounded-md text-sm font-medium disabled:opacity-50">
+														Dismiss
+													</button>
+												</div>
+											);
+										})}
+									</div>
+								)}
 							</div>
-						</div>
-					))}
+						);
+					})}
 				</div>
 			)}
 		</div>

@@ -45,7 +45,8 @@ import {
  *
  * Each pass is idempotent: it ensures exactly one active alert per subject while
  * the item is due, and deactivates the alert once the item is updated (the
- * "until it is updated" behavior).
+ * "until it is updated" behavior). A manually dismissed alert is snoozed for
+ * 3 days (1 day once overdue) before it is raised again.
  *
  * Security: Uses Vercel Cron Secret from Authorization header.
  */
@@ -56,6 +57,8 @@ const FIRE_EVAC_PERIOD = 365 * DAY;
 const FIRE_DRILL_PERIOD = 182 * DAY; // ~6 months
 const DEADLINE_LEAD = 30 * DAY; // ISP / fire-evac: 1 month before
 const SAFETY_LEAD = 7 * DAY; // fire drill: 1 week before
+const DISMISS_SNOOZE = 3 * DAY; // a dismissed reminder stays hidden this long
+const HIGH_SNOOZE = 1 * DAY; // ...but an overdue one comes back the next day
 // Smoke / CO cadence lives with its evaluation, in lib/life-safety-reporting
 // (DETECTOR_CHECK_INTERVAL_DAYS / DETECTOR_CHECK_REMINDER_LEAD_DAYS).
 
@@ -161,6 +164,20 @@ export async function GET(req: NextRequest) {
 				}
 				return 'exists';
 			}
+
+			// Respect a recent dismissal: without this the alert is re-created on
+			// the very next run and "Dismiss" only hides it until 9 AM tomorrow.
+			// Overdue (high) items resurface sooner than merely-upcoming ones.
+			const snooze = values.severity === 'high' ? HIGH_SNOOZE : DISMISS_SNOOZE;
+			const recentlyDismissed = allAlerts.some(
+				(a) =>
+					!a.active &&
+					a.dismissedAt &&
+					now - a.dismissedAt.getTime() < snooze &&
+					match(a)
+			);
+			if (recentlyDismissed) return 'exists';
+
 			await db.insert(complianceAlerts).values({
 				type: values.type,
 				title: values.title,
