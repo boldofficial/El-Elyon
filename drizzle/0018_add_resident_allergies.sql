@@ -1,0 +1,1 @@
+ALTER TABLE "residents" ADD COLUMN "allergies" text;

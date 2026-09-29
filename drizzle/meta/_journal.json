@@ -127,6 +127,13 @@
       "when": 1790625600000,
       "tag": "0017_release_blocked_water_temperature_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790699829095,
+      "tag": "0018_add_resident_allergies",
+      "breakpoints": true
     }
   ]
 }

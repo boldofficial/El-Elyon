@@ -74,6 +74,7 @@ export async function PATCH(
 			height: body.height,
 			hairColor: body.hairColor,
 			diagnosis: body.diagnosis,
+			allergies: body.allergies,
 			supportBroker: body.supportBroker,
 			importantRelationships: body.importantRelationships,
 			fundingAgency: body.fundingAgency,

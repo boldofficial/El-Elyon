@@ -23,6 +23,7 @@ interface Resident {
 	weight?: string;
 	height?: string;
 	hairColor?: string;
+	allergies?: string;
 	diagnosis?: string;
 	supportBroker?: string;
 	importantRelationships?: string;
@@ -165,6 +166,10 @@ export default function CarePortalResidentDetails({
 					</p>
 					<p>
 						<span className="font-medium">Hair Color:</span> {resident.hairColor}
+					</p>
+					<p>
+						<span className="font-medium">Allergies:</span>{' '}
+						{resident.allergies || 'None recorded'}
 					</p>
 					<p>
 						<span className="font-medium">Support Broker:</span>{' '}
