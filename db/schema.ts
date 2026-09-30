@@ -29,6 +29,10 @@ export const residents = pgTable(
 		location: varchar('location', {length: 255}).notNull(),
 		status: varchar('status', {length: 20}).notNull().default('active'),
 		inactiveReason: varchar('inactive_reason', {length: 50}),
+		// Day the resident left: date of death, placement termination or
+		// discharge, depending on inactiveReason. Stored as a calendar date
+		// (YYYY-MM-DD) so it never shifts across time zones.
+		inactiveDate: date('inactive_date'),
 
 		// NEW FIELDS
 		phone: varchar('phone', {length: 50}),

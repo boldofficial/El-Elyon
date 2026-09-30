@@ -14,6 +14,7 @@
 		"test:care-access": "node --experimental-test-module-mocks --import tsx --test lib/resident-scope.test.ts",
 		"test:care-access:db": "node --experimental-test-module-mocks --import tsx --test src/app/api/care/resident-documents/route.integration.test.ts src/app/api/care/incidents/route.integration.test.ts",
 		"test:query-helpers": "tsx --test db/query-helpers.test.ts",
+		"test:resident-status": "tsx --test lib/resident-status.test.ts",
 		"water-temperature:cutover-report": "tsx scripts/water-temperature-rollout-check.ts pre-cutover",
 		"water-temperature:post-deploy-check": "tsx scripts/water-temperature-rollout-check.ts post-deploy",
 		"db:generate": "drizzle-kit generate --name",

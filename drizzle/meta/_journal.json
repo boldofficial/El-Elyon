@@ -134,6 +134,13 @@
       "when": 1790699829095,
       "tag": "0018_add_resident_allergies",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790779951123,
+      "tag": "0019_add_resident_inactive_date",
+      "breakpoints": true
     }
   ]
 }
