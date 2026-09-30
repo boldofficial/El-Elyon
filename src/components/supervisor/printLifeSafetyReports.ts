@@ -7,7 +7,7 @@ import {MAX_FIRE_DRILL_DURATION_MINUTES} from '@/lib/life-safety-reporting';
 import type {LifeSafetyEquipmentType} from '@/lib/life-safety-reporting';
 
 const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
-const LOGO_URL = '/logo.svg';
+const LOGO_URL = '/el-elyon-emblem.svg';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MAX_TEXT = 2_000;
 const MAX_STAFF = 24;

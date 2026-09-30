@@ -8,7 +8,7 @@ import {escapePrintHtml, printDocument} from '../shared/printDocument';
 import {MEAL_SLOT_LABELS, type MealSlot} from '@/lib/carb-log';
 
 const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
-const LOGO_URL = '/logo.svg';
+const LOGO_URL = '/el-elyon-emblem.svg';
 const COLUMNS: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 export interface CarbLogSheetEntry {

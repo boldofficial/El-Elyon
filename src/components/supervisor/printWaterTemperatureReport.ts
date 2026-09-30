@@ -19,7 +19,7 @@ import {ABOVE_115_ESCALATION_INSTRUCTIONS} from '../care/waterTemperatureEntryMo
 import {SAFE_MAX_F, SAFE_MIN_F} from '@/lib/water-temperature';
 
 const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
-const LOGO_URL = '/logo.svg';
+const LOGO_URL = '/el-elyon-emblem.svg';
 
 // ============================================================================
 // FORM COPY (transcribed from the supplied photograph)
