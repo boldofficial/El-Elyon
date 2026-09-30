@@ -5,12 +5,14 @@
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
 import ResidentActivityHistory from '../care/ResidentActivityHistory';
+import {inactiveDateLabel} from '@/lib/resident-status';
 
 interface Resident {
 	id: string;
 	name: string;
 	status?: 'active' | 'inactive';
 	inactiveReason?: 'deceased' | 'placement_terminated' | 'discharged' | null;
+	inactiveDate?: string | null;
 	dateOfBirth?: string;
 	phone?: string;
 	placementDate?: Date;
@@ -134,6 +136,7 @@ export default function ResidentProfileManagement({
 					...prev,
 					status: value as Resident['status'],
 					inactiveReason: value === 'inactive' ? prev.inactiveReason : null,
+					inactiveDate: value === 'inactive' ? prev.inactiveDate : null,
 				};
 			}
 			return {...prev, [name]: value};
@@ -310,6 +313,23 @@ export default function ResidentProfileManagement({
 								</option>
 								<option value="discharged">Discharged</option>
 							</select>
+						</div>
+					)}
+					{(resident.status || 'active') === 'inactive' && (
+						<div>
+							<label
+								htmlFor="inactiveDate"
+								className="block text-sm font-medium mb-1">
+								{inactiveDateLabel(resident.inactiveReason)}
+							</label>
+							<input
+								id="inactiveDate"
+								type="date"
+								name="inactiveDate"
+								value={resident.inactiveDate || ''}
+								onChange={handleChange}
+								className="w-full border rounded px-3 py-2"
+							/>
 						</div>
 					)}
 					<div>

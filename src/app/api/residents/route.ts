@@ -28,6 +28,9 @@ export async function GET() {
 								dateOfBirth: r.dateOfBirth,
 								dob: r.dob, // Assuming dob is an alternative or additional date field
 								location: r.location,
+								status: r.status,
+								inactiveReason: r.inactiveReason,
+								inactiveDate: r.inactiveDate,
 								phone: r.phone,
 								placementDate: r.placementDate,
 								sex: r.sex,

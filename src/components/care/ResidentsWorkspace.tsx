@@ -4,6 +4,19 @@ import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
 import ResidentOnboardingForm from './ResidentOnboardingForm';
 import ResidentCase from './ResidentCase';
+import {
+	residentStatusBadge,
+	residentStatusDetail,
+	type ResidentStatusTone,
+} from '@/lib/resident-status';
+
+const STATUS_BADGE_STYLES: Record<ResidentStatusTone, string> = {
+	active: 'bg-green-100 text-green-800 ring-green-600/20 hover:bg-green-200',
+	deceased: 'bg-gray-800 text-white ring-gray-900/20 hover:bg-gray-700',
+	terminated: 'bg-red-100 text-red-800 ring-red-600/20 hover:bg-red-200',
+	discharged: 'bg-amber-100 text-amber-800 ring-amber-600/20 hover:bg-amber-200',
+	inactive: 'bg-gray-100 text-gray-700 ring-gray-500/20 hover:bg-gray-200',
+};
 
 interface ResidentsWorkspaceProps {
 	onNavigate?: (view: string, entityId: string) => void;
@@ -20,6 +33,11 @@ export default function ResidentsWorkspace({
 	const [selectedResident, setSelectedResident] = useState<string | null>(null);
 	const [searchTerm, setSearchTerm] = useState('');
 	const [locationFilter, setLocationFilter] = useState('all');
+	const [statusFilter, setStatusFilter] = useState<'all' | ResidentStatusTone>(
+		'all'
+	);
+	// Resident whose status badge was clicked to reveal its date.
+	const [openStatusId, setOpenStatusId] = useState<string | null>(null);
 
 	const fetchResidentsAndRole = async () => {
 		setLoadingData(true);
@@ -60,7 +78,10 @@ export default function ResidentsWorkspace({
 			.includes(searchTerm.toLowerCase());
 		const matchesLocation =
 			locationFilter === 'all' || resident.location === locationFilter;
-		return matchesSearch && matchesLocation;
+		const matchesStatus =
+			statusFilter === 'all' ||
+			residentStatusBadge(resident).tone === statusFilter;
+		return matchesSearch && matchesLocation && matchesStatus;
 	});
 
 	async function handleDeleteResident(residentId: string) {
@@ -127,7 +148,7 @@ export default function ResidentsWorkspace({
 
 			{/* Search and Filter */}
 			<div className="bg-white rounded-lg shadow-sm border p-4">
-				<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 					<div>
 						<label
 							htmlFor="searchResidents"
@@ -164,6 +185,28 @@ export default function ResidentsWorkspace({
 							))}
 						</select>
 					</div>
+					<div>
+						<label
+							htmlFor="statusFilter"
+							className="block text-sm font-medium text-gray-700 mb-2">
+							Filter by Status
+						</label>
+						<select
+							id="statusFilter"
+							value={statusFilter}
+							onChange={(e) =>
+								setStatusFilter(e.target.value as 'all' | ResidentStatusTone)
+							}
+							className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+							aria-label="Filter Residents by Status">
+							<option value="all">All Statuses</option>
+							<option value="active">Active</option>
+							<option value="deceased">Deceased</option>
+							<option value="terminated">Terminated</option>
+							<option value="discharged">Discharged</option>
+							<option value="inactive">Inactive (no reason set)</option>
+						</select>
+					</div>
 				</div>
 			</div>
 
@@ -187,12 +230,12 @@ export default function ResidentsWorkspace({
 					<div className="p-8 text-center text-gray-500">
 						<div className="text-4xl mb-4">🏠</div>
 						<p className="text-lg font-medium mb-2">
-							{searchTerm || locationFilter !== 'all'
+							{searchTerm || locationFilter !== 'all' || statusFilter !== 'all'
 								? 'No residents match your filters'
 								: 'No residents yet'}
 						</p>
 						<p className="text-sm">
-							{searchTerm || locationFilter !== 'all'
+							{searchTerm || locationFilter !== 'all' || statusFilter !== 'all'
 								? 'Try adjusting your search or filters'
 								: 'Add your first resident to get started'}
 						</p>
@@ -205,14 +248,38 @@ export default function ResidentsWorkspace({
 								className="p-6 hover:bg-gray-50 transition-colors">
 								<div className="flex items-start justify-between">
 									<div className="flex-1">
-										<div className="flex items-center space-x-3 mb-2">
+										<div className="flex flex-wrap items-center gap-3 mb-2">
 											<h4 className="text-lg font-medium text-gray-900">
 												{resident.name}
 											</h4>
+											{(() => {
+												const badge = residentStatusBadge(resident);
+												const isOpen = openStatusId === resident.id;
+												return (
+													<button
+														type="button"
+														onClick={() =>
+															setOpenStatusId(isOpen ? null : resident.id)
+														}
+														aria-expanded={isOpen}
+														aria-controls={`resident-status-${resident.id}`}
+														title="Show status date"
+														className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1 ring-inset transition-colors ${STATUS_BADGE_STYLES[badge.tone]}`}>
+														{badge.label}
+													</button>
+												);
+											})()}
 											<span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
 												{resident.location}
 											</span>
 										</div>
+										{openStatusId === resident.id && (
+											<p
+												id={`resident-status-${resident.id}`}
+												className="mb-2 inline-block rounded-md bg-gray-100 px-3 py-1 text-sm text-gray-800">
+												{residentStatusDetail(resident)}
+											</p>
+										)}
 
 										<div className="text-sm text-gray-600 space-y-1">
 											<div>

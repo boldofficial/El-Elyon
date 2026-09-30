@@ -58,6 +58,14 @@ export async function PATCH(
 			)
 				? body.inactiveReason
 				: null;
+		// Only an inactive resident has a leaving date; accept a plain
+		// YYYY-MM-DD calendar date and drop anything else.
+		const inactiveDate =
+			status === 'inactive' &&
+			typeof body.inactiveDate === 'string' &&
+			/^\d{4}-\d{2}-\d{2}$/.test(body.inactiveDate)
+				? body.inactiveDate
+				: null;
 
 		const updated = await updateResident(residentId, {
 			name: body.name,
@@ -65,6 +73,7 @@ export async function PATCH(
 			dob: body.dob, // Include dob if it's separate from dateOfBirth
 			status,
 			inactiveReason,
+			inactiveDate,
 			phone: body.phone,
 			placementDate: body.placementDate
 				? new Date(body.placementDate)
