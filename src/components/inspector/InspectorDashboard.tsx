@@ -8,6 +8,8 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {toast} from 'sonner';
 import SharedIncidentsAccordion from '@/components/care/SharedIncidentsAccordion';
+import CareLogReportPrintBar from '@/components/care/CareLogReportPrintBar';
+import {INSPECTOR_RECENT_LOG_LIMIT} from '@/lib/care-log-report';
 import type {
 	InspectorFireDrillReport,
 	InspectorLifeSafetyData,
@@ -362,6 +364,13 @@ export default function InspectorDashboard() {
 					<>
 						{tab === 'logs' && (
 							<Section title={`Care Logs (${data.logs.length})`}>
+								<CareLogReportPrintBar endpoint="/api/inspector/care-log-report" />
+								{data.logs.length >= INSPECTOR_RECENT_LOG_LIMIT && (
+									<p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+										Showing the {INSPECTOR_RECENT_LOG_LIMIT} most recent entries. Use the
+										activity log report above for a complete date range.
+									</p>
+								)}
 								<SimpleTable
 									columns={['Date', 'Resident', 'Type', 'Author', 'Notes']}
 									rows={data.logs.map((l) => [

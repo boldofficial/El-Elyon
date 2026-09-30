@@ -18,6 +18,7 @@ import {
 import {eq, and, asc, desc, gte, inArray, isNull, lte} from 'drizzle-orm';
 import {hashOtp} from '@/lib/inspector-auth';
 import {listLocationAliases} from './life-safety';
+import {INSPECTOR_RECENT_LOG_LIMIT} from '@/lib/care-log-report';
 import {groupFireDrillJoinRows} from './fire-drill-aggregate';
 import {
 	projectInspectorLifeSafetyData,
@@ -63,7 +64,7 @@ export async function getInspectorLocationData(location: string) {
 	const logs = await db.query.residentLogs.findMany({
 		where: eq(residentLogs.location, location),
 		orderBy: [desc(residentLogs.timestamp)],
-		limit: 500,
+		limit: INSPECTOR_RECENT_LOG_LIMIT,
 	});
 
 	// Incident reports for the location.
