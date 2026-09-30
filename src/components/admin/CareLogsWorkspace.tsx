@@ -7,6 +7,7 @@ import SharedIncidentsAccordion from '../care/SharedIncidentsAccordion';
 import CareLogWithActivities from '../care/CareLogWithActivities';
 import IncidentReportForm from '../care/IncidentReportForm';
 import CarbLogsOverview from './CarbLogsOverview';
+import CareLogReportPrintBar from '../care/CareLogReportPrintBar';
 
 type TabId =
 	| 'logs'
@@ -223,6 +224,11 @@ export default function CareLogsWorkspace() {
 			{/* ═══════════ VIEW LOGS TAB ═══════════ */}
 			{activeTab === 'logs' && (
 				<>
+					<CareLogReportPrintBar
+						endpoint="/api/admin/care-log-report"
+						locations={locations}
+					/>
+
 					{/* Filters */}
 					<div className="bg-white p-4 rounded-lg shadow-sm border grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
 						<div>
