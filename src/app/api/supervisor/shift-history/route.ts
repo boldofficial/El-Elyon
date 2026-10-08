@@ -87,6 +87,8 @@ export async function GET(req: NextRequest) {
 					logType: log.logType,
 					content: log.content,
 					createdAt: log.createdAt,
+					loggedForDate: log.loggedForDate,
+					lateEntryReason: log.lateEntryReason,
 					template: log.template,
 					activities: log.activities || [],
 				})) || [],

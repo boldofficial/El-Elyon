@@ -141,6 +141,13 @@
       "when": 1790779951123,
       "tag": "0019_add_resident_inactive_date",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791468394741,
+      "tag": "0021_add_resident_log_late_entry",
+      "breakpoints": true
     }
   ]
 }

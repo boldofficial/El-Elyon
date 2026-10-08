@@ -281,7 +281,11 @@ export const residentLogs = pgTable(
 		authorName: varchar('author_name', {length: 255}),
 		version: integer('version').default(1),
 		template: varchar('template', {length: 255}),
-		createdAt: timestamp('created_at').defaultNow()
+		createdAt: timestamp('created_at').defaultNow(),
+		// Set only on a late entry: the organization-local day the care happened.
+		// createdAt stays the real submission time (see lib/care-log-policy.ts).
+		loggedForDate: date('logged_for_date', {mode: 'string'}),
+		lateEntryReason: text('late_entry_reason')
 		// metadata: jsonb('metadata').$type<{
 		// 	mood?: string;
 		// 	behavior?: string;
