@@ -24,6 +24,7 @@ import MemosWorkspace from '../shared/MemosWorkspace';
 import VacationRequests from '../shared/VacationRequests';
 import AdminPrivilegesWorkspace from './AdminPrivilegesWorkspace';
 import InspectorAccessWorkspace from './InspectorAccessWorkspace';
+import StaffDocumentsWorkspace from '../shared/StaffDocumentsWorkspace';
 
 
 export default function AdminPortal() {
@@ -130,6 +131,8 @@ export default function AdminPortal() {
 				return <CareLogsWorkspace />;
 			case 'inspector-access':
 				return <InspectorAccessWorkspace />;
+			case 'staff-documents':
+				return <StaffDocumentsWorkspace />;
 			default:
 				return <AdminDashboard onNavigate={handleNavigate} />;
 		}

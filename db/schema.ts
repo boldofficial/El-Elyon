@@ -780,6 +780,41 @@ export const hrFileLogs = pgTable(
 	})
 );
 
+// Staff Documents (shown to state inspectors on site)
+// Each document is filed under exactly one employee OR one location — see
+// resolveStaffDocumentTarget in lib/staff-documents.ts. Removal archives the
+// row instead of deleting it; the S3 object is kept with it.
+export const staffDocuments = pgTable(
+	'staff_documents',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		category: varchar('category', {length: 50}).notNull(),
+		employeeId: uuid('employee_id').references(() => employees.id, {
+			onDelete: 'cascade',
+		}),
+		location: varchar('location', {length: 255}),
+		title: varchar('title', {length: 255}).notNull(),
+		notes: text('notes'),
+		fileStorageId: varchar('file_storage_id', {length: 500}).notNull(),
+		fileName: varchar('file_name', {length: 255}).notNull(),
+		fileSize: integer('file_size').notNull(),
+		contentType: varchar('content_type', {length: 100}).notNull(),
+		uploadedBy: varchar('uploaded_by', {length: 255}).notNull(),
+		uploadedAt: timestamp('uploaded_at').notNull().defaultNow(),
+		archivedAt: timestamp('archived_at'),
+		archivedBy: varchar('archived_by', {length: 255})
+	},
+	(table) => ({
+		employeeIdIdx: index('staff_documents_employee_id_idx').on(table.employeeId),
+		locationIdx: index('staff_documents_location_idx').on(table.location),
+		categoryIdx: index('staff_documents_category_idx').on(table.category),
+		filedUnderOneCheck: check(
+			'staff_documents_filed_under_one_check',
+			sql`(${table.employeeId} IS NULL) <> (${table.location} IS NULL)`
+		)
+	})
+);
+
 // Compliance Reminder Templates Table
 export const complianceReminderTemplates = pgTable(
 	'compliance_reminder_templates',

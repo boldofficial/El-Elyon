@@ -11,6 +11,7 @@ export const ADMIN_PRIVILEGES = [
 	'manage_guardian_checklists',
 	'manage_data_cleanup',
 	'manage_settings',
+	'view_staff_documents',
 ] as const;
 
 export type AdminPrivilege = (typeof ADMIN_PRIVILEGES)[number];
@@ -28,6 +29,7 @@ export const ADMIN_PRIVILEGE_LABELS: Record<AdminPrivilege, string> = {
 	manage_guardian_checklists: 'Manage Guardian Checklists',
 	manage_data_cleanup: 'Run Data Cleanup',
 	manage_settings: 'Manage Settings',
+	view_staff_documents: 'View Staff Documents (own locations)',
 };
 
 export function isAdminPrivilege(value: unknown): value is AdminPrivilege {
