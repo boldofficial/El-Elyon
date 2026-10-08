@@ -69,6 +69,11 @@ const NAV_SECTIONS = [
 		icon: '🛂',
 	},
 	{
+		key: 'staff-documents',
+		label: 'Staff Documents',
+		icon: '🗂️',
+	},
+	{
 		key: 'data-cleanup',
 		label: 'Data Cleanup',
 		icon: '🧹',

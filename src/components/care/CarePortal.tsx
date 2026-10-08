@@ -38,6 +38,7 @@ import {DataCleanupWorkspace} from '../admin/DataCleanupWorkspace';
 import SettingsWorkspace from '../admin/SettingsWorkspace';
 import AdminCareLogsWorkspace from '../admin/CareLogsWorkspace';
 import CarbLogsOverview from '../admin/CarbLogsOverview';
+import StaffDocumentsWorkspace from '../shared/StaffDocumentsWorkspace';
 
 type AdminPrivilege =
 	| 'manage_employees'
@@ -51,7 +52,8 @@ type AdminPrivilege =
 	| 'view_care_logs'
 	| 'manage_guardian_checklists'
 	| 'manage_data_cleanup'
-	| 'manage_settings';
+	| 'manage_settings'
+	| 'view_staff_documents';
 
 const PRIVILEGE_TO_VIEW: Record<AdminPrivilege, string> = {
 	manage_employees: 'manage-people',
@@ -66,6 +68,7 @@ const PRIVILEGE_TO_VIEW: Record<AdminPrivilege, string> = {
 	manage_guardian_checklists: 'manage-guardian-checklists',
 	manage_data_cleanup: 'manage-data-cleanup',
 	manage_settings: 'manage-settings',
+	view_staff_documents: 'staff-documents',
 };
 
 const MANAGEMENT_VIEW_LABELS: Record<string, {label: string; icon: string; description: string}> = {
@@ -109,6 +112,11 @@ const MANAGEMENT_VIEW_LABELS: Record<string, {label: string; icon: string; descr
 		icon: '🔐',
 		description: 'System settings',
 	},
+	'staff-documents': {
+		label: 'Staff Documents',
+		icon: '🗂️',
+		description: 'Personnel files for inspectors',
+	},
 };
 
 export default function CarePortal() {
@@ -121,6 +129,12 @@ export default function CarePortal() {
 	const delegatedManagementViews = Array.from(
 		new Set(
 			adminPrivileges
+				// Staff documents are supervisor-only even when granted to staff
+				// by mistake; requireStaffDocumentViewer enforces the same rule.
+				.filter(
+					(privilege) =>
+						privilege !== 'view_staff_documents' || sessionInfo?.role === 'supervisor'
+				)
 				.map((privilege) => PRIVILEGE_TO_VIEW[privilege])
 				.filter((viewId) => Boolean(MANAGEMENT_VIEW_LABELS[viewId]))
 		)
@@ -481,6 +495,10 @@ export default function CarePortal() {
 				return <DataCleanupWorkspace />;
 			case 'manage-settings':
 				return <SettingsWorkspace />;
+			// The server re-checks role + privilege + location on every request;
+			// this only decides which nav items render.
+			case 'staff-documents':
+				return <StaffDocumentsWorkspace />;
 			case 'team':
 				return isSupervisor ? (
 					<SupervisorTeamWorkspace />
