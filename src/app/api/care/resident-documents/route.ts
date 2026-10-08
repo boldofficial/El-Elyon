@@ -1,10 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireCareAccess, residentInScope } from '@/lib/db-helpers';
+import { AccessDeniedError, logAudit, requireCareAccess, residentInScope } from '@/lib/db-helpers';
 import { db } from '../../../../../db';
 import { residentDocuments, residents, ispFiles, fireEvac } from '../../../../../db/schema';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { eq, desc, and, inArray, sql, SQL } from 'drizzle-orm';
 import { searchCondition, offsetSlice } from '@/db/query-helpers';
+
+// /api/uploads keys every object as `${fileType}/...`, and the resident
+// documents form uploads with fileType 'resident-documents'. A row pointing
+// anywhere else (an HR file, an incident attachment) was not produced by that
+// flow, so it is refused rather than recorded against a resident.
+const RESIDENT_DOCUMENTS_KEY_PREFIX = 'resident-documents/';
+
+function isResidentDocumentKey(fileStorageId: unknown): boolean {
+  return (
+    typeof fileStorageId === 'string' &&
+    fileStorageId.startsWith(RESIDENT_DOCUMENTS_KEY_PREFIX) &&
+    fileStorageId.length > RESIDENT_DOCUMENTS_KEY_PREFIX.length &&
+    !fileStorageId.split('/').includes('..')
+  );
+}
+
+function accessDenied() {
+  return NextResponse.json({ error: 'Access denied' }, { status: 403 });
+}
 
 // GET all documents or filtered by residentId
 export async function GET(req: NextRequest) {
@@ -177,6 +196,7 @@ export async function GET(req: NextRequest) {
     response.headers.set('X-Has-More', String(hasMore));
     return response;
   } catch (error: any) {
+    if (error instanceof AccessDeniedError) return accessDenied();
     console.error('Error fetching documents:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to fetch documents' },
@@ -192,6 +212,7 @@ export async function POST(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const userRole = await requireCareAccess(user.id);
 
     const body = await req.json();
     const {
@@ -209,6 +230,17 @@ export async function POST(req: NextRequest) {
     if (!residentId || !title || !fileStorageId || !fileName) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
+    if (!isResidentDocumentKey(fileStorageId)) {
+      return NextResponse.json({ error: 'Invalid file reference' }, { status: 400 });
+    }
+
+    const allowed = await residentInScope({
+      clerkUserId: user.id,
+      userRole,
+      residentId,
+      auditDetail: 'resident_documents_create_cross_location',
+    });
+    if (!allowed) return accessDenied();
 
     const userName = `${user.firstName} ${user.lastName}`;
 
@@ -226,6 +258,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(newDoc);
   } catch (error: any) {
+    if (error instanceof AccessDeniedError) return accessDenied();
     console.error('Error creating document:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to create document' },
@@ -235,12 +268,17 @@ export async function POST(req: NextRequest) {
 }
 
 // DELETE document
+//
+// Any care role may delete a document for a resident in one of their assigned
+// locations (the resident documents tab shows Delete to every care role). The
+// document's resident is looked up server-side; the client only names the row.
 export async function DELETE(req: NextRequest) {
   try {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const userRole = await requireCareAccess(userId);
 
     const body = await req.json();
     const { documentId } = body;
@@ -249,10 +287,40 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Document ID required' }, { status: 400 });
     }
 
+    const doc = await db.query.residentDocuments.findFirst({
+      where: eq(residentDocuments.id, documentId),
+      columns: { residentId: true },
+    });
+
+    if (!doc) {
+      // Same rule as residentInScope: a non-admin must not be able to tell an
+      // id that does not exist from one in another location.
+      if (userRole.role === 'admin') {
+        return NextResponse.json({ error: 'Document not found' }, { status: 404 });
+      }
+      await logAudit({
+        clerkUserId: userId,
+        event: 'access_denied',
+        details: `resident_documents_delete_missing_${documentId}`,
+        deviceId: 'system',
+        location: '',
+      });
+      return accessDenied();
+    }
+
+    const allowed = await residentInScope({
+      clerkUserId: userId,
+      userRole,
+      residentId: doc.residentId,
+      auditDetail: 'resident_documents_delete_cross_location',
+    });
+    if (!allowed) return accessDenied();
+
     await db.delete(residentDocuments).where(eq(residentDocuments.id, documentId));
 
     return NextResponse.json({ success: true });
   } catch (error: any) {
+    if (error instanceof AccessDeniedError) return accessDenied();
     console.error('Error deleting document:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to delete document' },
