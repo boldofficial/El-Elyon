@@ -1,12 +1,15 @@
 'use client';
 
 import React from 'react';
+import {
+    CARE_LOG_EDIT_WINDOW_DAYS,
+    formatLoggedForDate,
+    isWithinCareLogEditWindow,
+} from '@/lib/care-log-policy';
 
 interface SharedLogsTableProps {
     logs: any[];
 }
-
-const EDIT_WINDOW_MS = 60 * 60 * 1000;
 
 export const formatLogContent = (content: string, template: string | undefined, allTemplates: any[] = []) => {
     // Handle empty or invalid content
@@ -93,13 +96,6 @@ function getEditableLogContent(content: string | null | undefined) {
     }
 
     return content;
-}
-
-function isWithinEditWindow(createdAt: string | Date | null | undefined) {
-    if (!createdAt) return false;
-    const created = new Date(createdAt).getTime();
-    if (Number.isNaN(created)) return false;
-    return Date.now() - created <= EDIT_WINDOW_MS;
 }
 
 export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
@@ -252,7 +248,8 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
                     const isEditing = editingId === displayLog.id;
                     const canEdit =
                         currentUserId === displayLog.authorId &&
-                        isWithinEditWindow(displayLog.createdAt);
+                        isWithinCareLogEditWindow(displayLog.createdAt);
+                    const isLateEntry = !!displayLog.loggedForDate;
                     const visibleActivities = activitiesById[displayLog.id] || displayLog.activities || [];
                     return (
                         <div 
@@ -266,7 +263,16 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
                                 <div className="flex-1 min-w-0 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
                                     {/* Date */}
                                     <div className="md:col-span-3 text-sm text-gray-500">
-                                        {new Date(displayLog.createdAt).toLocaleString()}
+                                        {isLateEntry ? (
+                                            <>
+                                                <div>For {formatLoggedForDate(displayLog.loggedForDate)}</div>
+                                                <span className="mt-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-900">
+                                                    Late entry
+                                                </span>
+                                            </>
+                                        ) : (
+                                            new Date(displayLog.createdAt).toLocaleString()
+                                        )}
                                     </div>
                                     
                                     {/* Resident */}
@@ -429,6 +435,20 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
                                                         </button>
                                                     )}
                                                 </div>
+                                                {isLateEntry && (
+                                                    <div className="mb-3 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+                                                        <p className="font-semibold">Late entry</p>
+                                                        <p className="mt-1">
+                                                            For {formatLoggedForDate(displayLog.loggedForDate)}, entered{' '}
+                                                            {new Date(displayLog.createdAt).toLocaleString()}.
+                                                        </p>
+                                                        {displayLog.lateEntryReason && (
+                                                            <p className="mt-1 whitespace-pre-wrap">
+                                                                Reason: {displayLog.lateEntryReason}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
                                                 <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-sm">
                                                     <div className="flex justify-between">
                                                         <dt className="text-gray-500">Author:</dt>
@@ -445,12 +465,12 @@ export default function SharedLogsTable({ logs }: SharedLogsTableProps) {
                                                 </dl>
                                                 {canEdit && !isEditing && (
                                                     <p className="mt-3 text-xs text-gray-500">
-                                                        Editable for 1 hour after submission.
+                                                        Editable for {CARE_LOG_EDIT_WINDOW_DAYS} days after submission.
                                                     </p>
                                                 )}
                                                 {!canEdit && currentUserId === displayLog.authorId && (
                                                     <p className="mt-3 text-xs text-gray-500">
-                                                        The 1-hour edit window has closed.
+                                                        The {CARE_LOG_EDIT_WINDOW_DAYS}-day edit window has closed.
                                                     </p>
                                                 )}
                                                 {isEditing && (

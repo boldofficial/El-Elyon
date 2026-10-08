@@ -11,6 +11,8 @@ function entry(overrides: Partial<CareLogReportEntry> = {}): CareLogReportEntry 
 		residentName: 'Ada Lovelace',
 		loggedAt: '2026-09-15T14:05:00.000Z',
 		loggedDate: '2026-09-15',
+		loggedForDate: null,
+		lateEntryReason: null,
 		authorName: 'Jane Staff',
 		logType: 'daily_notes',
 		template: null,
@@ -130,4 +132,26 @@ test('an empty period says so explicitly instead of printing an empty table', ()
 	assert.match(html, /No activity logs were recorded/);
 	assert.doesNotMatch(html, /<table>/);
 	assert.match(html, /End of report &middot; 0 entries/);
+});
+
+test('a late entry is dated by the day it is for and says when it was really entered', () => {
+	const html = buildCareLogReportHtml(
+		report([
+			entry({
+				loggedAt: '2026-09-25T20:10:00.000Z',
+				loggedDate: '2026-09-20',
+				loggedForDate: '2026-09-20',
+				lateEntryReason: 'Forgot to log <before> clocking out',
+			}),
+		])
+	);
+	assert.match(html, /Sep 20, 2026<div class="late">LATE ENTRY<\/div>/);
+	// 20:10Z is 3:10 PM CDT.
+	assert.match(html, /Entered Sep 25, 2026, 3:10 PM/);
+	assert.match(html, /Late entry reason: Forgot to log &lt;before&gt; clocking out/);
+});
+
+test('an on-time entry carries no late-entry marker', () => {
+	const html = buildCareLogReportHtml(report([entry()]));
+	assert.doesNotMatch(html, /LATE ENTRY|Late entry reason/);
 });

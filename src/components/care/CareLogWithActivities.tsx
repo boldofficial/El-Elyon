@@ -4,6 +4,19 @@
 
 import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
+import {
+	LATE_ENTRY_MAX_DAYS,
+	LATE_ENTRY_REASON_MAX_LENGTH,
+	shiftDate,
+} from '@/lib/care-log-policy';
+
+// The browser's local date; only bounds the date picker. The server checks
+// the chosen day against the organization's timezone.
+function localToday(): string {
+	const now = new Date();
+	const pad = (n: number) => String(n).padStart(2, '0');
+	return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
 
 interface ActivityState {
 	id?: string; // For existing activities
@@ -61,6 +74,15 @@ export default function CareLogWithActivities({
 	const [currentLog, setCurrentLog] = useState<ResidentLog | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [residentConfirmed, setResidentConfirmed] = useState(false);
+	const [isLateEntry, setIsLateEntry] = useState(false);
+	const [loggedForDate, setLoggedForDate] = useState('');
+	const [lateEntryReason, setLateEntryReason] = useState('');
+
+	const resetLateEntry = () => {
+		setIsLateEntry(false);
+		setLoggedForDate('');
+		setLateEntryReason('');
+	};
 
 	const safeErrorMessage = async (res: Response) => {
 		try {
@@ -92,6 +114,7 @@ export default function CareLogWithActivities({
 		);
 		setGeneralNotes('');
 		setCurrentLog(null);
+		resetLateEntry();
 		setLoading(false);
 	}, [residentId]);
 
@@ -163,6 +186,11 @@ export default function CareLogWithActivities({
 			return;
 		}
 
+		if (isLateEntry && !loggedForDate) {
+			toast.error('Choose the day this log is for');
+			return;
+		}
+
 		setSubmitting(true);
 
 		try {
@@ -181,6 +209,7 @@ export default function CareLogWithActivities({
 						location,
 						shiftId,
 						// authorName, // This should be derived from clerkUserId in API
+						...(isLateEntry ? {loggedForDate, lateEntryReason} : {}),
 					}),
 				});
 				if (!logRes.ok) {
@@ -284,11 +313,16 @@ export default function CareLogWithActivities({
 			setGeneralNotes('');
 			setCurrentLog(null);
 			setResidentConfirmed(false);
+			resetLateEntry();
 			// Refresh activities to ensure all IDs are updated and state is consistent
 			if (onSuccess) onSuccess();
 		} catch (error) {
 			console.error('Error saving log:', error);
-			toast.error('Failed to save activity log');
+			toast.error(
+				error instanceof Error && error.message
+					? error.message
+					: 'Failed to save activity log'
+			);
 		} finally {
 			setSubmitting(false);
 		}
@@ -320,6 +354,59 @@ export default function CareLogWithActivities({
 					/>
 					<span>I confirm this activity log is for {residentName}.</span>
 				</label>
+			</div>
+
+			<div className="mb-6 rounded border border-amber-200 bg-amber-50 px-4 py-3">
+				<label className="flex items-start gap-3 text-sm text-amber-950">
+					<input
+						type="checkbox"
+						checked={isLateEntry}
+						onChange={(e) => {
+							if (e.target.checked) setIsLateEntry(true);
+							else resetLateEntry();
+						}}
+						className="mt-0.5 h-4 w-4 rounded border-amber-300"
+					/>
+					<span>
+						This log is for an earlier day I forgot to log (up to {LATE_ENTRY_MAX_DAYS} days back).
+					</span>
+				</label>
+				{isLateEntry && (
+					<div className="mt-3 space-y-3">
+						<div>
+							<label htmlFor="logged-for-date" className="block text-sm font-medium text-amber-950">
+								Day this log is for *
+							</label>
+							<input
+								id="logged-for-date"
+								type="date"
+								value={loggedForDate}
+								min={shiftDate(localToday(), -LATE_ENTRY_MAX_DAYS)}
+								max={shiftDate(localToday(), -1)}
+								onChange={(e) => setLoggedForDate(e.target.value)}
+								className="mt-1 border rounded px-3 py-2 text-sm"
+								required
+							/>
+						</div>
+						<div>
+							<label htmlFor="late-entry-reason" className="block text-sm font-medium text-amber-950">
+								Reason (optional)
+							</label>
+							<textarea
+								id="late-entry-reason"
+								value={lateEntryReason}
+								onChange={(e) => setLateEntryReason(e.target.value)}
+								maxLength={LATE_ENTRY_REASON_MAX_LENGTH}
+								rows={2}
+								placeholder="e.g. Forgot to log before clocking out"
+								className="mt-1 w-full border rounded px-3 py-2 text-sm"
+							/>
+						</div>
+						<p className="text-xs text-amber-900">
+							You must have worked a shift at this house that day. The log will be marked as a late entry and will show today as the day it was entered.
+						</p>
+					</div>
+				)}
 			</div>
 
 			<form onSubmit={handleSubmit} className="space-y-6">

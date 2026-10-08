@@ -24,10 +24,16 @@ export interface CareLogReportEntry {
 	id: string;
 	residentId: string;
 	residentName: string;
-	/** ISO instant the log was recorded. */
+	/** ISO instant the log was recorded (for a late entry, when it was typed in). */
 	loggedAt: string;
-	/** Calendar date (YYYY-MM-DD) of loggedAt in the report's timezone. */
+	/**
+	 * Day (YYYY-MM-DD) the entry belongs to: loggedForDate for a late entry,
+	 * otherwise the date of loggedAt in the report's timezone.
+	 */
 	loggedDate: string;
+	/** Set only on a late entry: the day the care happened. */
+	loggedForDate: string | null;
+	lateEntryReason: string | null;
 	authorName: string | null;
 	logType: string | null;
 	template: string | null;
@@ -43,7 +49,7 @@ export interface CareLogReport {
 	timeZone: string;
 	/** ISO instant the report data was read. */
 	generatedAt: string;
-	/** Sorted oldest first. */
+	/** Sorted by loggedDate, then loggedAt. */
 	entries: CareLogReportEntry[];
 }
 

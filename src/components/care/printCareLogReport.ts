@@ -10,6 +10,7 @@
 import {escapePrintHtml, printDocument} from '../shared/printDocument';
 import {formatLogContent} from './SharedLogsTable';
 import type {CareLogReport, CareLogReportEntry} from '@/lib/care-log-report';
+import {formatLoggedForDate} from '@/lib/care-log-policy';
 
 const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
 // Hands-and-heart mark cut from the brand artwork. (/logo.svg is a "LOGO" placeholder.)
@@ -24,7 +25,7 @@ export interface CareLogReportSection {
 /**
  * One section per resident, alphabetical, each in time order -- inspectors
  * review care resident by resident. Keyed by ID so two residents who share a
- * name are never merged. `entries` arrive sorted oldest first.
+ * name are never merged. `entries` arrive sorted by day, then entry time.
  */
 export function groupCareLogEntries(
 	entries: CareLogReportEntry[]
@@ -88,11 +89,22 @@ function entryRowHtml(
 	showResident: boolean
 ): string {
 	const notes = formatLogContent(entry.content ?? '', entry.template ?? undefined, []);
+	// A late entry is dated by the day it is for, and says plainly when it was
+	// really written, so the reader never has to infer it from timestamps.
+	const when = entry.loggedForDate
+		? `${escapePrintHtml(formatLoggedForDate(entry.loggedForDate))}<div class="late">LATE ENTRY</div><div class="entered">Entered ${escapePrintHtml(
+				formatDateTime(entry.loggedAt, timeZone)
+			)}</div>`
+		: escapePrintHtml(formatDateTime(entry.loggedAt, timeZone));
+	const reason =
+		entry.loggedForDate && entry.lateEntryReason
+			? `<div class="late-reason">Late entry reason: ${escapePrintHtml(entry.lateEntryReason)}</div>`
+			: '';
 	return `<tr>
-		<td class="when">${escapePrintHtml(formatDateTime(entry.loggedAt, timeZone))}</td>
+		<td class="when">${when}</td>
 		${showResident ? `<td class="resident">${escapePrintHtml(entry.residentName)}</td>` : ''}
 		<td class="staff">${escapePrintHtml(entry.authorName ?? '—')}</td>
-		<td class="notes"><div>${escapePrintHtml(notes)}</div>${activitiesHtml(entry)}</td>
+		<td class="notes">${reason}<div>${escapePrintHtml(notes)}</div>${activitiesHtml(entry)}</td>
 	</tr>`;
 }
 
@@ -165,6 +177,9 @@ export function buildCareLogReportHtml(report: CareLogReport): string {
 		.notes div { white-space: pre-wrap; }
 		.activities { margin: 1mm 0 0; padding: 0; list-style: none; font-size: 7.5pt; color: #222; }
 		.activities .mark { display: inline-block; width: 3.5mm; font-weight: 700; }
+		.late { margin-top: 0.8mm; font-weight: 700; letter-spacing: 0.2pt; }
+		.entered { font-size: 7.5pt; color: #333; }
+		.notes .late-reason { margin-bottom: 1mm; font-style: italic; white-space: pre-wrap; }
 		.empty { margin: 8mm 0; text-align: center; font-size: 10pt; }
 		.footer { margin-top: 4mm; font-size: 7.5pt; color: #444; }
 	</style>

@@ -4,8 +4,10 @@ import {and, eq} from 'drizzle-orm';
 import {db} from '@/db/index';
 import {residentLogActivities, residentLogs} from '@/db/schema';
 import {requireCareAccess, logAudit} from '@/lib/db-helpers';
-
-const EDIT_WINDOW_MS = 60 * 60 * 1000;
+import {
+	CARE_LOG_EDIT_WINDOW_DAYS,
+	isWithinCareLogEditWindow,
+} from '@/lib/care-log-policy';
 
 type EditableActivity = {
 	id?: string;
@@ -62,9 +64,9 @@ export async function PATCH(
 		}
 
 		const createdAt = existingLog.createdAt || existingLog.timestamp;
-		if (!createdAt || Date.now() - createdAt.getTime() > EDIT_WINDOW_MS) {
+		if (!isWithinCareLogEditWindow(createdAt)) {
 			return NextResponse.json(
-				{error: 'Logs can only be edited within 1 hour of submission'},
+				{error: `Logs can only be edited within ${CARE_LOG_EDIT_WINDOW_DAYS} days of submission`},
 				{status: 403}
 			);
 		}
