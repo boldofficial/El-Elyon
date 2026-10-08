@@ -2,8 +2,15 @@
 
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {logAudit} from '@/lib/db-helpers';
+import {
+	AccessDeniedError,
+	getUserRoleDoc,
+	logAudit,
+	requireAdminAccess,
+	requireCareAccess,
+} from '@/lib/db-helpers';
 import {internalServerError} from '@/lib/api-errors';
+import {canReadUpload, canUploadAs, isStaffDocumentKey} from '@/lib/upload-access';
 import {
 	uploadFile,
 	generateFileKey,
@@ -19,12 +26,27 @@ export async function POST(request: Request) {
 	}
 
 	try {
+		const userRole = await requireCareAccess(userId);
+
 		const formData = await request.formData();
 		const file = formData.get('file') as File;
-		const fileType = formData.get('fileType') as string; // 'hr_doc', 'incident_attachment', etc.
+		const fileType = formData.get('fileType') as string; // 'isp-files', 'tb_test', etc.
 
 		if (!file) {
 			return NextResponse.json({error: 'No file provided'}, {status: 400});
+		}
+
+		// fileType becomes the key prefix, so it is checked against the roles
+		// allowed to write that kind of file (see UPLOAD_PREFIX_ROLES).
+		if (!canUploadAs(userRole.role, fileType)) {
+			await logAudit({
+				clerkUserId: userId,
+				event: 'access_denied',
+				details: `uploads_write_${fileType}_actual_${userRole.role}`,
+				deviceId: 'system',
+				location: '',
+			});
+			return NextResponse.json({error: 'Access denied'}, {status: 403});
 		}
 
 		// Validate file size (10MB max)
@@ -53,7 +75,7 @@ export async function POST(request: Request) {
 		}
 
 		// Generate unique key for S3
-		const fileKey = generateFileKey(fileType || 'general', file.name);
+		const fileKey = generateFileKey(fileType, file.name);
 
 		// Convert file to buffer
 		const bytes = await file.arrayBuffer();
@@ -81,6 +103,9 @@ export async function POST(request: Request) {
 			uploadedAt: new Date().toISOString(),
 		});
 	} catch (error) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: 'Access denied'}, {status: 403});
+		}
 		return internalServerError(error, 'UploadFile');
 	}
 }
@@ -99,6 +124,15 @@ export async function GET(request: Request) {
 
 		if (!fileId) {
 			return NextResponse.json({error: 'Missing fileId'}, {status: 400});
+		}
+
+		const allowed = await canReadUpload({
+			clerkUserId: userId,
+			userRole: await getUserRoleDoc(userId),
+			fileKey: fileId,
+		});
+		if (!allowed) {
+			return NextResponse.json({error: 'Access denied'}, {status: 403});
 		}
 
 		// Generate presigned URL
@@ -123,11 +157,25 @@ export async function DELETE(request: Request) {
 	}
 
 	try {
+		// Only the admin HR screen deletes through this route.
+		await requireAdminAccess(userId);
+
 		const {searchParams} = new URL(request.url);
 		const fileId = searchParams.get('fileId'); // S3 Key
 
 		if (!fileId) {
 			return NextResponse.json({error: 'Missing fileId'}, {status: 400});
+		}
+
+		if (isStaffDocumentKey(fileId)) {
+			await logAudit({
+				clerkUserId: userId,
+				event: 'access_denied',
+				details: `uploads_delete_staff_document_${fileId}`,
+				deviceId: 'system',
+				location: '',
+			});
+			return NextResponse.json({error: 'Access denied'}, {status: 403});
 		}
 
 		// Delete from S3
@@ -144,6 +192,9 @@ export async function DELETE(request: Request) {
 
 		return NextResponse.json({success: true, message: 'File deleted'});
 	} catch (error) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: 'Access denied'}, {status: 403});
+		}
 		return internalServerError(error, 'DeleteFile');
 	}
 }
