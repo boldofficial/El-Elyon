@@ -81,14 +81,16 @@ export function lateEntryDateError(loggedForDate: unknown, today: string): strin
 		return 'Choose the day this log is for';
 	}
 
-	// TODO(late-entry window): decide which days are allowed, using
-	// daysBetween(loggedForDate, today) and LATE_ENTRY_MAX_DAYS.
-	//   - Today or a future day is never a late entry; refuse it.
-	//   - Settle what "within two weeks" means at the far edge: on Sept 30,
-	//     is Sept 16 (exactly 14 days back) still allowed?
-	// Return a short, plain message the staff member will read on refusal.
-	// Until this is written every late entry is refused (fail closed).
-	return 'Late entries are not available yet';
+	// 1 = yesterday. Counting back from today, day LATE_ENTRY_MAX_DAYS is the
+	// last allowed day: on Sept 30, Sept 16 (day 14) is allowed, Sept 15 is not.
+	const daysBack = daysBetween(loggedForDate, today);
+	if (daysBack < 1) {
+		return 'A late entry must be for an earlier day. For today, log it normally.';
+	}
+	if (daysBack > LATE_ENTRY_MAX_DAYS) {
+		return `Late entries can only go back ${LATE_ENTRY_MAX_DAYS} days.`;
+	}
+	return null;
 }
 
 /** "Sep 20, 2026" for a YYYY-MM-DD day, independent of the viewer's timezone. */

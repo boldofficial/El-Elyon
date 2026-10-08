@@ -54,6 +54,8 @@ test('today and future days are not late entries', () => {
 	assert.notEqual(lateEntryDateError('2026-10-01', TODAY), null);
 });
 
-test('a day well past the two-week window is refused', () => {
+test('day 14 is the last allowed day; day 15 is refused', () => {
+	assert.equal(lateEntryDateError('2026-09-16', TODAY), null);
+	assert.notEqual(lateEntryDateError('2026-09-15', TODAY), null);
 	assert.notEqual(lateEntryDateError('2026-09-01', TODAY), null);
 });
