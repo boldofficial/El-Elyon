@@ -10,7 +10,7 @@
 
 import {db} from '../index';
 import {employees, locations, residentLogs} from '../schema';
-import {and, eq, gte, inArray, lt, sql} from 'drizzle-orm';
+import {and, between, eq, gte, inArray, isNotNull, isNull, lt, or, sql} from 'drizzle-orm';
 import {listLocationAliases} from './life-safety';
 import {getOperationalTimeZone} from './care';
 import {computeOperationalDate} from '@/lib/operational-time';
@@ -55,11 +55,21 @@ export async function getCareLogReport(
 	const {start, endExclusive} = reportWindowUtc(range, timeZone);
 	const loggedAt = sql`coalesce(${residentLogs.timestamp}, ${residentLogs.createdAt})`;
 
+	// A late entry belongs to the day it is for, not the day it was typed in.
 	const logs = await db.query.residentLogs.findMany({
 		where: and(
 			inArray(residentLogs.location, locationNames),
-			gte(loggedAt, start),
-			lt(loggedAt, endExclusive)
+			or(
+				and(
+					isNull(residentLogs.loggedForDate),
+					gte(loggedAt, start),
+					lt(loggedAt, endExclusive)
+				),
+				and(
+					isNotNull(residentLogs.loggedForDate),
+					between(residentLogs.loggedForDate, range.from, range.to)
+				)
+			)
 		),
 		limit: MAX_REPORT_ENTRIES + 1,
 		with: {
@@ -103,7 +113,9 @@ export async function getCareLogReport(
 				residentId: log.residentId,
 				residentName: log.resident?.name ?? 'Unknown resident',
 				loggedAt: at.toISOString(),
-				loggedDate: computeOperationalDate(at, timeZone),
+				loggedDate: log.loggedForDate ?? computeOperationalDate(at, timeZone),
+				loggedForDate: log.loggedForDate,
+				lateEntryReason: log.lateEntryReason,
 				authorName:
 					log.authorName ||
 					(log.authorId ? authorNames.get(log.authorId) : undefined) ||
@@ -118,7 +130,12 @@ export async function getCareLogReport(
 				})),
 			};
 		})
-		.sort((a, b) => a.loggedAt.localeCompare(b.loggedAt) || a.id.localeCompare(b.id));
+		.sort(
+			(a, b) =>
+				a.loggedDate.localeCompare(b.loggedDate) ||
+				a.loggedAt.localeCompare(b.loggedAt) ||
+				a.id.localeCompare(b.id)
+		);
 
 	return {
 		location: location.name,

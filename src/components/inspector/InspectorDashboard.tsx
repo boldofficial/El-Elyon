@@ -10,6 +10,7 @@ import {toast} from 'sonner';
 import SharedIncidentsAccordion from '@/components/care/SharedIncidentsAccordion';
 import CareLogReportPrintBar from '@/components/care/CareLogReportPrintBar';
 import {INSPECTOR_RECENT_LOG_LIMIT} from '@/lib/care-log-report';
+import {formatLoggedForDate} from '@/lib/care-log-policy';
 import type {
 	InspectorFireDrillReport,
 	InspectorLifeSafetyData,
@@ -374,7 +375,9 @@ export default function InspectorDashboard() {
 								<SimpleTable
 									columns={['Date', 'Resident', 'Type', 'Author', 'Notes']}
 									rows={data.logs.map((l) => [
-										new Date(l.timestamp || l.createdAt).toLocaleString(),
+										l.loggedForDate
+											? `${formatLoggedForDate(l.loggedForDate)} (late entry, entered ${new Date(l.timestamp || l.createdAt).toLocaleString()}${l.lateEntryReason ? `; reason: ${l.lateEntryReason}` : ''})`
+											: new Date(l.timestamp || l.createdAt).toLocaleString(),
 										residentName(l.residentId),
 										l.logType || '—',
 										l.authorName || l.createdBy || '—',

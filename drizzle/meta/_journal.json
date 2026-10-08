@@ -148,6 +148,13 @@
       "when": 1791419261081,
       "tag": "0020_add_staff_documents",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1791468394741,
+      "tag": "0021_add_resident_log_late_entry",
+      "breakpoints": true
     }
   ]
 }
