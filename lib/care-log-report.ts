@@ -127,11 +127,17 @@ function zoneOffsetMs(instant: Date, timeZone: string): number {
 
 /** The UTC instant at which `isoDate` begins (local midnight) in `timeZone`. */
 export function localDayStartUtc(isoDate: string, timeZone: string): Date {
+	return localDateTimeUtc(isoDate, '00:00', timeZone);
+}
+
+/** The UTC instant of wall-clock `time` (`HH:MM`) on `isoDate` in `timeZone`. */
+export function localDateTimeUtc(isoDate: string, time: string, timeZone: string): Date {
 	const [y, m, d] = isoDate.split('-').map(Number);
-	const guess = Date.UTC(y, m - 1, d);
+	const [hours, minutes] = time.split(':').map(Number);
+	const guess = Date.UTC(y, m - 1, d, hours, minutes);
 	const first = guess - zoneOffsetMs(new Date(guess), timeZone);
-	// Re-check at the candidate: a DST change between UTC midnight and local
-	// midnight shifts the offset by an hour.
+	// Re-check at the candidate: a DST change between the UTC guess and the
+	// local time shifts the offset by an hour.
 	const second = guess - zoneOffsetMs(new Date(first), timeZone);
 	return new Date(second);
 }

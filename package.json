@@ -17,6 +17,7 @@
 		"test:idle-timeout": "tsx --test lib/idle-timeout.test.ts",
 		"test:staff-documents": "tsx --test lib/staff-documents.test.ts",
 		"test:employee-access": "node --experimental-test-module-mocks --import tsx --test lib/employee-access.test.ts \"src/app/api/admin/employees/[[]id[]]/route.test.ts\"",
+		"test:missed-shift": "tsx --test lib/missed-shift.test.ts lib/care-log-report.test.ts src/app/api/supervisor/missed-shifts/route.test.ts",
 		"test:query-helpers": "tsx --test db/query-helpers.test.ts",
 		"test:resident-status": "tsx --test lib/resident-status.test.ts",
 		"water-temperature:cutover-report": "tsx scripts/water-temperature-rollout-check.ts pre-cutover",

@@ -2,6 +2,7 @@
 
 import React, {useEffect, useMemo, useState} from "react";
 import SharedLogsTable from "@/components/care/SharedLogsTable";
+import RecordMissedShiftForm from "@/components/supervisor/RecordMissedShiftForm";
 
 interface ShiftRecord {
   shiftId: string;
@@ -11,6 +12,9 @@ interface ShiftRecord {
   location: string;
   clockInTime?: string;
   clockOutTime?: string | null;
+  /** Set when a supervisor recorded the shift after a missed clock-in. */
+  enteredByName?: string | null;
+  enteredAt?: string | null;
   durationMs: number;
   logCount: number;
   activityCount: number;
@@ -27,6 +31,8 @@ export default function SupervisorShiftHistory() {
   const [selectedStaff, setSelectedStaff] = useState<string>("all");
   const [dateRange, setDateRange] = useState({from: "", to: ""});
   const [expandedShiftId, setExpandedShiftId] = useState<string | null>(null);
+  const [showMissedShiftForm, setShowMissedShiftForm] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     async function bootstrap() {
@@ -69,7 +75,7 @@ export default function SupervisorShiftHistory() {
       }
     }
     loadShifts();
-  }, [dateRange, selectedLocation, selectedStaff]);
+  }, [dateRange, selectedLocation, selectedStaff, reloadKey]);
 
   const isAuthorized = userRole && ["admin", "supervisor"].includes(userRole.role);
 
@@ -110,7 +116,26 @@ export default function SupervisorShiftHistory() {
             {selectedLocation === "all" ? "All managed locations" : selectedLocation}
           </p>
         </div>
+        {!showMissedShiftForm && (
+          <button
+            type="button"
+            onClick={() => setShowMissedShiftForm(true)}
+            className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Record missed shift
+          </button>
+        )}
       </div>
+
+      {showMissedShiftForm && (
+        <RecordMissedShiftForm
+          onCancel={() => setShowMissedShiftForm(false)}
+          onRecorded={() => {
+            setShowMissedShiftForm(false);
+            setReloadKey((key) => key + 1);
+          }}
+        />
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border p-6">
         <h3 className="text-lg font-semibold mb-4">Filters</h3>
@@ -207,7 +232,17 @@ export default function SupervisorShiftHistory() {
                                 <div className="text-gray-500 text-xs">{shift.staffEmail}</div>
                               </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.location}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDateTime(shift.clockInTime)}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                {formatDateTime(shift.clockInTime)}
+                                {shift.enteredByName && (
+                                  <div className="mt-1">
+                                    <span className="inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                                      Missed clock-in · recorded by {shift.enteredByName}
+                                      {shift.enteredAt ? ` on ${new Date(shift.enteredAt).toLocaleDateString()}` : ""}
+                                    </span>
+                                  </div>
+                                )}
+                              </td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{shift.clockOutTime ? formatDateTime(shift.clockOutTime) : "Still working"}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{formatDurationHours(shift.durationMs)}h</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">

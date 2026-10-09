@@ -89,6 +89,21 @@ export async function GET(req: NextRequest) {
 			}
 		}
 
+		// Names for shifts a supervisor recorded after a missed clock-in.
+		const enteredByIds = Array.from(
+			new Set(scopedShifts.map((row) => row.shift.enteredBy).filter(Boolean) as string[])
+		);
+		const enteredByNames = new Map<string, string>();
+		if (enteredByIds.length > 0) {
+			const enteredByRows = await db
+				.select({clerkUserId: employees.clerkUserId, name: employees.name})
+				.from(employees)
+				.where(inArray(employees.clerkUserId, enteredByIds));
+			for (const row of enteredByRows) {
+				if (row.clerkUserId) enteredByNames.set(row.clerkUserId, row.name || 'Unknown');
+			}
+		}
+
 		const response = scopedShifts.map((row) => {
 			const shiftId = row.shift.id;
 			return {
@@ -99,6 +114,10 @@ export async function GET(req: NextRequest) {
 				location: row.shift.location,
 				clockInTime: row.shift.clockInTime,
 				clockOutTime: row.shift.clockOutTime,
+				enteredByName: row.shift.enteredBy
+					? enteredByNames.get(row.shift.enteredBy) || 'Unknown'
+					: null,
+				enteredAt: row.shift.enteredAt,
 				durationMs: row.shift.clockOutTime
 					? new Date(row.shift.clockOutTime).getTime() -
 					  new Date(row.shift.clockInTime).getTime()
