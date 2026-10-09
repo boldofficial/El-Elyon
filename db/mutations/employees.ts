@@ -29,8 +29,23 @@ import {
 	sendWelcomeEmailWithCredentials,
 } from '@/lib/emails/employee';
 import {auth} from '@clerk/nextjs/server';
-import {getUserRoleDoc, requireAdminAccess, requireAdminOrPrivilege, logAudit} from '@/lib/db-helpers'; // Import from db-helpers
+import {getUserRoleDoc, requireAdminAccess, requireAdminOrPrivilege, logAudit, AccessDeniedError} from '@/lib/db-helpers'; // Import from db-helpers
 import {checkForAdmins} from '../queries/roles';
+import {checkEmployeeCreate, checkEmployeeUpdate} from '@/lib/employee-access';
+
+/**
+ * Set only by POST /api/admin/force-create after it has checked
+ * ADMIN_BOOTSTRAP_SECRET: skips the caller's privilege check so the bootstrap
+ * can make its own caller an admin. Never derive it from a request body.
+ */
+export type EmployeeMutationOptions = {authorizedByBootstrapSecret?: true};
+
+// Resolves when the caller is an admin or holds manage_employees, and says
+// which, so lib/employee-access can apply the admin-only rules.
+async function requireEmployeeManager(clerkUserId: string) {
+	const userRole = await requireAdminOrPrivilege(clerkUserId, 'manage_employees');
+	return {clerkUserId, isAdmin: userRole?.role?.toLowerCase() === 'admin'};
+}
 
 // Mutation: Accept invite by token (public for invite acceptance)
 export async function acceptInvite(token: string) {
@@ -141,9 +156,7 @@ export async function linkUserToEmployee(
 	return {success: true, role: roleToAssign, locations: locationsToAssign};
 }
 
-// Mutation: Create employee with Clerk account (admin only, OR self-sync, OR first admin)
-// ✅ FIX: Skip admin check if this is the first admin being created OR if user is syncing themselves
-
+// Mutation: Create employee with Clerk account (admin or manage_employees, OR first admin)
 export async function createEmployee(
 	args: {
 		name: string;
@@ -152,24 +165,21 @@ export async function createEmployee(
 		locations: string[];
 		assignedDeviceId?: string;
 	},
-	adminClerkUserId: string
+	adminClerkUserId: string,
+	options: EmployeeMutationOptions = {}
 ) {
 	// ✅ CRITICAL FIX: Check if this is first admin BEFORE requiring admin access
 	const admins = await checkForAdmins();
 	const isFirstAdmin = admins.length === 0;
 
-	// ✅ FIX: Check if this is a self-sync (user creating their own employee record)
-	// This happens when a user logs in and their Clerk metadata has role/locations but no employee record exists
-	const clerkUser = await getClerkUser(adminClerkUserId);
-	const isSelfSync = clerkUser?.email === args.email;
-
-	// Only require admin access if NOT creating first admin AND NOT self-sync
-	if (!isFirstAdmin && !isSelfSync) {
-		await requireAdminOrPrivilege(adminClerkUserId, 'manage_employees');
-	} else if (isFirstAdmin) {
+	if (isFirstAdmin) {
 		console.log('🎖️  Creating first admin - skipping admin check');
-	} else if (isSelfSync) {
-		console.log('✅ Self-sync allowed - user creating their own employee record');
+	} else if (options.authorizedByBootstrapSecret) {
+		console.log('🚨 Bootstrap-secret create - skipping admin check');
+	} else {
+		const actor = await requireEmployeeManager(adminClerkUserId);
+		const decision = checkEmployeeCreate(actor, {role: args.role});
+		if (!decision.ok) throw new AccessDeniedError(decision.reason);
 	}
 
 	// Check if employee with this email already exists
@@ -385,7 +395,7 @@ export async function createEmployee(
 	};
 }
 
-// Mutation: Update employee (admin only, OR self-update during sync)
+// Mutation: Update employee (admin or manage_employees; see lib/employee-access)
 export async function updateEmployee(
 	args: {
 		employeeId: string;
@@ -403,23 +413,25 @@ export async function updateEmployee(
 		applicationFormFileId?: string;
 		personalBio?: string;
 	},
-	clerkUserId: string
+	clerkUserId: string,
+	options: EmployeeMutationOptions = {}
 ) {
 	const employee = await db.query.employees.findFirst({
 		where: eq(employees.id, args.employeeId),
 	});
 	if (!employee) throw new Error('Employee not found');
 
-	// ✅ CRITICAL FIX: Allow self-updates during sync (user updating their own record)
-	const isSelfUpdate = 
-		employee.clerkUserId === clerkUserId || 
-		employee.email === args.email || 
-		employee.workEmail === args.email;
-		
-	if (!isSelfUpdate) {
-		await requireAdminOrPrivilege(clerkUserId, 'manage_employees');
+	// No self-update exemption: matching on the caller's own record or on the
+	// submitted email let any signed-in user rewrite any employee's role.
+	if (options.authorizedByBootstrapSecret) {
+		console.log('🚨 Bootstrap-secret update - skipping admin check');
 	} else {
-		console.log('✅ Self-update allowed for user:', clerkUserId);
+		const actor = await requireEmployeeManager(clerkUserId);
+		const decision = checkEmployeeUpdate(actor, employee, {
+			role: args.role,
+			locations: args.locations,
+		});
+		if (!decision.ok) throw new AccessDeniedError(decision.reason);
 	}
 
 	await db

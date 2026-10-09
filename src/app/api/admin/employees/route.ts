@@ -3,6 +3,7 @@ import {auth} from '@clerk/nextjs/server';
 import {listEmployees, hasAdminUser, getEmployeeByEmail} from '@/db/queries/employees';
 import {createEmployee} from '@/db/mutations/employees';
 import {logAudit} from '@/db/mutations/audit';
+import {AccessDeniedError} from '@/lib/db-helpers';
 
 // GET /api/admin/employees - List all employees (Admin only)
 export async function GET(req: NextRequest) {
@@ -37,6 +38,9 @@ export async function POST(req: NextRequest) {
 		const result = await createEmployee({name, email, role, locations, assignedDeviceId}, userId);
 		return NextResponse.json(result);
 	} catch (error: any) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: error.message}, {status: 403});
+		}
 		console.error('Error creating employee:', error);
 		await logAudit({
 			clerkUserId: (await auth()).userId,
