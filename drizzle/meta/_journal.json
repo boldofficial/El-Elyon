@@ -155,6 +155,13 @@
       "when": 1791468394741,
       "tag": "0021_add_resident_log_late_entry",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1791575412177,
+      "tag": "0022_add_shift_manual_entry",
+      "breakpoints": true
     }
   ]
 }

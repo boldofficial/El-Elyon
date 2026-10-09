@@ -136,7 +136,7 @@ export async function POST(req: Request) {
 			if (!workedShift) {
 				return NextResponse.json(
 					{
-						error: `You have no shift on record at ${logLocation} on ${loggedForDate}. Ask a supervisor to correct your shift record first.`,
+						error: `You have no shift on record at ${logLocation} on ${loggedForDate}. If you forgot to clock in, ask a supervisor to record the missed shift first.`,
 					},
 					{status: 409}
 				);

@@ -211,7 +211,12 @@ export const shifts = pgTable(
 		operationalDate: date('operational_date', {mode: 'string'}),
 		operationalTimeZoneSnapshot: varchar('operational_time_zone_snapshot', {
 			length: 100
-		})
+		}),
+		// Set only on a shift a supervisor or admin recorded after the fact
+		// because the worker forgot to clock in (see lib/missed-shift.ts).
+		// Null on every real clock-in.
+		enteredBy: varchar('entered_by', {length: 255}),
+		enteredAt: timestamp('entered_at')
 	},
 	(table) => ({
 		clerkUserIdIdx: index('shifts_clerk_user_id_idx').on(table.clerkUserId),
