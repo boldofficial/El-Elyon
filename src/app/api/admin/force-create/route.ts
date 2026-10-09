@@ -64,7 +64,8 @@ export async function POST(req: Request) {
 					locations: existingEmployee.locations || [],
 					assignedDeviceId: undefined,
 				},
-				userId
+				userId,
+				{authorizedByBootstrapSecret: true}
 			);
 		} else {
 			console.log('📝 Creating new employee record as admin');
@@ -76,7 +77,8 @@ export async function POST(req: Request) {
 					locations: [],
 					assignedDeviceId: undefined,
 				},
-				userId
+				userId,
+				{authorizedByBootstrapSecret: true}
 			);
 		}
 
