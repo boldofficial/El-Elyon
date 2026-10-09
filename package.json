@@ -16,6 +16,7 @@
 		"test:care-log-report": "tsx --test lib/care-log-report.test.ts lib/care-log-policy.test.ts src/app/api/inspector/care-log-report/route.test.ts src/app/api/admin/care-log-report/route.test.ts src/components/care/printCareLogReport.test.ts",
 		"test:idle-timeout": "tsx --test lib/idle-timeout.test.ts",
 		"test:staff-documents": "tsx --test lib/staff-documents.test.ts",
+		"test:employee-access": "node --experimental-test-module-mocks --import tsx --test lib/employee-access.test.ts \"src/app/api/admin/employees/[[]id[]]/route.test.ts\"",
 		"test:query-helpers": "tsx --test db/query-helpers.test.ts",
 		"test:resident-status": "tsx --test lib/resident-status.test.ts",
 		"water-temperature:cutover-report": "tsx scripts/water-temperature-rollout-check.ts pre-cutover",

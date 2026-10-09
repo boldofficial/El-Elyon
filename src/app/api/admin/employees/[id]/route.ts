@@ -2,6 +2,7 @@ import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {updateEmployee, deleteEmployee} from '@/db/mutations/employees';
 import {logAudit} from '@/db/mutations/audit';
+import {AccessDeniedError} from '@/lib/db-helpers';
 
 // PUT /api/admin/employees/[id] - Update employee (Admin only)
 export async function PUT(
@@ -27,6 +28,9 @@ export async function PUT(
 		);
 		return NextResponse.json({success: true});
 	} catch (error: any) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: error.message}, {status: 403});
+		}
 		console.error('Error updating employee:', error);
 		await logAudit({
 			clerkUserId: (await auth()).userId,
