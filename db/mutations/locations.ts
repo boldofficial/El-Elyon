@@ -2,7 +2,12 @@
 
 import {randomUUID} from 'node:crypto';
 import {db} from '../index';
-import {locationLegacyNames, locations} from '../schema';
+import {
+	locationLegacyNames,
+	locations,
+	staffDocuments,
+	staffRosterEntries,
+} from '../schema';
 import {eq} from 'drizzle-orm';
 
 // ============================
@@ -59,6 +64,18 @@ export async function updateLocation(
 				{locationId, name: newName, createdAt: new Date()},
 			])
 			.onConflictDoNothing(),
+
+		// The Staff Directory files rosters and home documents by location
+		// name, so a rename carries them along (no-op when the name is
+		// unchanged).
+		db
+			.update(staffRosterEntries)
+			.set({location: newName})
+			.where(eq(staffRosterEntries.location, current.name)),
+		db
+			.update(staffDocuments)
+			.set({location: newName})
+			.where(eq(staffDocuments.location, current.name)),
 	]);
 
 	return updated;

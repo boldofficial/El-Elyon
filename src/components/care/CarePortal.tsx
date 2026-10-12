@@ -38,7 +38,7 @@ import {DataCleanupWorkspace} from '../admin/DataCleanupWorkspace';
 import SettingsWorkspace from '../admin/SettingsWorkspace';
 import AdminCareLogsWorkspace from '../admin/CareLogsWorkspace';
 import CarbLogsOverview from '../admin/CarbLogsOverview';
-import StaffDocumentsWorkspace from '../shared/StaffDocumentsWorkspace';
+import StaffDirectoryWorkspace from '../shared/StaffDirectoryWorkspace';
 
 type AdminPrivilege =
 	| 'manage_employees'
@@ -68,7 +68,7 @@ const PRIVILEGE_TO_VIEW: Record<AdminPrivilege, string> = {
 	manage_guardian_checklists: 'manage-guardian-checklists',
 	manage_data_cleanup: 'manage-data-cleanup',
 	manage_settings: 'manage-settings',
-	view_staff_documents: 'staff-documents',
+	view_staff_documents: 'staff-directory',
 };
 
 const MANAGEMENT_VIEW_LABELS: Record<string, {label: string; icon: string; description: string}> = {
@@ -112,8 +112,8 @@ const MANAGEMENT_VIEW_LABELS: Record<string, {label: string; icon: string; descr
 		icon: '🔐',
 		description: 'System settings',
 	},
-	'staff-documents': {
-		label: 'Staff Documents',
+	'staff-directory': {
+		label: 'Staff Directory',
 		icon: '🗂️',
 		description: 'Personnel files for inspectors',
 	},
@@ -497,8 +497,8 @@ export default function CarePortal() {
 				return <SettingsWorkspace />;
 			// The server re-checks role + privilege + location on every request;
 			// this only decides which nav items render.
-			case 'staff-documents':
-				return <StaffDocumentsWorkspace />;
+			case 'staff-directory':
+				return <StaffDirectoryWorkspace />;
 			case 'team':
 				return isSupervisor ? (
 					<SupervisorTeamWorkspace />

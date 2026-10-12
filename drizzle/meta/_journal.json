@@ -162,6 +162,13 @@
       "when": 1791575412177,
       "tag": "0022_add_shift_manual_entry",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791839336799,
+      "tag": "0023_add_staff_directory",
+      "breakpoints": true
     }
   ]
 }

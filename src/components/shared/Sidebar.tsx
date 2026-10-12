@@ -69,8 +69,8 @@ const NAV_SECTIONS = [
 		icon: '🛂',
 	},
 	{
-		key: 'staff-documents',
-		label: 'Staff Documents',
+		key: 'staff-directory',
+		label: 'Staff Directory',
 		icon: '🗂️',
 	},
 	{
