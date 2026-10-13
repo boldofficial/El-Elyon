@@ -44,11 +44,10 @@ test('states location, period, and total entry count in the header and footer', 
 	assert.match(html, /Times shown in America\/Chicago/);
 });
 
-test('prints the El Elyon emblem and name, never the placeholder logo', () => {
+test('prints the El Elyon company logo, never the placeholder logo', () => {
 	const html = buildCareLogReportHtml(report([entry()]));
-	assert.match(html, /<img src="\/el-elyon-emblem\.svg"/);
-	assert.match(html, /<span>EL ELYON PROPERTIES LLC<\/span>/);
-	assert.doesNotMatch(html, /logo\.svg/);
+	assert.match(html, /<img src="\/el-elyon-logo\.svg"/);
+	assert.doesNotMatch(html, /src="\/logo\.svg"/);
 });
 
 test('renders times in the report timezone, not UTC', () => {

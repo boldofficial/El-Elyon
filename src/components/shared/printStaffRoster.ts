@@ -22,7 +22,7 @@ export interface PrintableRoster {
 }
 
 // The company's full logo (name, tagline and phone), from the El Elyon
-// artwork. The other printouts still use the app's emblem.
+// artwork. (/logo.svg is a "LOGO" placeholder.)
 const LOGO_URL = '/el-elyon-logo.svg';
 
 // Calendar dates are stored as YYYY-MM-DD; show them without a timezone shift.

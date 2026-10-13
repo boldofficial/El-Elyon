@@ -19,7 +19,7 @@ import {ABOVE_115_ESCALATION_INSTRUCTIONS} from '../care/waterTemperatureEntryMo
 import {SAFE_MAX_F, SAFE_MIN_F} from '@/lib/water-temperature';
 
 const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
-const LOGO_URL = '/el-elyon-emblem.svg';
+const LOGO_URL = '/el-elyon-logo.svg';
 
 // ============================================================================
 // FORM COPY (transcribed from the supplied photograph)
@@ -539,9 +539,10 @@ function documentShell(args: {title: string; body: string}): string {
 		   budget is 8.5in minus 6mm padding = ~210mm: ~22mm masthead, ~7mm
 		   escalation footer, 9.5mm of table headers, and 31 body rows of
 		   5.5mm (170.5mm). */
-		.log-page { width: 11in; height: 8.5in; padding: 3mm 5mm; overflow: hidden; break-after: avoid; page-break-after: avoid; }
+		.log-page { width: 11in; height: 8.5in; padding: 3mm 5mm; overflow: hidden; break-after: avoid; page-break-after: avoid; position: relative; }
 		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 8pt; }
-		.brand-header img { width: 5mm; height: 5mm; object-fit: contain; }
+		/* The company logo sits in the corner beside the masthead so it adds no height. */
+		.brand-header img { position: absolute; top: 3mm; left: 5mm; height: 15mm; width: auto; }
 		h1 { margin: 0.8mm 0 0; text-align: center; font-size: 11pt; letter-spacing: 0.3pt; }
 		.safe-range { margin: 0.7mm 0 0; text-align: center; font-size: 8pt; font-weight: 700; }
 		.safe-range .range { color: #c0392b; }
