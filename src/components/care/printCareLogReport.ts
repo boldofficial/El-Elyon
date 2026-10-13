@@ -12,9 +12,9 @@ import {formatLogContent} from './SharedLogsTable';
 import type {CareLogReport, CareLogReportEntry} from '@/lib/care-log-report';
 import {formatLoggedForDate} from '@/lib/care-log-policy';
 
-const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
-// Hands-and-heart mark cut from the brand artwork. (/logo.svg is a "LOGO" placeholder.)
-const EMBLEM_URL = '/el-elyon-emblem.svg';
+// The company's full logo (name, tagline and phone), from the El Elyon
+// artwork. (/logo.svg is a "LOGO" placeholder.)
+const LOGO_URL = '/el-elyon-logo.svg';
 
 export interface CareLogReportSection {
 	/** Printed above the section's table; empty string for no heading. */
@@ -158,8 +158,8 @@ export function buildCareLogReportHtml(report: CareLogReport): string {
 		@page { size: Letter portrait; margin: 12mm; }
 		* { box-sizing: border-box; }
 		html, body { margin: 0; padding: 0; color: #111; background: #fff; font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2.5mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 10pt; color: #26499b; }
-		.brand-header img { height: 10mm; width: auto; }
+		.brand-header { text-align: center; }
+		.brand-header img { height: 30mm; width: auto; }
 		h1 { margin: 1.5mm 0 3mm; text-align: center; font-size: 13pt; letter-spacing: 0.3pt; }
 		h2 { margin: 5mm 0 1.5mm; font-size: 10pt; break-after: avoid; page-break-after: avoid; }
 		h2 .count { font-weight: 400; font-size: 8.5pt; color: #444; }
@@ -185,7 +185,7 @@ export function buildCareLogReportHtml(report: CareLogReport): string {
 	</style>
 </head>
 <body>
-	<div class="brand-header"><img src="${EMBLEM_URL}" alt="" /><span>${escapePrintHtml(ORGANIZATION_NAME)}</span></div>
+	<div class="brand-header"><img src="${LOGO_URL}" alt="El Elyon Supported Living Homes" /></div>
 	<h1>RESIDENT ACTIVITY LOG REPORT</h1>
 	<div class="meta">
 		<div>Location: <span>${escapePrintHtml(report.location)}</span></div>

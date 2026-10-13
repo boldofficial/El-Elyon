@@ -10,6 +10,7 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {toast} from 'sonner';
 import {
 	STAFF_DOCUMENT_CATEGORIES,
+	STAFF_DOCUMENT_UPLOAD_CATEGORIES,
 	STAFF_DOCUMENT_CATEGORY_LABELS,
 	STAFF_DOCUMENT_CATEGORY_SCOPE,
 	STAFF_DOCUMENT_MAX_BYTES,
@@ -300,7 +301,7 @@ function UploadForm({
 }) {
 	// On an employee's page only person categories make sense; on a home's
 	// page only home categories.
-	const categories = STAFF_DOCUMENT_CATEGORIES.filter((category) => {
+	const categories = STAFF_DOCUMENT_UPLOAD_CATEGORIES.filter((category) => {
 		const scope = STAFF_DOCUMENT_CATEGORY_SCOPE[category];
 		if (fixedEmployeeId) return scope !== 'location';
 		if (fixedLocation) return scope !== 'employee';

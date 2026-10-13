@@ -7,8 +7,7 @@
 import {escapePrintHtml, printDocument} from '../shared/printDocument';
 import {MEAL_SLOT_LABELS, type MealSlot} from '@/lib/carb-log';
 
-const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
-const LOGO_URL = '/el-elyon-emblem.svg';
+const LOGO_URL = '/el-elyon-logo.svg';
 const COLUMNS: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
 export interface CarbLogSheetEntry {
@@ -85,8 +84,9 @@ export function buildCarbLogSheetHtml(input: CarbLogSheetInput): string {
 		@page { size: Letter portrait; margin: 10mm; }
 		* { box-sizing: border-box; }
 		html, body { margin: 0; padding: 0; color: #111; background: #fff; font-family: Arial, Helvetica, sans-serif; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 9pt; }
-		.brand-header img { width: 6mm; height: 6mm; object-fit: contain; }
+		/* Sized so a 31-day month still fits one page. */
+		.brand-header { text-align: center; }
+		.brand-header img { height: 20mm; width: auto; }
 		h1 { margin: 1.5mm 0 0; text-align: center; font-size: 13pt; letter-spacing: 0.3pt; }
 		.meta { display: flex; justify-content: space-between; margin: 3mm 0 2mm; font-size: 9pt; }
 		.meta span { display: inline-block; min-width: 50mm; padding: 0 1.5mm; border-bottom: 0.3mm solid #333; }
@@ -103,7 +103,7 @@ export function buildCarbLogSheetHtml(input: CarbLogSheetInput): string {
 	</style>
 </head>
 <body>
-	<div class="brand-header"><img src="${LOGO_URL}" alt="" /><span>${escapePrintHtml(ORGANIZATION_NAME)}</span></div>
+	<div class="brand-header"><img src="${LOGO_URL}" alt="El Elyon Supported Living Homes" /></div>
 	<h1>CARBOHYDRATE INTAKE LOG</h1>
 	<div class="meta">
 		<div>RESIDENT: <span>${escapePrintHtml(input.residentName)}</span></div>

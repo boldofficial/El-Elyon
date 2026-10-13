@@ -46,6 +46,12 @@ export const STAFF_DOCUMENT_CATEGORY_SCOPE: Record<StaffDocumentCategory, StaffD
 	miscellaneous: 'either',
 };
 
+// The staff roster is printed from the Staff Directory now, so a scanned copy
+// is no longer uploaded. The category stays so older uploads still list.
+export const STAFF_DOCUMENT_UPLOAD_CATEGORIES: readonly StaffDocumentCategory[] = STAFF_DOCUMENT_CATEGORIES.filter(
+	(category) => category !== 'staff_roster'
+);
+
 export function isStaffDocumentCategory(value: unknown): value is StaffDocumentCategory {
 	return (
 		typeof value === 'string' &&
@@ -87,6 +93,9 @@ export function resolveStaffDocumentTarget(input: {
 		return {ok: false, error: 'Choose a document category'};
 	}
 	const category = input.category;
+	if (!STAFF_DOCUMENT_UPLOAD_CATEGORIES.includes(category)) {
+		return {ok: false, error: 'Staff rosters come from the Staff Directory now. Use "Download roster" on the home instead'};
+	}
 	const employeeId =
 		typeof input.employeeId === 'string' && input.employeeId.trim() ? input.employeeId.trim() : null;
 	const location =

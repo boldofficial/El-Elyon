@@ -11,6 +11,7 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {toast} from 'sonner';
 import StaffDocumentsWorkspace from './StaffDocumentsWorkspace';
+import {printStaffRoster} from './printStaffRoster';
 import {STAFF_SEX_LABELS, STAFF_SEX_OPTIONS} from '@/lib/staff-directory';
 
 type View =
@@ -251,6 +252,12 @@ function HomeView({
 		}
 	}
 
+	async function downloadRoster() {
+		if (!data) return;
+		const started = await printStaffRoster({home: data.home, roster: data.roster});
+		if (started) toast.info('Choose "Save as PDF" in the print window to download the roster');
+	}
+
 	return (
 		<div className="space-y-6">
 			<BackLink label="Staff Directory" onClick={onBack} />
@@ -268,8 +275,14 @@ function HomeView({
 					</div>
 
 					<section className="rounded-lg border border-gray-200 bg-white">
-						<div className="border-b border-gray-200 px-4 py-3">
+						<div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
 							<h3 className="font-semibold text-gray-900">Staff roster</h3>
+							<button
+								type="button"
+								onClick={() => void downloadRoster()}
+								className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+								Download roster
+							</button>
 						</div>
 						<div className="overflow-x-auto">
 							<table className="min-w-full divide-y divide-gray-200 text-sm">

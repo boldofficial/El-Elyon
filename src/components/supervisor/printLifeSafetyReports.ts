@@ -6,8 +6,7 @@ import {
 import {MAX_FIRE_DRILL_DURATION_MINUTES} from '@/lib/life-safety-reporting';
 import type {LifeSafetyEquipmentType} from '@/lib/life-safety-reporting';
 
-const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
-const LOGO_URL = '/el-elyon-emblem.svg';
+const LOGO_URL = '/el-elyon-logo.svg';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MAX_TEXT = 2_000;
 const MAX_STAFF = 24;
@@ -230,7 +229,7 @@ function fireDrillSection(
 }
 
 function brandHeader(): string {
-	return `<header class="brand-header"><img src="${LOGO_URL}" alt="" /><div>${ORGANIZATION_NAME}</div></header>`;
+	return `<header class="brand-header"><img src="${LOGO_URL}" alt="El Elyon Supported Living Homes" /></header>`;
 }
 
 function documentShell(args: {
@@ -251,8 +250,10 @@ function documentShell(args: {
 		@page { size: Letter ${args.orientation}; margin: 0; }
 		* { box-sizing: border-box; }
 		html, body { margin: 0; padding: 0; color: #111; background: #fff; font-family: Arial, Helvetica, sans-serif; }
-		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2.5mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; }
-		.brand-header img { width: 10mm; height: 10mm; object-fit: contain; }
+		/* Keeps the line the company name used to fill, so the form below doesn't move. */
+		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2.5mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; height: 1.15em; }
+		/* The company logo sits in the page corner so it adds no height to these fixed-size forms. */
+		.brand-header img { position: absolute; top: 6mm; left: 8mm; height: 20mm; width: auto; }
 		table { border-collapse: collapse; width: 100%; table-layout: fixed; }
 		th, td { overflow-wrap: anywhere; }
 		.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
@@ -396,9 +397,10 @@ function chunk<T>(values: T[], size: number): T[][] {
 }
 
 const inspectionStyles = `
-	.inspection-page { width: 8.5in; height: 11in; padding: 12mm 10mm 10mm; break-after: page; page-break-after: always; }
+	.inspection-page { position: relative; width: 8.5in; height: 11in; padding: 12mm 10mm 10mm; break-after: page; page-break-after: always; }
 	.inspection-page:last-child { break-after: auto; page-break-after: auto; }
 	.inspection-page .brand-header { font-size: 16pt; margin-bottom: 1.5mm; }
+	.inspection-page .brand-header img { top: 3mm; height: 16mm; }
 	.inspection-page h1 { margin: 0 0 2mm; text-align: center; font-family: Georgia, 'Times New Roman', serif; font-size: 13pt; line-height: 1.2; }
 	.report-meta { width: 62mm; margin: 0 auto 3mm; font-family: Georgia, 'Times New Roman', serif; font-size: 11pt; }
 	.report-meta div { display: flex; align-items: flex-end; gap: 2mm; margin-top: 1mm; }
@@ -413,10 +415,10 @@ const inspectionStyles = `
 `;
 
 const fireDrillStyles = `
-	.drill-page { width: 11in; height: 8.5in; padding: 8mm 12mm 7mm; break-after: page; page-break-after: always; overflow: hidden; }
+	.drill-page { position: relative; width: 11in; height: 8.5in; padding: 8mm 12mm 7mm; break-after: page; page-break-after: always; overflow: hidden; }
 	.drill-page:last-child { break-after: auto; page-break-after: auto; }
 	.drill-page .brand-header { font-family: Arial, Helvetica, sans-serif; font-size: 15pt; }
-	.drill-page .brand-header img { width: 8mm; height: 8mm; }
+	.drill-page .brand-header img { top: 5mm; left: 10mm; height: 18mm; }
 	.drill-page h1 { margin: -0.5mm 0 0; text-align: center; font-size: 12pt; }
 	.drill-meta { text-align: center; font-size: 8.5pt; margin: 0.5mm 0 1mm; }
 	.drill-meta strong + * { margin-left: 2mm; }
