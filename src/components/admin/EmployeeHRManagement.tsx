@@ -130,7 +130,7 @@ export default function EmployeeHRManagement({
 						/>
 					</div>
 
-					{/* Expiry dates. The documents themselves live in Staff Documents
+					{/* Expiry dates. The documents themselves live in the Staff Directory
 					    below, where privileged supervisors can also reach them. */}
 					<div className="grid gap-4 sm:grid-cols-2">
 						<label className="block">
@@ -193,11 +193,11 @@ export default function EmployeeHRManagement({
 				</div>
 			</div>
 
-			{/* Staff Documents (TB test, background check, application, ...) */}
+			{/* Staff Directory documents (TB test, background check, application, ...) */}
 			<div className="bg-white rounded-lg shadow p-6">
 				<h2 className="text-xl font-bold mb-1">Staff Documents</h2>
 				<p className="text-sm text-gray-600 mb-4">
-					Supervisors with &quot;View Staff Documents&quot; at {employee.name}&apos;s locations can download these for inspectors.
+					Supervisors with &quot;View Staff Directory&quot; at the homes {employee.name} is rostered at can download these for inspectors.
 				</p>
 				<StaffDocumentsWorkspace employeeId={employeeId} />
 			</div>

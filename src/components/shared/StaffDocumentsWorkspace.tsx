@@ -51,11 +51,16 @@ function formatSize(bytes: number) {
 
 export default function StaffDocumentsWorkspace({
 	employeeId,
+	location,
 }: {
-	// When set, the workspace is embedded on one employee's HR page: only
-	// their documents are listed and uploads are filed under them.
+	// Embedded on one employee's page: only their documents are listed and
+	// uploads are filed under them.
 	employeeId?: string;
+	// Embedded on one home's page: only that home's own (facility)
+	// documents, and uploads are filed under it.
+	location?: string;
 }) {
+	const embedded = Boolean(employeeId || location);
 	const [data, setData] = useState<StaffDocumentsResponse | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [loadError, setLoadError] = useState<string | null>(null);
@@ -68,7 +73,11 @@ export default function StaffDocumentsWorkspace({
 	const fetchDocuments = useCallback(async () => {
 		setLoading(true);
 		try {
-			const query = employeeId ? `?employeeId=${encodeURIComponent(employeeId)}` : '';
+			const query = employeeId
+				? `?employeeId=${encodeURIComponent(employeeId)}`
+				: location
+					? `?location=${encodeURIComponent(location)}`
+					: '';
 			const res = await fetch(`/api/staff-documents${query}`);
 			const body = await res.json().catch(() => ({}));
 			if (!res.ok) throw new Error(body.error || 'Failed to load staff documents');
@@ -79,7 +88,7 @@ export default function StaffDocumentsWorkspace({
 		} finally {
 			setLoading(false);
 		}
-	}, [employeeId]);
+	}, [employeeId, location]);
 
 	useEffect(() => {
 		void fetchDocuments();
@@ -132,7 +141,7 @@ export default function StaffDocumentsWorkspace({
 
 	return (
 		<div className="space-y-6">
-			{!employeeId && (
+			{!embedded && (
 				<div>
 					<h2 className="text-xl font-semibold text-gray-900">Staff Documents</h2>
 					<p className="text-sm text-gray-600">
@@ -149,6 +158,7 @@ export default function StaffDocumentsWorkspace({
 					employees={data.employees}
 					locations={data.locations}
 					fixedEmployeeId={employeeId}
+					fixedLocation={location}
 					onUploaded={fetchDocuments}
 				/>
 			)}
@@ -172,7 +182,7 @@ export default function StaffDocumentsWorkspace({
 						</option>
 					))}
 				</select>
-				{!employeeId && (
+				{!embedded && (
 					<>
 						<select
 							value={employeeFilter}
@@ -206,7 +216,7 @@ export default function StaffDocumentsWorkspace({
 						<tr>
 							<th className="px-4 py-3">Document</th>
 							<th className="px-4 py-3">Category</th>
-							{!employeeId && <th className="px-4 py-3">Filed under</th>}
+							{!embedded && <th className="px-4 py-3">Filed under</th>}
 							<th className="px-4 py-3">Uploaded</th>
 							<th className="px-4 py-3 text-right">Actions</th>
 						</tr>
@@ -214,7 +224,7 @@ export default function StaffDocumentsWorkspace({
 					<tbody className="divide-y divide-gray-100">
 						{filtered.length === 0 ? (
 							<tr>
-								<td colSpan={employeeId ? 4 : 5} className="px-4 py-8 text-center text-gray-500">
+								<td colSpan={embedded ? 4 : 5} className="px-4 py-8 text-center text-gray-500">
 									{data.documents.length === 0
 										? 'No staff documents yet.'
 										: 'No documents match these filters.'}
@@ -235,7 +245,7 @@ export default function StaffDocumentsWorkspace({
 									<td className="px-4 py-3 text-gray-700">
 										{STAFF_DOCUMENT_CATEGORY_LABELS[doc.category] ?? doc.category}
 									</td>
-									{!employeeId && (
+									{!embedded && (
 										<td className="px-4 py-3 text-gray-700">
 											{doc.employeeName ?? (
 												<span>
@@ -279,22 +289,28 @@ function UploadForm({
 	employees,
 	locations,
 	fixedEmployeeId,
+	fixedLocation,
 	onUploaded,
 }: {
 	employees: EmployeeOption[];
 	locations: string[];
 	fixedEmployeeId?: string;
+	fixedLocation?: string;
 	onUploaded: () => void;
 }) {
-	// On an employee's own page only employee-filed categories make sense.
-	const categories = STAFF_DOCUMENT_CATEGORIES.filter(
-		(category) => !fixedEmployeeId || STAFF_DOCUMENT_CATEGORY_SCOPE[category] !== 'location'
-	);
+	// On an employee's page only person categories make sense; on a home's
+	// page only home categories.
+	const categories = STAFF_DOCUMENT_CATEGORIES.filter((category) => {
+		const scope = STAFF_DOCUMENT_CATEGORY_SCOPE[category];
+		if (fixedEmployeeId) return scope !== 'location';
+		if (fixedLocation) return scope !== 'employee';
+		return true;
+	});
 
 	const [category, setCategory] = useState<StaffDocumentCategory>(categories[0]);
 	const [miscTarget, setMiscTarget] = useState<'employee' | 'location'>('employee');
 	const [employeeId, setEmployeeId] = useState(fixedEmployeeId ?? '');
-	const [location, setLocation] = useState('');
+	const [location, setLocation] = useState(fixedLocation ?? '');
 	const [title, setTitle] = useState('');
 	const [notes, setNotes] = useState('');
 	const [file, setFile] = useState<File | null>(null);
@@ -302,7 +318,13 @@ function UploadForm({
 	const fileInput = useRef<HTMLInputElement>(null);
 
 	const scope = STAFF_DOCUMENT_CATEGORY_SCOPE[category];
-	const target = fixedEmployeeId ? 'employee' : scope === 'either' ? miscTarget : scope;
+	const target = fixedEmployeeId
+		? 'employee'
+		: fixedLocation
+			? 'location'
+			: scope === 'either'
+				? miscTarget
+				: scope;
 
 	async function submit(e: React.FormEvent) {
 		e.preventDefault();
@@ -359,7 +381,7 @@ function UploadForm({
 					</select>
 				</label>
 
-				{!fixedEmployeeId && (
+				{!fixedEmployeeId && !fixedLocation && (
 					<div className="text-sm">
 						<span className="mb-1 block font-medium text-gray-700">
 							{target === 'employee' ? 'Employee' : 'Location'}

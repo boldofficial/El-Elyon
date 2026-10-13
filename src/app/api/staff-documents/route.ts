@@ -39,8 +39,10 @@ export async function GET(req: NextRequest) {
 			return NextResponse.json({error: 'Invalid employee'}, {status: 400});
 		}
 
+		const location = req.nextUrl.searchParams.get('location') || undefined;
+
 		const [documents, options] = await Promise.all([
-			listVisibleStaffDocuments(viewer, {employeeId}),
+			listVisibleStaffDocuments(viewer, {employeeId, location}),
 			listStaffDocumentFilterOptions(viewer),
 		]);
 

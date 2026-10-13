@@ -29,7 +29,8 @@ export const ADMIN_PRIVILEGE_LABELS: Record<AdminPrivilege, string> = {
 	manage_guardian_checklists: 'Manage Guardian Checklists',
 	manage_data_cleanup: 'Run Data Cleanup',
 	manage_settings: 'Manage Settings',
-	view_staff_documents: 'View Staff Documents (own locations)',
+	// Key kept from the Staff Documents era so existing grants carry over.
+	view_staff_documents: 'View Staff Directory (own homes)',
 };
 
 export function isAdminPrivilege(value: unknown): value is AdminPrivilege {

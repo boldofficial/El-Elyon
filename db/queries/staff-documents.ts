@@ -1,6 +1,6 @@
-import {and, desc, eq, isNull} from 'drizzle-orm';
+import {and, desc, eq, inArray, isNull} from 'drizzle-orm';
 import {db} from '@/db/index';
-import {employees, locations, staffDocuments} from '@/db/schema';
+import {employees, locations, staffDocuments, staffRosterEntries} from '@/db/schema';
 import {hasAdminPrivilege} from '@/db/queries/admin-privileges';
 import {AccessDeniedError, getUserRoleDoc, logAudit} from '@/lib/db-helpers';
 import {
@@ -37,7 +37,26 @@ export async function requireStaffDocumentViewer(
 		deviceId: 'system',
 		location: '',
 	});
-	throw new AccessDeniedError('You do not have access to staff documents');
+	throw new AccessDeniedError('You do not have access to the staff directory');
+}
+
+/**
+ * Which homes each employee is ROSTERED at. This — not employees.locations,
+ * which also covers homes a floater merely works shifts at — decides where a
+ * person's profile and documents are visible in the Staff Directory.
+ */
+export async function getRosterHomesByEmployee(employeeIds?: string[]) {
+	if (employeeIds && employeeIds.length === 0) return new Map<string, string[]>();
+	const rows = await db
+		.select({employeeId: staffRosterEntries.employeeId, location: staffRosterEntries.location})
+		.from(staffRosterEntries)
+		.where(employeeIds ? inArray(staffRosterEntries.employeeId, employeeIds) : undefined);
+
+	const homes = new Map<string, string[]>();
+	for (const row of rows) {
+		homes.set(row.employeeId, [...(homes.get(row.employeeId) || []), row.location]);
+	}
+	return homes;
 }
 
 const documentColumns = {
@@ -53,7 +72,6 @@ const documentColumns = {
 	contentType: staffDocuments.contentType,
 	uploadedAt: staffDocuments.uploadedAt,
 	employeeName: employees.name,
-	employeeLocations: employees.locations,
 };
 
 type StaffDocumentRow = {
@@ -69,12 +87,24 @@ type StaffDocumentRow = {
 	contentType: string;
 	uploadedAt: Date;
 	employeeName: string | null;
-	employeeLocations: string[] | null;
 };
+
+type PlacedStaffDocumentRow = StaffDocumentRow & {employeeLocations: string[] | null};
+
+async function withRosterHomes(rows: StaffDocumentRow[]): Promise<PlacedStaffDocumentRow[]> {
+	const employeeIds = Array.from(
+		new Set(rows.map((row) => row.employeeId).filter((id): id is string => Boolean(id)))
+	);
+	const homes = await getRosterHomesByEmployee(employeeIds);
+	return rows.map((row) => ({
+		...row,
+		employeeLocations: row.employeeId ? homes.get(row.employeeId) || [] : null,
+	}));
+}
 
 // The S3 key never leaves the server; downloads go through the
 // privilege-checked route by document id.
-function toListItem({fileStorageId: _key, ...row}: StaffDocumentRow) {
+function toListItem({fileStorageId: _key, ...row}: PlacedStaffDocumentRow) {
 	return row;
 }
 
@@ -85,7 +115,7 @@ function toListItem({fileStorageId: _key, ...row}: StaffDocumentRow) {
  */
 export async function listVisibleStaffDocuments(
 	viewer: StaffDocumentViewer,
-	filter: {employeeId?: string} = {}
+	filter: {employeeId?: string; location?: string} = {}
 ) {
 	const rows: StaffDocumentRow[] = await db
 		.select(documentColumns)
@@ -94,20 +124,20 @@ export async function listVisibleStaffDocuments(
 		.where(
 			and(
 				isNull(staffDocuments.archivedAt),
-				filter.employeeId
-					? eq(staffDocuments.employeeId, filter.employeeId)
-					: undefined
+				filter.employeeId ? eq(staffDocuments.employeeId, filter.employeeId) : undefined,
+				filter.location ? eq(staffDocuments.location, filter.location) : undefined
 			)
 		)
 		.orderBy(desc(staffDocuments.uploadedAt));
 
-	return rows.filter((row) => canViewStaffDocument(viewer, row)).map(toListItem);
+	const placed = await withRosterHomes(rows);
+	return placed.filter((row) => canViewStaffDocument(viewer, row)).map(toListItem);
 }
 
 /**
  * One active document, or null when it doesn't exist, is archived, or sits
- * outside the viewer's locations. Callers answer all three the same way so
- * the response can't be used to probe which ids are real.
+ * outside the viewer's homes. Callers answer all three the same way so the
+ * response can't be used to probe which ids are real.
  */
 export async function getVisibleStaffDocument(
 	viewer: StaffDocumentViewer,
@@ -119,9 +149,10 @@ export async function getVisibleStaffDocument(
 		.leftJoin(employees, eq(staffDocuments.employeeId, employees.id))
 		.where(and(eq(staffDocuments.id, documentId), isNull(staffDocuments.archivedAt)))
 		.limit(1);
+	if (!row) return null;
 
-	if (!row || !canViewStaffDocument(viewer, row)) return null;
-	return row as StaffDocumentRow;
+	const [placed] = await withRosterHomes([row]);
+	return canViewStaffDocument(viewer, placed) ? placed : null;
 }
 
 export function documentAuditLocation(row: {
@@ -132,27 +163,31 @@ export function documentAuditLocation(row: {
 }
 
 /**
- * Employees and locations this viewer can filter by (and, for admins, file
- * uploads under). Same scoping rule as the documents themselves.
+ * Employees and homes this viewer can file or filter by. Admins get every
+ * employee (anyone can be given documents, rostered or not); supervisors get
+ * the staff rostered at their homes.
  */
 export async function listStaffDocumentFilterOptions(viewer: StaffDocumentViewer) {
-	const [employeeRows, locationRows] = await Promise.all([
+	const [employeeRows, locationRows, homes] = await Promise.all([
 		db
-			.select({id: employees.id, name: employees.name, locations: employees.locations})
+			.select({id: employees.id, name: employees.name})
 			.from(employees)
 			.orderBy(employees.name),
 		db.select({name: locations.name}).from(locations).orderBy(locations.name),
+		getRosterHomesByEmployee(),
 	]);
 
 	const isAdmin = viewer.role === 'admin';
 	return {
-		employees: employeeRows.filter((employee) =>
-			canViewStaffDocument(viewer, {
-				location: null,
-				employeeId: employee.id,
-				employeeLocations: employee.locations,
-			})
-		),
+		employees: employeeRows
+			.map((employee) => ({...employee, locations: homes.get(employee.id) || []}))
+			.filter((employee) =>
+				canViewStaffDocument(viewer, {
+					location: null,
+					employeeId: employee.id,
+					employeeLocations: employee.locations,
+				})
+			),
 		locations: locationRows
 			.map((row) => row.name)
 			.filter((name) => isAdmin || viewer.locations.includes(name)),

@@ -118,6 +118,15 @@ export const employees = pgTable(
 		applicationFormFileId: varchar('application_form_file_id', {length: 500}),
 		personalBio: text('personal_bio'),
 
+		// Staff Directory profile (shown to state inspectors; admin-edited)
+		dateOfBirth: date('date_of_birth'),
+		sex: varchar('sex', {length: 20}),
+		homeAddress: text('home_address'),
+		emergencyContactName: varchar('emergency_contact_name', {length: 255}),
+		emergencyContactPhone: varchar('emergency_contact_phone', {length: 50}),
+		emergencyContactRelationship: varchar('emergency_contact_relationship', {length: 100}),
+		profileNotes: text('profile_notes'),
+
 		// Existing fields
 		createdAt: timestamp('created_at').defaultNow(),
 		createdBy: varchar('created_by', {length: 255}),
@@ -816,6 +825,37 @@ export const staffDocuments = pgTable(
 		filedUnderOneCheck: check(
 			'staff_documents_filed_under_one_check',
 			sql`(${table.employeeId} IS NULL) <> (${table.location} IS NULL)`
+		)
+	})
+);
+
+// Staff Roster (Staff Directory)
+// Who is officially on each home's staff list, as filed with the state.
+// Deliberately separate from employees.locations: that column decides where
+// someone can clock in and which residents they see, and floaters work homes
+// they aren't rostered at. Nothing outside the Staff Directory reads this.
+export const staffRosterEntries = pgTable(
+	'staff_roster_entries',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		location: varchar('location', {length: 255}).notNull(),
+		employeeId: uuid('employee_id')
+			.notNull()
+			.references(() => employees.id, {onDelete: 'cascade'}),
+		title: varchar('title', {length: 255}),
+		// Start date at THIS home; the same person can differ per home.
+		rosterHireDate: date('roster_hire_date'),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		createdBy: varchar('created_by', {length: 255}).notNull(),
+		updatedAt: timestamp('updated_at'),
+		updatedBy: varchar('updated_by', {length: 255})
+	},
+	(table) => ({
+		locationIdx: index('staff_roster_entries_location_idx').on(table.location),
+		employeeIdx: index('staff_roster_entries_employee_id_idx').on(table.employeeId),
+		locationEmployeeUidx: uniqueIndex('staff_roster_entries_location_employee_uidx').on(
+			table.location,
+			table.employeeId
 		)
 	})
 );
