@@ -6,7 +6,6 @@ import {
 import {MAX_FIRE_DRILL_DURATION_MINUTES} from '@/lib/life-safety-reporting';
 import type {LifeSafetyEquipmentType} from '@/lib/life-safety-reporting';
 
-const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
 const LOGO_URL = '/el-elyon-logo.svg';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MAX_TEXT = 2_000;
@@ -230,7 +229,7 @@ function fireDrillSection(
 }
 
 function brandHeader(): string {
-	return `<header class="brand-header"><img src="${LOGO_URL}" alt="" /><div>${ORGANIZATION_NAME}</div></header>`;
+	return `<header class="brand-header"><img src="${LOGO_URL}" alt="El Elyon Supported Living Homes" /></header>`;
 }
 
 function documentShell(args: {
@@ -251,7 +250,8 @@ function documentShell(args: {
 		@page { size: Letter ${args.orientation}; margin: 0; }
 		* { box-sizing: border-box; }
 		html, body { margin: 0; padding: 0; color: #111; background: #fff; font-family: Arial, Helvetica, sans-serif; }
-		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2.5mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; }
+		/* Keeps the line the company name used to fill, so the form below doesn't move. */
+		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2.5mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; height: 1.15em; }
 		/* The company logo sits in the page corner so it adds no height to these fixed-size forms. */
 		.brand-header img { position: absolute; top: 6mm; left: 8mm; height: 20mm; width: auto; }
 		table { border-collapse: collapse; width: 100%; table-layout: fixed; }

@@ -18,7 +18,6 @@ import {
 import {ABOVE_115_ESCALATION_INSTRUCTIONS} from '../care/waterTemperatureEntryModel';
 import {SAFE_MAX_F, SAFE_MIN_F} from '@/lib/water-temperature';
 
-const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
 const LOGO_URL = '/el-elyon-logo.svg';
 
 // ============================================================================
@@ -207,7 +206,7 @@ export function buildWaterTemperatureCheckLogHtml(
 	return documentShell({
 		title: `Daily Water Temperature Check Log — ${report.houseName} — ${monthLabel}`,
 		body: `<main class="log-page">
-			<header class="brand-header"><img src="${LOGO_URL}" alt="" /><div>${ORGANIZATION_NAME}</div></header>
+			<header class="brand-header"><img src="${LOGO_URL}" alt="El Elyon Supported Living Homes" /></header>
 			<h1>${escapePrintHtml(WATER_TEMPERATURE_REPORT_TITLE)}</h1>
 			<p class="safe-range">${escapePrintHtml(WATER_TEMPERATURE_SAFE_RANGE_LEAD)} <span class="range">${escapePrintHtml(WATER_TEMPERATURE_SAFE_RANGE_VALUE)}</span></p>
 			<p class="instruction">${escapePrintHtml(WATER_TEMPERATURE_SHIFT_INSTRUCTION)}</p>
@@ -540,7 +539,7 @@ function documentShell(args: {title: string; body: string}): string {
 		   escalation footer, 9.5mm of table headers, and 31 body rows of
 		   5.5mm (170.5mm). */
 		.log-page { width: 11in; height: 8.5in; padding: 3mm 5mm; overflow: hidden; break-after: avoid; page-break-after: avoid; position: relative; }
-		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 8pt; }
+		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 8pt; height: 1.15em; }
 		/* The company logo sits in the corner beside the masthead so it adds no height. */
 		.brand-header img { position: absolute; top: 3mm; left: 5mm; height: 15mm; width: auto; }
 		h1 { margin: 0.8mm 0 0; text-align: center; font-size: 11pt; letter-spacing: 0.3pt; }
