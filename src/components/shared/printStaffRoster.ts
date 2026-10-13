@@ -21,9 +21,9 @@ export interface PrintableRoster {
 	generatedAt?: Date;
 }
 
-const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
-// Hands-and-heart mark cut from the brand artwork. (/logo.svg is a "LOGO" placeholder.)
-const EMBLEM_URL = '/el-elyon-emblem.svg';
+// The company's full logo (name, tagline and phone), from the El Elyon
+// artwork. The other printouts still use the app's emblem.
+const LOGO_URL = '/el-elyon-logo.svg';
 
 // Calendar dates are stored as YYYY-MM-DD; show them without a timezone shift.
 function formatDate(value: string | null) {
@@ -74,8 +74,8 @@ export function buildStaffRosterHtml({home, roster, generatedAt = new Date()}: P
 		@page { size: Letter portrait; margin: 12mm; }
 		* { box-sizing: border-box; }
 		html, body { margin: 0; padding: 0; color: #111; background: #fff; font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2.5mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 10pt; color: #26499b; }
-		.brand-header img { height: 10mm; width: auto; }
+		.brand-header { text-align: center; }
+		.brand-header img { height: 30mm; width: auto; }
 		h1 { margin: 1.5mm 0 3mm; text-align: center; font-size: 13pt; letter-spacing: 0.3pt; }
 		.meta { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 6mm; margin-bottom: 3mm; font-size: 9pt; }
 		.meta div span { font-weight: 700; }
@@ -91,7 +91,7 @@ export function buildStaffRosterHtml({home, roster, generatedAt = new Date()}: P
 	</style>
 </head>
 <body>
-	<div class="brand-header"><img src="${EMBLEM_URL}" alt="" /><span>${esc(ORGANIZATION_NAME)}</span></div>
+	<div class="brand-header"><img src="${LOGO_URL}" alt="El Elyon Supported Living Homes" /></div>
 	<h1>STAFF ROSTER</h1>
 	<div class="meta">
 		<div>Location: <span>${esc(home.name)}</span></div>
