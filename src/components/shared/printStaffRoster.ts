@@ -4,6 +4,9 @@
 // sends it to the browser's print dialog (which offers "Save as PDF"). This
 // replaces uploading a scanned paper roster: the roster in the app is the
 // source of truth, so the printout is always current.
+//
+// Laid out like the Resident Activity Log Report (printCareLogReport.ts) so
+// the documents handed to inspectors look like one set.
 
 import {escapePrintHtml as esc, printDocument} from './printDocument';
 
@@ -18,7 +21,9 @@ export interface PrintableRoster {
 	generatedAt?: Date;
 }
 
-const ORG_NAME = 'El-Elyon Care Management';
+const ORGANIZATION_NAME = 'EL ELYON PROPERTIES LLC';
+// Hands-and-heart mark cut from the brand artwork. (/logo.svg is a "LOGO" placeholder.)
+const EMBLEM_URL = '/el-elyon-emblem.svg';
 
 // Calendar dates are stored as YYYY-MM-DD; show them without a timezone shift.
 function formatDate(value: string | null) {
@@ -31,75 +36,72 @@ function formatStatus(status: string | null) {
 	return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Active';
 }
 
-export function buildStaffRosterHtml({home, roster, generatedAt = new Date()}: PrintableRoster): string {
-	const contact = [home.address, home.phone].filter(Boolean).join(' · ');
-	const rows =
-		roster.length === 0
-			? '<tr><td colspan="5" class="empty">Nobody is on this roster yet.</td></tr>'
-			: roster
-					.map(
-						(row, i) => `<tr>
-			<td class="num">${i + 1}</td>
-			<td>${esc(row.name)}</td>
-			<td>${esc(row.title || '—')}</td>
-			<td class="nowrap">${esc(formatDate(row.rosterHireDate))}</td>
-			<td>${esc(formatStatus(row.employmentStatus))}</td>
-		</tr>`
-					)
-					.join('');
+function formatDateTime(value: Date) {
+	return value.toLocaleString('en-US', {
+		year: 'numeric',
+		month: 'short',
+		day: 'numeric',
+		hour: 'numeric',
+		minute: '2-digit',
+	});
+}
 
-	return `<!doctype html>
-<html>
+export function buildStaffRosterHtml({home, roster, generatedAt = new Date()}: PrintableRoster): string {
+	const total = roster.length;
+	const body =
+		total === 0
+			? '<p class="empty">Nobody is on this roster yet.</p>'
+			: `<table>
+		<thead><tr><th class="num">#</th><th>Name</th><th>Title</th><th class="hired">Date of hire</th><th class="status">Status</th></tr></thead>
+		<tbody>${roster
+			.map(
+				(row, i) =>
+					`<tr><td class="num">${i + 1}</td><td>${esc(row.name)}</td><td>${esc(
+						row.title || '—'
+					)}</td><td>${esc(formatDate(row.rosterHireDate))}</td><td>${esc(
+						formatStatus(row.employmentStatus)
+					)}</td></tr>`
+			)
+			.join('')}</tbody>
+	</table>`;
+
+	return `<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<title>Staff Roster — ${esc(home.name)}</title>
-<style>
-	* { box-sizing: border-box; }
-	body {
-		font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-		color: #1a1a1a;
-		margin: 0;
-		padding: 32px 36px;
-		font-size: 13px;
-		line-height: 1.5;
-	}
-	.doc-header { border-bottom: 2px solid #1d4ed8; padding-bottom: 12px; margin-bottom: 20px; }
-	.org { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #6b7280; }
-	h1 { font-size: 22px; margin: 4px 0 0; }
-	.contact { color: #4b5563; margin-top: 2px; }
-	table { width: 100%; border-collapse: collapse; }
-	thead { display: table-header-group; }
-	th {
-		text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
-		color: #6b7280; border-bottom: 1px solid #d1d5db; padding: 6px 8px;
-	}
-	td { border-bottom: 1px solid #e5e7eb; padding: 6px 8px; vertical-align: top; }
-	tr { page-break-inside: avoid; }
-	.num { width: 2.5em; color: #6b7280; }
-	.nowrap { white-space: nowrap; }
-	.empty { text-align: center; color: #9ca3af; padding: 24px 8px; }
-	.doc-footer { margin-top: 28px; padding-top: 10px; border-top: 1px solid #e5e7eb; font-size: 11px; color: #9ca3af; display: flex; justify-content: space-between; }
-	@media print { body { padding: 0; } @page { margin: 18mm; } }
-</style>
+	<meta charset="utf-8" />
+	<title>Staff Roster – ${esc(home.name)}</title>
+	<style>
+		@page { size: Letter portrait; margin: 12mm; }
+		* { box-sizing: border-box; }
+		html, body { margin: 0; padding: 0; color: #111; background: #fff; font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+		.brand-header { display: flex; align-items: center; justify-content: center; gap: 2.5mm; font-family: Georgia, 'Times New Roman', serif; font-weight: 700; font-size: 10pt; color: #26499b; }
+		.brand-header img { height: 10mm; width: auto; }
+		h1 { margin: 1.5mm 0 3mm; text-align: center; font-size: 13pt; letter-spacing: 0.3pt; }
+		.meta { display: grid; grid-template-columns: 1fr 1fr; gap: 1mm 6mm; margin-bottom: 3mm; font-size: 9pt; }
+		.meta div span { font-weight: 700; }
+		table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+		th, td { border: 0.25mm solid #444; padding: 1mm 1.2mm; vertical-align: top; text-align: left; overflow-wrap: anywhere; }
+		thead th { background: #eee; font-weight: 700; }
+		tbody tr { break-inside: avoid; page-break-inside: avoid; }
+		.num { width: 8mm; }
+		.hired { width: 26mm; }
+		.status { width: 22mm; }
+		.empty { margin: 8mm 0; text-align: center; font-size: 10pt; }
+		.footer { margin-top: 4mm; font-size: 7.5pt; color: #444; }
+	</style>
 </head>
 <body>
-	<div class="doc-header">
-		<div class="org">${esc(ORG_NAME)}</div>
-		<h1>Staff Roster — ${esc(home.name)}</h1>
-		${contact ? `<div class="contact">${esc(contact)}</div>` : ''}
+	<div class="brand-header"><img src="${EMBLEM_URL}" alt="" /><span>${esc(ORGANIZATION_NAME)}</span></div>
+	<h1>STAFF ROSTER</h1>
+	<div class="meta">
+		<div>Location: <span>${esc(home.name)}</span></div>
+		<div>Address: <span>${esc(home.address || '—')}</span></div>
+		<div>Total staff: <span>${total}</span></div>
+		<div>Phone: <span>${esc(home.phone || '—')}</span></div>
+		<div>Generated: <span>${esc(formatDateTime(generatedAt))}</span></div>
 	</div>
-
-	<table>
-		<thead>
-			<tr><th>#</th><th>Name</th><th>Title</th><th>Date of hire</th><th>Status</th></tr>
-		</thead>
-		<tbody>${rows}</tbody>
-	</table>
-
-	<div class="doc-footer">
-		<span>Total staff: ${roster.length}</span>
-		<span>Generated from the Staff Directory: ${esc(generatedAt.toLocaleString())}</span>
-	</div>
+	${body}
+	<p class="footer">End of roster &middot; ${total} staff &middot; Generated from the Staff Directory.</p>
 </body>
 </html>`;
 }

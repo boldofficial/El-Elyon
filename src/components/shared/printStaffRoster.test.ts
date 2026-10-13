@@ -13,12 +13,13 @@ test('lists every rostered staff member with title, hire date and status', () =>
 			{name: 'Grace Hopper', title: null, rosterHireDate: null, employmentStatus: 'inactive'},
 		],
 	});
-	assert.match(html, /Staff Roster — Maple House/);
-	assert.match(html, /12 Maple St · 555-0100/);
+	assert.match(html, /STAFF ROSTER/);
+	assert.match(html, /Location: <span>Maple House/);
+	assert.match(html, /12 Maple St/);
 	assert.match(html, /Ada Lovelace/);
 	assert.match(html, /03\/04\/2025/);
 	assert.match(html, /Inactive/);
-	assert.match(html, /Total staff: 2/);
+	assert.match(html, /Total staff: <span>2/);
 });
 
 test('escapes names so roster data cannot inject markup', () => {
@@ -32,5 +33,5 @@ test('escapes names so roster data cannot inject markup', () => {
 test('says so when the roster is empty', () => {
 	const html = buildStaffRosterHtml({home, roster: []});
 	assert.match(html, /Nobody is on this roster yet/);
-	assert.match(html, /Total staff: 0/);
+	assert.match(html, /Total staff: <span>0/);
 });
