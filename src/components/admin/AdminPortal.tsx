@@ -4,7 +4,7 @@ import React, {useState, useEffect} from 'react';
 import {useUser} from '@clerk/nextjs';
 import {getDeviceId} from '@/lib/device';
 import {SignOutButton} from '../auth/SignOutButton';
-import Sidebar from '../shared/Sidebar';
+import Sidebar, {getNavLabel} from '../shared/Sidebar';
 import AdminDashboard from './AdminDashboard';
 import PeopleWorkspace from './PeopleWorkspace';
 import ComplianceWorkspace from '../compliance/ComplianceWorkspace';
@@ -167,10 +167,7 @@ export default function AdminPortal() {
 			<main className="flex-1 overflow-y-auto p-8">
 				<div className="flex justify-between items-center mb-8">
 					<h1 className="text-3xl font-bold text-gray-900">
-						{activeView === 'employee-hr' && 'Employee HR Documents'}
-						{activeView === 'resident-profile' && 'Resident Profile'}
-						{activeView !== 'employee-hr' && activeView !== 'resident-profile' &&
-							activeView.charAt(0).toUpperCase() + activeView.slice(1)}
+						{getNavLabel(activeView)}
 					</h1>
 					<SignOutButton />
 				</div>
