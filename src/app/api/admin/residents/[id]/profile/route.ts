@@ -18,6 +18,64 @@ import {
 import {db} from '@/db/index';
 import {residents} from '@/db/schema';
 import {eq} from 'drizzle-orm';
+import {
+	normalizeScheduledChecks,
+	resolveGlucoseThresholds,
+	validateGlucoseThresholds,
+} from '@/lib/blood-glucose';
+
+const GLUCOSE_LIMIT_FIELDS = [
+	'glucoseCriticalLowMgDl',
+	'glucoseTargetLowMgDl',
+	'glucoseTargetHighMgDl',
+	'glucoseCriticalHighMgDl',
+] as const;
+
+/**
+ * Blood sugar settings from the profile form. Only keys present in the body
+ * are returned, so an older client that never sends them leaves them alone.
+ * Blank limits are stored as null and fall back to the facility defaults.
+ */
+function glucoseSettingsFromBody(
+	body: Record<string, unknown>
+): {error: string} | {data: Record<string, unknown>} {
+	const data: Record<string, unknown> = {};
+	if (typeof body.glucoseTrackingEnabled === 'boolean') {
+		data.glucoseTrackingEnabled = body.glucoseTrackingEnabled;
+	}
+	const hasLimits = GLUCOSE_LIMIT_FIELDS.some((key) => key in body);
+	if (hasLimits) {
+		const limits: Record<string, number | null> = {};
+		for (const key of GLUCOSE_LIMIT_FIELDS) {
+			const raw = body[key];
+			if (raw === undefined || raw === null || raw === '') {
+				limits[key] = null;
+				continue;
+			}
+			const n = Number(raw);
+			if (!Number.isInteger(n)) {
+				return {error: 'Blood sugar limits must be whole numbers (mg/dL)'};
+			}
+			limits[key] = n;
+		}
+		const error = validateGlucoseThresholds(resolveGlucoseThresholds(limits));
+		if (error) return {error};
+		Object.assign(data, limits);
+	}
+	if ('glucoseScheduledChecks' in body) {
+		data.glucoseScheduledChecks = normalizeScheduledChecks(body.glucoseScheduledChecks);
+	}
+	if ('glucoseCareInstructions' in body) {
+		const raw = body.glucoseCareInstructions;
+		if (raw !== null && raw !== undefined && typeof raw !== 'string') {
+			return {error: 'Blood sugar instructions must be text'};
+		}
+		const text = typeof raw === 'string' ? raw.trim() : '';
+		if (text.length > 2000) return {error: 'Blood sugar instructions are too long'};
+		data.glucoseCareInstructions = text || null;
+	}
+	return {data};
+}
 
 // GET - Get resident profile
 export async function GET(request: Request, {params}: {params: Promise<{id: string}>}) {
@@ -60,6 +118,10 @@ export async function PATCH(
 
 		const {id: residentId} = await params;
 		const body = await request.json();
+		const glucose = glucoseSettingsFromBody(body);
+		if ('error' in glucose) {
+			return NextResponse.json({error: glucose.error}, {status: 400});
+		}
 
 		// Read the status as it stands before the write, so the TRANSITION --
 		// not merely the new value -- drives the side effects below. Saving an
@@ -146,6 +208,7 @@ export async function PATCH(
 			...(typeof body.carbTrackingEnabled === 'boolean'
 				? {carbTrackingEnabled: body.carbTrackingEnabled}
 				: {}),
+			...glucose.data,
 		});
 
 		await logAudit({

@@ -9,6 +9,7 @@ import IncidentReportForm from './IncidentReportForm';
 import IncidentReportsList from './IncidentReportsList';
 import ResidentDocuments from './ResidentDocuments';
 import CarbLogWorkspace from './CarbLogWorkspace';
+import GlucoseLogWorkspace from './GlucoseLogWorkspace';
 
 interface Resident {
 	id: string;
@@ -38,6 +39,7 @@ interface Resident {
 	careNotes?: string;
 	profileImageId?: string;
 	carbTrackingEnabled?: boolean;
+	glucoseTrackingEnabled?: boolean;
 	createdAt?: Date;
 	createdBy?: string;
 }
@@ -52,6 +54,7 @@ interface CarePortalResidentDetailsProps {
 type TabType =
 	| 'log'
 	| 'carb-log'
+	| 'blood-sugar'
 	| 'incidents'
 	| 'history'
 	| 'documents'
@@ -121,6 +124,9 @@ export default function CarePortalResidentDetails({
 		// Only residents opted in by an admin/supervisor get the carb log tab.
 		...(resident.carbTrackingEnabled
 			? [{id: 'carb-log' as TabType, label: 'Carb Log', icon: '🍞'}]
+			: []),
+		...(resident.glucoseTrackingEnabled
+			? [{id: 'blood-sugar' as TabType, label: 'Blood Sugar', icon: '🩸'}]
 			: []),
 		{id: 'incidents' as TabType, label: 'Incident Reports', icon: '⚠️'},
 		{id: 'history' as TabType, label: 'Log History', icon: '📜'},
@@ -275,6 +281,13 @@ export default function CarePortalResidentDetails({
 
 					{activeTab === 'carb-log' && resident.carbTrackingEnabled && (
 						<CarbLogWorkspace
+							residentId={resident.id}
+							residentName={resident.name}
+						/>
+					)}
+
+					{activeTab === 'blood-sugar' && resident.glucoseTrackingEnabled && (
+						<GlucoseLogWorkspace
 							residentId={resident.id}
 							residentName={resident.name}
 						/>

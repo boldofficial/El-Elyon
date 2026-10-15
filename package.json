@@ -20,6 +20,7 @@
 		"test:missed-shift": "tsx --test lib/missed-shift.test.ts lib/care-log-report.test.ts src/app/api/supervisor/missed-shifts/route.test.ts",
 		"test:query-helpers": "tsx --test db/query-helpers.test.ts",
 		"test:resident-status": "tsx --test lib/resident-status.test.ts",
+		"test:blood-glucose": "tsx --test lib/blood-glucose.test.ts lib/custom-log-schedule.test.ts src/components/care/printGlucoseLogSheet.test.ts",
 		"water-temperature:cutover-report": "tsx scripts/water-temperature-rollout-check.ts pre-cutover",
 		"water-temperature:post-deploy-check": "tsx scripts/water-temperature-rollout-check.ts post-deploy",
 		"db:generate": "drizzle-kit generate --name",

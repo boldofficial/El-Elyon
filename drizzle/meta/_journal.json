@@ -169,6 +169,13 @@
       "when": 1791839336799,
       "tag": "0023_add_staff_directory",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792088070772,
+      "tag": "0024_add_blood_glucose_logs",
+      "breakpoints": true
     }
   ]
 }

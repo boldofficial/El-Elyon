@@ -7,6 +7,7 @@ import SharedIncidentsAccordion from '../care/SharedIncidentsAccordion';
 import CareLogWithActivities from '../care/CareLogWithActivities';
 import IncidentReportForm from '../care/IncidentReportForm';
 import CarbLogsOverview from './CarbLogsOverview';
+import BloodGlucoseOverview from './BloodGlucoseOverview';
 import CareLogReportPrintBar from '../care/CareLogReportPrintBar';
 
 type TabId =
@@ -14,7 +15,8 @@ type TabId =
 	| 'log-activity'
 	| 'report-incident'
 	| 'incidents'
-	| 'carb-logs';
+	| 'carb-logs'
+	| 'blood-sugar';
 
 interface Resident {
 	id: string;
@@ -185,6 +187,7 @@ export default function CareLogsWorkspace() {
 		{id: 'report-incident', label: 'Report Incident', icon: '⚠️'},
 		{id: 'incidents', label: 'Incidents', icon: '🚨'},
 		{id: 'carb-logs', label: 'Carb Logs', icon: '🍞'},
+		{id: 'blood-sugar', label: 'Blood Sugar', icon: '🩸'},
 	];
 
 	return (
@@ -303,6 +306,9 @@ export default function CareLogsWorkspace() {
 
 			{/* ═══════════ CARB LOGS TAB ═══════════ */}
 			{activeTab === 'carb-logs' && <CarbLogsOverview />}
+
+			{/* ═══════════ BLOOD SUGAR TAB ═══════════ */}
+			{activeTab === 'blood-sugar' && <BloodGlucoseOverview />}
 
 			{/* ═══════════ LOG ACTIVITY TAB ═══════════ */}
 			{activeTab === 'log-activity' && (
