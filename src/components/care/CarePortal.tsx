@@ -38,6 +38,7 @@ import {DataCleanupWorkspace} from '../admin/DataCleanupWorkspace';
 import SettingsWorkspace from '../admin/SettingsWorkspace';
 import AdminCareLogsWorkspace from '../admin/CareLogsWorkspace';
 import CarbLogsOverview from '../admin/CarbLogsOverview';
+import BloodGlucoseOverview from '../admin/BloodGlucoseOverview';
 import StaffDirectoryWorkspace from '../shared/StaffDirectoryWorkspace';
 
 type AdminPrivilege =
@@ -391,6 +392,12 @@ export default function CarePortal() {
 			icon: '🍞',
 			description: 'Per-meal intake by day',
 		},
+		{
+			id: 'blood-sugar',
+			label: 'Blood Sugar',
+			icon: '🩸',
+			description: 'Checks to review',
+		},
 	];
 
 	const delegatedItems = delegatedManagementViews.map((viewId) => ({
@@ -520,6 +527,8 @@ export default function CarePortal() {
 			// Location-scoped by the server; this check only hides the nav item.
 			case 'carb-logs':
 				return isSupervisor ? <CarbLogsOverview /> : <div>Access denied</div>;
+			case 'blood-sugar':
+				return isSupervisor ? <BloodGlucoseOverview /> : <div>Access denied</div>;
 			default:
 				return (
 					<CareShiftWorkspace

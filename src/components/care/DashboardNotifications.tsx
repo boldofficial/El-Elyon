@@ -9,6 +9,13 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {toast} from 'sonner';
 import DocumentViewerModal from '@/components/shared/DocumentViewerModal';
+import {
+	GLUCOSE_STATUS_LABELS,
+	formatGlucoseReading,
+	isCritical,
+	type GlucoseStatus,
+	type GlucoseUnit,
+} from '@/lib/blood-glucose';
 
 interface PendingIspAck {
 	ispFileId: string;
@@ -38,6 +45,31 @@ interface CarbLogReminder {
 	operationalDate: string;
 	slots: Array<{slot: {key: string; label: string}; status: 'open' | 'missed'}>;
 }
+
+interface GlucoseReminders {
+	scheduled: CarbLogReminder[];
+	rechecks: Array<{
+		logId: string;
+		residentId: string;
+		residentName: string;
+		location: string;
+		status: GlucoseStatus;
+		checkedAt: string;
+		recheckDueAt: string;
+	}>;
+	unreviewed: Array<{
+		logId: string;
+		residentId: string;
+		residentName: string;
+		location: string;
+		status: GlucoseStatus;
+		readingValue: number | null;
+		readingUnit: GlucoseUnit;
+		checkedAt: string;
+	}>;
+}
+
+const EMPTY_GLUCOSE: GlucoseReminders = {scheduled: [], rechecks: [], unreviewed: []};
 
 interface ComplianceReminder {
 	id: string;
@@ -75,6 +107,7 @@ export default function DashboardNotifications() {
 	const [unreadMemos, setUnreadMemos] = useState<Memo[]>([]);
 	const [reminders, setReminders] = useState<ComplianceReminder[]>([]);
 	const [carbReminders, setCarbReminders] = useState<CarbLogReminder[]>([]);
+	const [glucose, setGlucose] = useState<GlucoseReminders>(EMPTY_GLUCOSE);
 	const [loading, setLoading] = useState(true);
 	const [acking, setAcking] = useState<string | null>(null);
 	const [viewingIsp, setViewingIsp] = useState<PendingIspAck | null>(null);
@@ -88,6 +121,7 @@ export default function DashboardNotifications() {
 			setUnreadMemos(data.unreadMemos || []);
 			setReminders(data.complianceReminders || []);
 			setCarbReminders(data.carbLogReminders || []);
+			setGlucose({...EMPTY_GLUCOSE, ...(data.glucoseReminders || {})});
 		} catch (error) {
 			console.error('Error loading dashboard notifications:', error);
 		} finally {
@@ -137,12 +171,112 @@ export default function DashboardNotifications() {
 		pendingIspAcks.length === 0 &&
 		unreadMemos.length === 0 &&
 		reminders.length === 0 &&
-		carbReminders.length === 0
+		carbReminders.length === 0 &&
+		glucose.scheduled.length === 0 &&
+		glucose.rechecks.length === 0 &&
+		glucose.unreviewed.length === 0
 	)
 		return null;
 
+	const glucoseCount =
+		glucose.rechecks.length + glucose.scheduled.length + glucose.unreviewed.length;
+	const formatTime = (iso: string) =>
+		new Date(iso).toLocaleTimeString(undefined, {hour: 'numeric', minute: '2-digit'});
+
 	return (
 		<div className="space-y-4">
+			{/* Blood sugar: rechecks owed, scheduled checks due/missed, readings to review */}
+			{glucoseCount > 0 && (
+				<div className="bg-white rounded-lg shadow-sm border">
+					<div className="px-4 py-3 border-b bg-gray-50 rounded-t-lg flex items-center gap-2">
+						<span className="text-lg">🩸</span>
+						<h3 className="font-semibold text-gray-900">Blood sugar</h3>
+						<span className="ml-auto text-xs font-medium bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full">
+							{glucoseCount}
+						</span>
+					</div>
+					<ul className="divide-y">
+						{glucose.rechecks.map((r) => {
+							const overdue = new Date(r.recheckDueAt).getTime() < Date.now();
+							return (
+								<li
+									key={`recheck-${r.logId}`}
+									className={`px-4 py-3 border-l-4 ${overdue ? 'border-red-500' : 'border-amber-400'}`}>
+									<p className="text-sm font-medium text-gray-900">
+										{r.residentName}
+										<span className="text-gray-400 font-normal"> · {r.location}</span>
+									</p>
+									<p className={`text-sm mt-0.5 ${overdue ? 'text-red-700' : 'text-gray-700'}`}>
+										Recheck {overdue ? 'overdue' : 'due'} at {formatTime(r.recheckDueAt)} (
+										{GLUCOSE_STATUS_LABELS[r.status].toLowerCase()} reading at{' '}
+										{formatTime(r.checkedAt)})
+										<span className="text-gray-400"> · open the resident&apos;s Blood Sugar tab</span>
+									</p>
+								</li>
+							);
+						})}
+						{glucose.scheduled.map((r) => {
+							const missed = r.slots.filter((s) => s.status === 'missed');
+							const open = r.slots.filter((s) => s.status === 'open');
+							return (
+								<li
+									key={`scheduled-${r.residentId}`}
+									className={`px-4 py-3 border-l-4 ${
+										missed.length > 0 ? 'border-red-400' : 'border-amber-400'
+									}`}>
+									<p className="text-sm font-medium text-gray-900">
+										{r.residentName}
+										<span className="text-gray-400 font-normal"> · {r.location}</span>
+									</p>
+									<p className="text-sm text-gray-600 mt-0.5">
+										{missed.length > 0 && (
+											<span className="text-red-700">
+												Missed: {missed.map((s) => s.slot.label).join(', ')}
+											</span>
+										)}
+										{missed.length > 0 && open.length > 0 && ' · '}
+										{open.length > 0 && (
+											<span>Due now: {open.map((s) => s.slot.label).join(', ')}</span>
+										)}
+										<span className="text-gray-400"> · open the resident&apos;s Blood Sugar tab</span>
+									</p>
+								</li>
+							);
+						})}
+						{glucose.unreviewed.map((r) => (
+							<li
+								key={`review-${r.logId}`}
+								className={`px-4 py-3 border-l-4 ${
+									isCritical(r.status) ? 'border-red-600' : 'border-orange-400'
+								}`}>
+								<p className="text-sm font-medium text-gray-900">
+									{r.residentName}
+									<span className="text-gray-400 font-normal"> · {r.location}</span>
+								</p>
+								<p className="text-sm text-gray-700 mt-0.5">
+									<span className={isCritical(r.status) ? 'text-red-700 font-semibold' : ''}>
+										{GLUCOSE_STATUS_LABELS[r.status]}:{' '}
+										{formatGlucoseReading({
+											refused: false,
+											readingValue: r.readingValue,
+											readingUnit: r.readingUnit,
+										})}
+									</span>{' '}
+									on {new Date(r.checkedAt).toLocaleString(undefined, {
+										month: 'short',
+										day: 'numeric',
+										hour: 'numeric',
+										minute: '2-digit',
+									})}{' '}
+									needs your review
+									<span className="text-gray-400"> · see Blood Sugar in the menu</span>
+								</p>
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+
 			{/* Carb log meals still to record today (non-blocking) */}
 			{carbReminders.length > 0 && (
 				<div className="bg-white rounded-lg shadow-sm border">

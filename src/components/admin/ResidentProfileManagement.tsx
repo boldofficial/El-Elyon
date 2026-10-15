@@ -6,8 +6,11 @@ import React, {useState, useEffect} from 'react';
 import {toast} from 'sonner';
 import ResidentActivityHistory from '../care/ResidentActivityHistory';
 import {inactiveDateLabel} from '@/lib/resident-status';
+import GlucoseTrackingSettings, {
+	type GlucoseSettingsValues,
+} from './GlucoseTrackingSettings';
 
-interface Resident {
+interface Resident extends GlucoseSettingsValues {
 	id: string;
 	name: string;
 	status?: 'active' | 'inactive';
@@ -157,7 +160,13 @@ export default function ResidentProfileManagement({
 				body: JSON.stringify({...resident, importantRelationships}),
 			});
 
-			if (!res.ok) throw new Error('Failed to update');
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				// 400s carry a message meant for the user (e.g. blood sugar limits).
+				throw new Error(
+					res.status === 400 && data.error ? data.error : 'Failed to update resident profile'
+				);
+			}
 
 			const updated = await res.json();
 			setResident(updated);
@@ -167,7 +176,9 @@ export default function ResidentProfileManagement({
 			toast.success('Resident profile updated successfully');
 		} catch (error) {
 			console.error('Error updating resident:', error);
-			toast.error('Failed to update resident profile');
+			toast.error(
+				error instanceof Error ? error.message : 'Failed to update resident profile'
+			);
 		} finally {
 			setSaving(false);
 		}
@@ -677,6 +688,14 @@ export default function ResidentProfileManagement({
 						</span>
 					</span>
 				</label>
+				<div className="mt-5 pt-5 border-t">
+					<GlucoseTrackingSettings
+						values={resident}
+						onChange={(patch) =>
+							setResident((prev) => (prev ? {...prev, ...patch} : prev))
+						}
+					/>
+				</div>
 			</div>
 
 			{/* Save Button */}
