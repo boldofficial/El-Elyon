@@ -1,7 +1,7 @@
 import {db} from '../index';
 import {residentLogActivities, residentLogs, residents} from '../schema';
 import {eq} from 'drizzle-orm';
-import {requireCareAccess} from '@/lib/db-helpers';
+import {requireCareAccess, requireResidentInScope} from '@/lib/db-helpers';
 import {logAudit} from './audit';
 import {InferSelectModel} from 'drizzle-orm';
 
@@ -17,7 +17,7 @@ export async function createResidentLogActivity(
 		notes?: string;
 	}
 ) {
-	await requireCareAccess(clerkUserId);
+	const userRole = await requireCareAccess(clerkUserId);
 
 	const residentLog = await db.query.residentLogs.findFirst({
 		where: eq(residentLogs.id, data.logId),
@@ -26,6 +26,13 @@ export async function createResidentLogActivity(
 	if (!residentLog) {
 		throw new Error('Resident log not found');
 	}
+
+	await requireResidentInScope({
+		clerkUserId,
+		userRole,
+		residentId: residentLog.residentId,
+		auditDetail: 'log_activity_create_cross_location',
+	});
 
 	const resident = await db.query.residents.findFirst({
 		where: eq(residents.id, residentLog.residentId),
@@ -77,7 +84,13 @@ export async function createResidentLogWithActivities(
 		}>;
 	}
 ) {
-	await requireCareAccess(data.authorId); // Assuming authorId is the clerkUserId for access control
+	const userRole = await requireCareAccess(data.authorId); // Assuming authorId is the clerkUserId for access control
+	await requireResidentInScope({
+		clerkUserId: data.authorId,
+		userRole,
+		residentId: data.residentId,
+		auditDetail: 'resident_log_create_cross_location',
+	});
 
 	// 1. Create the resident log
 	const [newLog] = await db
@@ -128,7 +141,7 @@ export async function updateResidentLogActivity(
 	activityId: string,
 	data: Partial<ResidentLogActivityInsert>
 ) {
-	await requireCareAccess(clerkUserId);
+	const userRole = await requireCareAccess(clerkUserId);
 
 	const existingActivity = await db.query.residentLogActivities.findFirst({
 		where: eq(residentLogActivities.id, activityId),
@@ -140,6 +153,15 @@ export async function updateResidentLogActivity(
 
 	const residentLog = await db.query.residentLogs.findFirst({
 		where: eq(residentLogs.id, existingActivity.logId),
+	});
+	if (!residentLog) {
+		throw new Error('Resident log not found');
+	}
+	await requireResidentInScope({
+		clerkUserId,
+		userRole,
+		residentId: residentLog.residentId,
+		auditDetail: 'log_activity_change_cross_location',
 	});
 	const resident = residentLog
 		? await db.query.residents.findFirst({where: eq(residents.id, residentLog.residentId)})
@@ -174,7 +196,7 @@ export async function toggleResidentLogActivityCompletion(
 	activityId: string,
 	completed: boolean
 ) {
-	await requireCareAccess(clerkUserId);
+	const userRole = await requireCareAccess(clerkUserId);
 
 	const existingActivity = await db.query.residentLogActivities.findFirst({
 		where: eq(residentLogActivities.id, activityId),
@@ -186,6 +208,15 @@ export async function toggleResidentLogActivityCompletion(
 
 	const residentLog = await db.query.residentLogs.findFirst({
 		where: eq(residentLogs.id, existingActivity.logId),
+	});
+	if (!residentLog) {
+		throw new Error('Resident log not found');
+	}
+	await requireResidentInScope({
+		clerkUserId,
+		userRole,
+		residentId: residentLog.residentId,
+		auditDetail: 'log_activity_change_cross_location',
 	});
 	const resident = residentLog
 		? await db.query.residents.findFirst({where: eq(residents.id, residentLog.residentId)})
@@ -219,7 +250,7 @@ export async function deleteResidentLogActivity(
 	clerkUserId: string,
 	activityId: string
 ) {
-	await requireCareAccess(clerkUserId);
+	const userRole = await requireCareAccess(clerkUserId);
 
 	const existingActivity = await db.query.residentLogActivities.findFirst({
 		where: eq(residentLogActivities.id, activityId),
@@ -231,6 +262,15 @@ export async function deleteResidentLogActivity(
 
 	const residentLog = await db.query.residentLogs.findFirst({
 		where: eq(residentLogs.id, existingActivity.logId),
+	});
+	if (!residentLog) {
+		throw new Error('Resident log not found');
+	}
+	await requireResidentInScope({
+		clerkUserId,
+		userRole,
+		residentId: residentLog.residentId,
+		auditDetail: 'log_activity_change_cross_location',
 	});
 	const resident = residentLog
 		? await db.query.residents.findFirst({where: eq(residents.id, residentLog.residentId)})

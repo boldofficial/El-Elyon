@@ -1,6 +1,6 @@
 import {db} from '../index';
 import {residents, guardians, guardianChecklistTemplates} from '../schema';
-import {eq} from 'drizzle-orm';
+import {eq, inArray} from 'drizzle-orm';
 
 export async function getResidentById(residentId: string) {
     return await db.query.residents.findFirst({
@@ -10,6 +10,19 @@ export async function getResidentById(residentId: string) {
 
 export async function listAllResidents() {
     return await db.query.residents.findMany();
+}
+
+export async function listResidentsInLocations(locationList: string[]) {
+    if (locationList.length === 0) return [];
+    return await db.query.residents.findMany({
+        where: inArray(residents.location, locationList),
+    });
+}
+
+/** Ids of every resident in the given locations. */
+export async function residentIdsInLocations(locationList: string[]) {
+    const rows = await listResidentsInLocations(locationList);
+    return new Set(rows.map((resident) => resident.id));
 }
 
 export async function listResidentsByLocation(location: string) {

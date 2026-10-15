@@ -132,6 +132,34 @@ export async function residentInScope(args: {
 	return allowed;
 }
 
+/**
+ * residentInScope, but throws AccessDeniedError so a handler can map the
+ * denial to 403 with the same `instanceof` check it uses for role failures.
+ */
+export async function requireResidentInScope(args: {
+	clerkUserId: string;
+	userRole: {role: string | null; locations?: string[] | null};
+	residentId: string;
+	auditDetail: string;
+}) {
+	if (!(await residentInScope(args))) {
+		throw new AccessDeniedError('Resident is outside your locations');
+	}
+}
+
+/**
+ * The locations a caller may read records from, or null when the caller is an
+ * admin and may read every location. List handlers filter on this rather than
+ * returning every row and trusting the client to hide the rest.
+ */
+export function scopedLocations(userRole: {
+	role: string | null;
+	locations?: string[] | null;
+}): string[] | null {
+	if ((userRole.role || '').toLowerCase() === 'admin') return null;
+	return userRole.locations || [];
+}
+
 // Helper: Check supervisor access
 export async function requireSupervisorAccess(clerkUserId: string) {
 	const userRole = await getUserRoleDoc(clerkUserId);

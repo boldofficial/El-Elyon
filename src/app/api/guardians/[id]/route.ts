@@ -5,12 +5,15 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {
+	AccessDeniedError,
 	requireCareAccess,
 	requireAdminAccess,
 	logAudit,
+	scopedLocations,
 } from '@/lib/db-helpers';
 import {internalServerError} from '@/lib/api-errors';
 import {updateGuardian, deleteGuardian} from '@/db/mutations/guardians';
+import {getGuardianById, residentIdsInLocations} from '@/db/queries/people';
 
 export async function PATCH(
 	request: Request,
@@ -22,7 +25,7 @@ export async function PATCH(
 	}
 
 	try {
-		await requireCareAccess(userId);
+		const userRole = await requireCareAccess(userId);
 
 		const {id: guardianId} = await params;
 		if (!guardianId) {
@@ -33,7 +36,34 @@ export async function PATCH(
 		}
 
 		const body = await request.json();
-		const {name, email, phone, residentIds, relationship, address} = body;
+		const {name, email, phone, relationship, address} = body;
+		let residentIds: string[] | undefined = body.residentIds;
+
+		// Non-admins may only edit guardians of residents in their own locations.
+		// They only ever see those links (GET filters the rest out), so links to
+		// residents elsewhere are carried over rather than dropped on save.
+		const allowedLocations = scopedLocations(userRole);
+		if (allowedLocations) {
+			const inScope = await residentIdsInLocations(allowedLocations);
+			const existing = await getGuardianById(guardianId);
+			const existingIds = existing?.residentIds || [];
+			const requested = residentIds ?? existingIds.filter((id) => inScope.has(id));
+			if (
+				!existingIds.some((id) => inScope.has(id)) ||
+				!Array.isArray(requested) ||
+				!requested.every((id) => inScope.has(id))
+			) {
+				await logAudit({
+					clerkUserId: userId,
+					event: 'access_denied',
+					details: `guardian_update_cross_location_${guardianId}`,
+					deviceId: 'system',
+					location: '',
+				});
+				throw new AccessDeniedError('Guardian is outside your locations');
+			}
+			residentIds = [...existingIds.filter((id) => !inScope.has(id)), ...requested];
+		}
 
 		await updateGuardian(guardianId, {
 			name,
@@ -56,6 +86,9 @@ export async function PATCH(
 			{status: 200}
 		);
 	} catch (error) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: 'Access denied'}, {status: 403});
+		}
 		return internalServerError(error, 'UpdateGuardian');
 	}
 }

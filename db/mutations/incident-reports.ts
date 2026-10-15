@@ -1,7 +1,7 @@
 import {db} from '../index';
 import {incidentReports, residents, employees} from '../schema';
 import {eq} from 'drizzle-orm';
-import {requireCareAccess} from '@/lib/db-helpers';
+import {requireAdminAccess, requireCareAccess, requireResidentInScope} from '@/lib/db-helpers';
 import {getClerkUser} from '@/lib/clerk';
 import {logAudit} from './audit';
 import {InferSelectModel} from 'drizzle-orm';
@@ -38,6 +38,15 @@ export async function createIncidentReport(
 	if (!resident) {
 		throw new Error('Resident not found');
 	}
+
+	// The resident must be in one of the caller's locations, not just the
+	// location named in the request.
+	await requireResidentInScope({
+		clerkUserId,
+		userRole,
+		residentId: data.residentId,
+		auditDetail: 'incident_create_cross_location',
+	});
 
 	// Resolve the reporter's display name. requireCareAccess returns a `roles`
 	// row, which has no name column — the human-readable name lives on the
@@ -146,7 +155,10 @@ export async function deleteIncidentReport(
 	clerkUserId: string,
 	incidentId: string
 ) {
-	await requireCareAccess(clerkUserId); // Only care staff/admin can delete
+	// Incident reports are compliance records. Staff can only correct their own
+	// report inside the edit window (see updateIncidentReport); removing one
+	// outright is an admin decision.
+	await requireAdminAccess(clerkUserId);
 
 	const existingReport = await db.query.incidentReports.findFirst({
 		where: eq(incidentReports.id, incidentId),

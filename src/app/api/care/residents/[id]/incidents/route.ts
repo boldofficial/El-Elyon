@@ -2,7 +2,12 @@
 
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireCareAccess, logAudit} from '@/lib/db-helpers';
+import {
+	AccessDeniedError,
+	requireCareAccess,
+	requireResidentInScope,
+	logAudit,
+} from '@/lib/db-helpers';
 import {internalServerError} from '@/lib/api-errors';
 import {getResidentIncidentReports} from '@/db/queries/incident-reports';
 // import {getClerkUser} from "@/lib/clerk";
@@ -19,13 +24,22 @@ export async function GET(
 	}
 
 	try {
-		await requireCareAccess(userId);
+		const userRole = await requireCareAccess(userId);
 
 		const {id: residentId} = await params;
+		await requireResidentInScope({
+			clerkUserId: userId,
+			userRole,
+			residentId,
+			auditDetail: 'resident_incidents_read_cross_location',
+		});
 		const reports = await getResidentIncidentReports(residentId, userId);
 
 		return NextResponse.json(reports);
 	} catch (error) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: 'Access denied'}, {status: 403});
+		}
 		return internalServerError(error, 'GetResidentIncidents');
 	}
 }
@@ -41,9 +55,15 @@ export async function POST(
 	}
 
 	try {
-		await requireCareAccess(userId);
+		const userRole = await requireCareAccess(userId);
 
 		const {id: residentId} = await params;
+		await requireResidentInScope({
+			clerkUserId: userId,
+			userRole,
+			residentId,
+			auditDetail: 'resident_incidents_write_cross_location',
+		});
 		const body = await request.json();
 
 		const report = await createIncidentReport(userId, {
@@ -70,6 +90,9 @@ export async function POST(
 
 		return NextResponse.json(report, {status: 201});
 	} catch (error) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: 'Access denied'}, {status: 403});
+		}
 		return internalServerError(error, 'CreateIncidentReport');
 	}
 }

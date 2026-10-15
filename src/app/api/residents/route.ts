@@ -3,10 +3,11 @@
 // ===================================
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireCareAccess} from '@/lib/db-helpers';
+import {AccessDeniedError, requireCareAccess, scopedLocations} from '@/lib/db-helpers';
 import {internalServerError} from '@/lib/api-errors';
 import {db} from '@/db/index';
 import {residents} from '@/db/schema';
+import {inArray} from 'drizzle-orm';
 
 export async function GET() {
 		const {userId} = await auth();
@@ -15,9 +16,16 @@ export async function GET() {
 		}
 
 		try {
-				await requireCareAccess(userId);
+				const userRole = await requireCareAccess(userId);
+
+				// Non-admins only see residents in their own locations.
+				const locations = scopedLocations(userRole);
+				if (locations && locations.length === 0) {
+						return NextResponse.json([]);
+				}
 
 				const residentsList = await db.query.residents.findMany({
+						where: locations ? inArray(residents.location, locations) : undefined,
 						orderBy: (residents, {asc}) => [asc(residents.name)],
 				});
 
@@ -56,6 +64,9 @@ export async function GET() {
 						}))
 				);
 		} catch (error: any) {
+				if (error instanceof AccessDeniedError) {
+						return NextResponse.json({error: 'Access denied'}, {status: 403});
+				}
 				console.error('Error fetching residents:', error);
 				return NextResponse.json({error: error.message}, {status: 500});
 		}

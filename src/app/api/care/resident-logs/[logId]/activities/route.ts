@@ -2,7 +2,7 @@
 
 import {NextResponse} from "next/server";
 import {auth} from "@clerk/nextjs/server";
-import {requireCareAccess, logAudit} from "@/lib/db-helpers";
+import {AccessDeniedError, requireCareAccess, requireResidentInScope, logAudit} from "@/lib/db-helpers";
 import {internalServerError} from '@/lib/api-errors';
 import {
 	createResidentLogActivity,
@@ -11,7 +11,7 @@ import {
 	deleteResidentLogActivity,
 } from "@/db/mutations/care-activities";
 import {db} from "@/db/index";
-import {residentLogActivities} from "@/db/schema";
+import {residentLogActivities, residentLogs} from "@/db/schema";
 import {eq} from "drizzle-orm";
 
 // GET - List resident log activities for a specific log
@@ -25,9 +25,23 @@ export async function GET(
 	}
 
 	try {
-		await requireCareAccess(userId);
+		const userRole = await requireCareAccess(userId);
 
 		const {logId} = await params;
+		const residentLog = await db.query.residentLogs.findFirst({
+			where: eq(residentLogs.id, logId),
+			columns: {residentId: true},
+		});
+		if (!residentLog) {
+			return NextResponse.json({error: "Resident log not found"}, {status: 404});
+		}
+		await requireResidentInScope({
+			clerkUserId: userId,
+			userRole,
+			residentId: residentLog.residentId,
+			auditDetail: "log_activities_read_cross_location",
+		});
+
 		const activities = await db.query.residentLogActivities.findMany({
 			where: eq(residentLogActivities.logId, logId),
 			orderBy: (activities, {asc}) => [asc(activities.timestamp)],
@@ -35,6 +49,9 @@ export async function GET(
 
 		return NextResponse.json(activities);
 	} catch (error) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: "Access denied"}, {status: 403});
+		}
 		return internalServerError(error, 'GetResidentLogActivities');
 	}
 }
@@ -72,6 +89,9 @@ export async function POST(
 
 		return NextResponse.json(newActivity, {status: 201});
 	} catch (error) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: "Access denied"}, {status: 403});
+		}
 		return internalServerError(error, 'CreateResidentLogActivity');
 	}
 }
@@ -132,6 +152,9 @@ export async function PATCH(
 
 		return NextResponse.json(updatedActivity);
 	} catch (error) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: "Access denied"}, {status: 403});
+		}
 		return internalServerError(error, 'UpdateResidentLogActivity');
 	}
 }
@@ -171,6 +194,9 @@ export async function DELETE(
 
 		return NextResponse.json({success: true});
 	} catch (error) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: "Access denied"}, {status: 403});
+		}
 		return internalServerError(error, 'DeleteResidentLogActivity');
 	}
 }

@@ -4,7 +4,7 @@
 
 import {NextResponse} from "next/server";
 import {auth} from "@clerk/nextjs/server";
-import {requireCareAccess, logAudit} from "@/lib/db-helpers";
+import {AccessDeniedError, requireCareAccess, requireResidentInScope, logAudit} from "@/lib/db-helpers";
 import {getIncidentReport} from "@/db/queries/incident-reports";
 import { deleteIncidentReport, updateIncidentReport } from "@/db/mutations/incident-reports";
 import {IncidentEditNotAllowedError} from "@/lib/incident-edit-policy";
@@ -20,7 +20,7 @@ export async function GET(
 	}
 
 	try {
-		await requireCareAccess(userId);
+		const userRole = await requireCareAccess(userId);
 
 		const {reportId} = await params;
 		const report = await getIncidentReport(reportId, userId);
@@ -29,8 +29,18 @@ export async function GET(
 			return NextResponse.json({error: "Report not found"}, {status: 404});
 		}
 
+		await requireResidentInScope({
+			clerkUserId: userId,
+			userRole,
+			residentId: report.residentId,
+			auditDetail: "incident_read_cross_location",
+		});
+
 		return NextResponse.json(report);
 	} catch (error: any) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: "Access denied"}, {status: 403});
+		}
 		console.error("Error fetching incident report:", error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}
@@ -108,6 +118,9 @@ export async function DELETE(
 
 		return NextResponse.json({success: true});
 	} catch (error: any) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: "Access denied"}, {status: 403});
+		}
 		console.error("Error deleting incident report:", error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}

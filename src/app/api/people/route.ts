@@ -1,8 +1,8 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireCareAccess, logAudit} from '../../../../lib/db-helpers';
+import {AccessDeniedError, requireCareAccess, logAudit, scopedLocations} from '../../../../lib/db-helpers';
 import {internalServerError} from '@/lib/api-errors';
-import {listResidentsByLocation, listAllResidents, getGuardianChecklistTemplates} from '../../../../db/queries/people';
+import {listResidentsByLocation, listAllResidents, listResidentsInLocations, getGuardianChecklistTemplates} from '../../../../db/queries/people';
 import {insertResident} from '../../../../db/mutations/people';
 import {insertGuardian} from '../../../../db/mutations/guardians';
 import {db} from '../../../../db';
@@ -12,6 +12,17 @@ import {InferSelectModel} from 'drizzle-orm';
 
 type GuardianChecklistTemplateSelect = InferSelectModel<typeof guardianChecklistTemplates>;
 
+async function denyLocation(clerkUserId: string, action: string, location: string) {
+    await logAudit({
+        clerkUserId,
+        event: 'access_denied',
+        details: `${action}_cross_location`,
+        deviceId: 'system',
+        location,
+    });
+    return new AccessDeniedError('Location is outside your locations');
+}
+
 export async function GET(request: Request) {
     const {userId} = await auth();
     if (!userId) {
@@ -19,20 +30,31 @@ export async function GET(request: Request) {
     }
 
     try {
-        await requireCareAccess(userId);
+        const userRole = await requireCareAccess(userId);
 
         const {searchParams} = new URL(request.url);
         const location = searchParams.get('location');
+        // Non-admins only see residents in their own locations.
+        const allowedLocations = scopedLocations(userRole);
+
+        if (location && allowedLocations && !allowedLocations.includes(location)) {
+            throw await denyLocation(userId, 'people_list', location);
+        }
 
         let residents;
         if (location) {
             residents = await listResidentsByLocation(location);
+        } else if (allowedLocations) {
+            residents = await listResidentsInLocations(allowedLocations);
         } else {
             residents = await listAllResidents();
         }
 
         return NextResponse.json(residents);
     } catch (error) {
+        if (error instanceof AccessDeniedError) {
+            return NextResponse.json({error: 'Access denied'}, {status: 403});
+        }
         return internalServerError(error, 'GetPeopleResidents');
     }
 }
@@ -44,13 +66,19 @@ export async function POST(request: Request) {
     }
 
     try {
-        await requireCareAccess(userId);
+        const userRole = await requireCareAccess(userId);
 
         const body = await request.json();
         const {name, location, dateOfBirth, guardians, generateChecklist} = body;
 
         if (!name || !location || !dateOfBirth) {
             return NextResponse.json({error: 'Missing required fields: name, location, dateOfBirth'}, {status: 400});
+        }
+
+        // Non-admins may only add residents to their own locations.
+        const allowedLocations = scopedLocations(userRole);
+        if (allowedLocations && !allowedLocations.includes(location)) {
+            throw await denyLocation(userId, 'people_create', location);
         }
 
         const newResident = await insertResident({
@@ -117,6 +145,9 @@ export async function POST(request: Request) {
         });
         return NextResponse.json({id: newResident.id}, {status: 201});
     } catch (error) {
+        if (error instanceof AccessDeniedError) {
+            return NextResponse.json({error: 'Access denied'}, {status: 403});
+        }
         return internalServerError(error, 'CreateResident');
     }
 }
