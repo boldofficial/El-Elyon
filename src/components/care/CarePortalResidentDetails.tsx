@@ -10,6 +10,7 @@ import IncidentReportsList from './IncidentReportsList';
 import ResidentDocuments from './ResidentDocuments';
 import CarbLogWorkspace from './CarbLogWorkspace';
 import GlucoseLogWorkspace from './GlucoseLogWorkspace';
+import {formatResidentDate} from '@/lib/resident-status';
 
 interface Resident {
 	id: string;
@@ -158,9 +159,7 @@ export default function CarePortalResidentDetails({
 					</p>
 					<p>
 						<span className="font-medium">Placement Date:</span>{' '}
-						{resident.placementDate
-							? new Date(resident.placementDate).toLocaleDateString()
-							: 'N/A'}
+						{formatResidentDate(resident.placementDate) ?? 'N/A'}
 					</p>
 				</div>
 				<div>

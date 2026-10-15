@@ -329,9 +329,15 @@ export function admissionDrillAnchorDate(resident: {
   placementDate: Date | string | null | undefined;
   createdAt: Date | string | null | undefined;
 }): string | null {
-  const source = resident.placementDate ?? resident.createdAt;
-  if (!source) return null;
-  return toLocalDate(source);
+  // placement_date is a calendar day saved as UTC midnight, so its day is the
+  // UTC one. Reading it in local time puts a US browser on the day before.
+  if (resident.placementDate) {
+    const placement = resident.placementDate;
+    return (placement instanceof Date ? placement.toISOString() : placement).slice(0, 10);
+  }
+  // createdAt is a real moment, so the local day is the right one.
+  if (!resident.createdAt) return null;
+  return toLocalDate(resident.createdAt);
 }
 
 /** Whether a placement on `anchorDate` falls under the tracked requirement. */
