@@ -11,7 +11,9 @@ import {
 	check,
 	uuid,
 	date,
-	time
+	time,
+	numeric,
+	type AnyPgColumn
 } from 'drizzle-orm/pg-core';
 import {relations, sql} from 'drizzle-orm';
 
@@ -67,6 +69,24 @@ export const residents = pgTable(
 		carbTrackingEnabled: boolean('carb_tracking_enabled')
 			.notNull()
 			.default(false),
+		// Per-resident opt-in for the blood sugar log (see bloodGlucoseLogs),
+		// plus the resident's own alert limits in mg/dL. A null limit falls
+		// back to DEFAULT_GLUCOSE_THRESHOLDS in lib/blood-glucose.ts.
+		glucoseTrackingEnabled: boolean('glucose_tracking_enabled')
+			.notNull()
+			.default(false),
+		glucoseCriticalLowMgDl: integer('glucose_critical_low_mg_dl'),
+		glucoseTargetLowMgDl: integer('glucose_target_low_mg_dl'),
+		glucoseTargetHighMgDl: integer('glucose_target_high_mg_dl'),
+		glucoseCriticalHighMgDl: integer('glucose_critical_high_mg_dl'),
+		// Check types expected every day (e.g. ['before_breakfast', 'bedtime']);
+		// drives the "due / missed" reminders.
+		glucoseScheduledChecks: jsonb('glucose_scheduled_checks')
+			.$type<string[]>()
+			.notNull()
+			.default([]),
+		// Physician's instructions shown to staff on the entry screen.
+		glucoseCareInstructions: text('glucose_care_instructions'),
 		createdAt: timestamp('created_at').defaultNow(),
 		createdBy: varchar('created_by', {length: 255})
 	},
@@ -1629,6 +1649,139 @@ export const carbLogs = pgTable(
 	})
 );
 
+// Blood Glucose Log Table
+//
+// One row per blood sugar check for residents with
+// `residents.glucoseTrackingEnabled`. The reading is kept as entered
+// (value + unit) and as canonical mg/dL; `status` is classified at write time
+// against the resident's limits, which are snapshotted on the row so the
+// record keeps meaning the same thing if the limits change later. Rows are
+// never deleted; every edit writes the previous values to
+// bloodGlucoseLogRevisions first.
+export const bloodGlucoseLogs = pgTable(
+	'blood_glucose_logs',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		residentId: uuid('resident_id')
+			.notNull()
+			.references(() => residents.id, {onDelete: 'cascade'}),
+		location: varchar('location', {length: 255}).notNull(),
+		operationalDate: date('operational_date', {mode: 'string'}).notNull(),
+		checkedAt: timestamp('checked_at').notNull(),
+		checkType: varchar('check_type', {length: 30}).notNull(),
+		method: varchar('method', {length: 20}).notNull().default('fingerstick'),
+		refused: boolean('refused').notNull().default(false),
+		refusalReason: text('refusal_reason'),
+		readingValue: numeric('reading_value', {
+			precision: 5,
+			scale: 1,
+			mode: 'number'
+		}),
+		readingUnit: varchar('reading_unit', {length: 10})
+			.notNull()
+			.default('mg_dl'),
+		readingMgDl: integer('reading_mg_dl'),
+		status: varchar('status', {length: 20}).notNull(),
+		criticalLowMgDl: integer('critical_low_mg_dl').notNull(),
+		targetLowMgDl: integer('target_low_mg_dl').notNull(),
+		targetHighMgDl: integer('target_high_mg_dl').notNull(),
+		criticalHighMgDl: integer('critical_high_mg_dl').notNull(),
+		symptoms: jsonb('symptoms').$type<string[]>().notNull().default([]),
+		actionsTaken: jsonb('actions_taken')
+			.$type<string[]>()
+			.notNull()
+			.default([]),
+		notifiedWho: varchar('notified_who', {length: 255}),
+		insulinGiven: boolean('insulin_given').notNull().default(false),
+		insulinType: varchar('insulin_type', {length: 100}),
+		insulinUnits: numeric('insulin_units', {
+			precision: 5,
+			scale: 1,
+			mode: 'number'
+		}),
+		// Set on an out-of-range reading; cleared state is derived from a
+		// child row whose recheckOfId points here.
+		recheckDueAt: timestamp('recheck_due_at'),
+		recheckOfId: uuid('recheck_of_id').references(
+			(): AnyPgColumn => bloodGlucoseLogs.id,
+			{onDelete: 'set null'}
+		),
+		notes: text('notes'),
+		shiftId: uuid('shift_id').references(() => shifts.id, {
+			onDelete: 'set null'
+		}),
+		staffId: varchar('staff_id', {length: 255}).notNull(),
+		staffNameSnapshot: varchar('staff_name_snapshot', {
+			length: 255
+		}).notNull(),
+		loggedAt: timestamp('logged_at').notNull().defaultNow(),
+		updatedAt: timestamp('updated_at'),
+		updatedBy: varchar('updated_by', {length: 255}),
+		reviewedAt: timestamp('reviewed_at'),
+		reviewedBy: varchar('reviewed_by', {length: 255}),
+		reviewedByName: varchar('reviewed_by_name', {length: 255}),
+		reviewComment: text('review_comment')
+	},
+	(table) => ({
+		residentDateIdx: index('blood_glucose_logs_resident_date_idx').on(
+			table.residentId,
+			table.operationalDate
+		),
+		locationDateIdx: index('blood_glucose_logs_location_date_idx').on(
+			table.location,
+			table.operationalDate
+		),
+		// One recheck per out-of-range reading; a recheck that is itself out
+		// of range gets its own recheck.
+		recheckOfIdx: uniqueIndex('blood_glucose_logs_recheck_of_uidx')
+			.on(table.recheckOfId)
+			.where(sql`${table.recheckOfId} is not null`),
+		checkTypeCheck: check(
+			'blood_glucose_logs_check_type_check',
+			sql`${table.checkType} in ('fasting', 'before_breakfast', 'before_lunch', 'before_dinner', 'bedtime', 'after_meal', 'prn', 'recheck')`
+		),
+		methodCheck: check(
+			'blood_glucose_logs_method_check',
+			sql`${table.method} in ('fingerstick', 'cgm', 'lab')`
+		),
+		unitCheck: check(
+			'blood_glucose_logs_unit_check',
+			sql`${table.readingUnit} in ('mg_dl', 'mmol_l')`
+		),
+		statusCheck: check(
+			'blood_glucose_logs_status_check',
+			sql`${table.status} in ('critical_low', 'low', 'in_range', 'high', 'critical_high', 'refused')`
+		),
+		// A refused check has no reading; any other check must have one.
+		readingPresenceCheck: check(
+			'blood_glucose_logs_reading_presence_check',
+			sql`(${table.refused} and ${table.readingMgDl} is null and ${table.status} = 'refused') or (not ${table.refused} and ${table.readingMgDl} is not null and ${table.status} <> 'refused')`
+		)
+	})
+);
+
+// Previous values of a blood glucose log row, written before every edit.
+export const bloodGlucoseLogRevisions = pgTable(
+	'blood_glucose_log_revisions',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		logId: uuid('log_id')
+			.notNull()
+			.references(() => bloodGlucoseLogs.id, {onDelete: 'cascade'}),
+		previous: jsonb('previous').$type<Record<string, unknown>>().notNull(),
+		reason: text('reason').notNull(),
+		revisedBy: varchar('revised_by', {length: 255}).notNull(),
+		revisedByName: varchar('revised_by_name', {length: 255}).notNull(),
+		revisedAt: timestamp('revised_at').notNull().defaultNow()
+	},
+	(table) => ({
+		logIdx: index('blood_glucose_log_revisions_log_idx').on(
+			table.logId,
+			table.revisedAt
+		)
+	})
+);
+
 export const residentsRelations = relations(residents, ({many}) => ({
 	logs: many(residentLogs),
 	ispFiles: many(ispFiles),
@@ -1641,8 +1794,34 @@ export const residentsRelations = relations(residents, ({many}) => ({
 	documents: many(residentDocuments),
 	fireDrillParticipants: many(fireDrillParticipants),
 	admissionFireDrills: many(fireDrillReports),
-	carbLogs: many(carbLogs)
+	carbLogs: many(carbLogs),
+	bloodGlucoseLogs: many(bloodGlucoseLogs)
 }));
+
+export const bloodGlucoseLogsRelations = relations(
+	bloodGlucoseLogs,
+	({one, many}) => ({
+		resident: one(residents, {
+			fields: [bloodGlucoseLogs.residentId],
+			references: [residents.id]
+		}),
+		shift: one(shifts, {
+			fields: [bloodGlucoseLogs.shiftId],
+			references: [shifts.id]
+		}),
+		revisions: many(bloodGlucoseLogRevisions)
+	})
+);
+
+export const bloodGlucoseLogRevisionsRelations = relations(
+	bloodGlucoseLogRevisions,
+	({one}) => ({
+		log: one(bloodGlucoseLogs, {
+			fields: [bloodGlucoseLogRevisions.logId],
+			references: [bloodGlucoseLogs.id]
+		})
+	})
+);
 
 export const carbLogsRelations = relations(carbLogs, ({one}) => ({
 	resident: one(residents, {

@@ -22,6 +22,7 @@ import {
 } from '@/lib/carb-log';
 import {getOperationalTimeZone} from '../queries/care';
 import {shiftDate} from '../queries/carb-logs';
+import {isInactiveResident} from '@/lib/resident-status';
 
 export class CarbLogValidationError extends Error {
 	constructor(message: string) {
@@ -97,9 +98,21 @@ export async function createCarbLog(
 
 	const resident = await db.query.residents.findFirst({
 		where: eq(residents.id, input.residentId),
-		columns: {id: true, location: true, carbTrackingEnabled: true},
+		columns: {
+			id: true,
+			location: true,
+			carbTrackingEnabled: true,
+			status: true,
+		},
 	});
 	if (!resident) throw new CarbLogValidationError('Resident not found');
+	// Checked before carbTrackingEnabled: a resident who has left gives the
+	// clearer message, and the flag is often still on when they go.
+	if (isInactiveResident(resident)) {
+		throw new CarbLogValidationError(
+			'This resident is no longer at the facility; their record is read-only'
+		);
+	}
 	if (!resident.carbTrackingEnabled) {
 		throw new CarbLogValidationError('Carb tracking is not enabled for this resident');
 	}

@@ -6,6 +6,7 @@ import ResidentActivityHistory from "./ResidentActivityHistory";
 import IncidentReportsList from "./IncidentReportsList";
 import IncidentReportForm from "./IncidentReportForm";
 import CarbLogWorkspace from "./CarbLogWorkspace";
+import GlucoseLogWorkspace from "./GlucoseLogWorkspace";
 import { formatResidentDate } from "@/lib/resident-status";
 
 type Props = {
@@ -97,6 +98,9 @@ export default function ResidentCase({ residentId, onBack }: Props) {
           ...(resident.carbTrackingEnabled
             ? [{ key: "carb_log", label: "Carb Log" }]
             : []),
+          ...(resident.glucoseTrackingEnabled
+            ? [{ key: "blood_sugar", label: "Blood Sugar" }]
+            : []),
         ].map((t) => (
           <button
             key={t.key}
@@ -129,6 +133,9 @@ export default function ResidentCase({ residentId, onBack }: Props) {
         {tab === "documents" && <ResidentDocuments residentId={residentId} />}
         {tab === "carb_log" && resident.carbTrackingEnabled && (
           <CarbLogWorkspace residentId={residentId} residentName={resident.name} />
+        )}
+        {tab === "blood_sugar" && resident.glucoseTrackingEnabled && (
+          <GlucoseLogWorkspace residentId={residentId} residentName={resident.name} />
         )}
       </div>
     </div>

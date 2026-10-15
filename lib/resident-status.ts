@@ -1,8 +1,66 @@
-// Shared wording for a resident's status: the badge on the resident list and
+// lib/resident-status.ts
+//
+// Single source of truth for "has this resident left the facility?", plus the
+// shared wording for a resident's status: the badge on the resident list and
 // the leaving-date field on the admin profile both read from here so they
 // always agree.
+//
+// A resident who leaves is never deleted -- licensing requires the record to
+// survive -- so `residents.status` is the only thing separating a current
+// resident from a historical one. Before this module each call site re-derived
+// that separately (or, more often, forgot to), which is how departed residents
+// kept generating ISP and fire-evac reminders.
+//
+// Two details worth knowing:
+//
+//   1. `status` is a plain varchar(20), not a pg enum. Migration 0006 added it
+//      with DEFAULT 'active', and the write path normalises anything that is
+//      not exactly 'inactive' back to 'active'. So the safe read is "inactive
+//      means inactive, everything else -- including null on a row written
+//      before 0006 -- means active". Inverting that test would silently mute
+//      alerts for legacy rows.
+//
+//   2. Hiding an inactive resident applies to LISTS, not to lookups by id.
+//      Their profile, logs, ISPs and drill history must still open on a direct
+//      link; that is the whole point of keeping the record. What stops is new
+//      writes and outbound notices.
+//
+// This module is imported by client components, so it stays free of database
+// imports. The Drizzle filter lives in lib/resident-status-sql.ts.
 
-export type InactiveReason = 'deceased' | 'placement_terminated' | 'discharged';
+export const RESIDENT_ACTIVE = 'active' as const;
+export const RESIDENT_INACTIVE = 'inactive' as const;
+
+export type ResidentStatus = typeof RESIDENT_ACTIVE | typeof RESIDENT_INACTIVE;
+
+/** Reasons the admin UI offers when marking a resident inactive. */
+export const INACTIVE_REASONS = [
+	'deceased',
+	'placement_terminated',
+	'discharged',
+] as const;
+
+export type InactiveReason = (typeof INACTIVE_REASONS)[number];
+
+type StatusBearing = {status?: string | null};
+
+/** True while the resident is still placed at the facility. */
+export function isActiveResident(resident: StatusBearing): boolean {
+	return (resident.status ?? RESIDENT_ACTIVE) !== RESIDENT_INACTIVE;
+}
+
+/** True once the resident has left, for whatever reason. */
+export function isInactiveResident(resident: StatusBearing): boolean {
+	return !isActiveResident(resident);
+}
+
+/**
+ * In-memory filter, for the several queries that already load every resident
+ * and then partition them by location in TypeScript.
+ */
+export function onlyActiveResidents<T extends StatusBearing>(rows: T[]): T[] {
+	return rows.filter(isActiveResident);
+}
 
 export interface ResidentStatusFields {
 	status?: string | null;
@@ -32,11 +90,7 @@ const REASON_PHRASE: Record<InactiveReason, string> = {
 };
 
 function isInactiveReason(value: unknown): value is InactiveReason {
-	return (
-		value === 'deceased' ||
-		value === 'placement_terminated' ||
-		value === 'discharged'
-	);
+	return (INACTIVE_REASONS as readonly unknown[]).includes(value);
 }
 
 /**
@@ -61,7 +115,7 @@ export function formatResidentDate(value: string | Date | null | undefined) {
 }
 
 export function residentStatusBadge(resident: ResidentStatusFields) {
-	if ((resident.status ?? 'active') !== 'inactive') {
+	if (isActiveResident(resident)) {
 		return {label: 'Active', tone: 'active' as ResidentStatusTone};
 	}
 	if (isInactiveReason(resident.inactiveReason)) {
@@ -72,7 +126,7 @@ export function residentStatusBadge(resident: ResidentStatusFields) {
 
 /** The sentence shown when someone clicks a resident's status badge. */
 export function residentStatusDetail(resident: ResidentStatusFields) {
-	if ((resident.status ?? 'active') !== 'inactive') {
+	if (isActiveResident(resident)) {
 		const since = formatResidentDate(resident.placementDate);
 		return since ? `Active since ${since}` : 'Active (no placement date on file)';
 	}
