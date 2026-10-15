@@ -6,6 +6,7 @@ import ResidentActivityHistory from "./ResidentActivityHistory";
 import IncidentReportsList from "./IncidentReportsList";
 import IncidentReportForm from "./IncidentReportForm";
 import CarbLogWorkspace from "./CarbLogWorkspace";
+import { formatResidentDate } from "@/lib/resident-status";
 
 type Props = {
   residentId: string;
@@ -157,7 +158,7 @@ function OverviewTab({ resident }: { resident: any }) {
           <InfoField label="Allergies" value={resident.allergies} />
           <InfoField 
             label="Placement Date" 
-            value={resident.placementDate ? new Date(resident.placementDate).toLocaleDateString() : null} 
+            value={formatResidentDate(resident.placementDate)}
           />
         </div>
       </div>

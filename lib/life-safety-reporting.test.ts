@@ -309,9 +309,15 @@ test("admission drills are keyed by the admitted resident, who must be a partici
 test("admission drill anchor prefers the placement date and falls back to creation", () => {
   assert.equal(
     admissionDrillAnchorDate({
-      placementDate: new Date(2026, 8, 3, 15, 0),
+      placementDate: new Date(Date.UTC(2026, 8, 3)),
       createdAt: new Date(2026, 8, 1),
     }),
+    "2026-09-03",
+  );
+  // Placement arrives in the browser as a UTC-midnight ISO string; it must not
+  // slide to the previous day in a US time zone.
+  assert.equal(
+    admissionDrillAnchorDate({ placementDate: "2026-09-03T00:00:00.000Z", createdAt: null }),
     "2026-09-03",
   );
   assert.equal(
