@@ -2,6 +2,7 @@ import {db} from '../index';
 import {isp, ispFiles, ispFileAcknowledgments} from '../schema';
 import {eq, and, inArray} from 'drizzle-orm';
 import {getUserRoleDoc} from '@/lib/db-helpers';
+import {isActiveResident} from '@/lib/resident-status';
 
 export async function getIspById(ispId: string) {
     return await db.query.isp.findFirst({
@@ -38,6 +39,12 @@ export interface PendingISPFileAck {
 // Active ISP files the given user still needs to acknowledge, scoped to the
 // user's assigned locations (admins see all). When a new file is activated the
 // prior version is archived, so only the current active version is ever pending.
+//
+// Residents who have left the facility are skipped. ispFiles.status stays
+// 'active' after a resident becomes inactive -- the two columns are unrelated,
+// and the file is still the current version of a document that must be kept --
+// so without this check staff keep being asked to acknowledge the care plan of
+// someone no longer in the house.
 export async function getPendingISPFileAcknowledgments(
     clerkUserId: string
 ): Promise<PendingISPFileAck[]> {
@@ -52,12 +59,14 @@ export async function getPendingISPFileAcknowledgments(
         with: {resident: true},
     });
 
+    const placed = activeFiles.filter(
+        (f) => f.resident && isActiveResident(f.resident)
+    );
+
     const scoped =
         role === 'admin'
-            ? activeFiles
-            : activeFiles.filter(
-                  (f) => f.resident && userLocations.includes(f.resident.location)
-              );
+            ? placed
+            : placed.filter((f) => userLocations.includes(f.resident!.location));
 
     if (scoped.length === 0) return [];
 

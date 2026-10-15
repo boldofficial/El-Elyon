@@ -3,14 +3,22 @@ import {residents, roles, employees, residentLogs, config, shifts, locations, is
 import {eq, or, and, isNull, asc} from 'drizzle-orm';
 import {requireCareAccess} from '@/lib/db-helpers';
 import {isValidIanaTimeZone, type ShiftSlot} from '@/lib/water-temperature';
+import {activeResidentsOnly} from '@/lib/resident-status-sql';
 
-// Query: Get residents for current user's locations
+// Query: Get residents currently placed at the user's locations.
+//
+// Scoped to active residents: this answers "who am I caring for", which a
+// resident who has left is no longer part of. Their record is still reachable
+// by id (getResidentLogs with a residentId, the admin profile route); it is
+// only the roster that shortens.
 export async function getMyResidents(clerkUserId: string) {
 	const userRole = await requireCareAccess(clerkUserId);
 
 	// Admin can see all residents
 	if (userRole.role === 'admin') {
-		const allResidents = await db.query.residents.findMany();
+		const allResidents = await db.query.residents.findMany({
+			where: activeResidentsOnly(),
+		});
 		return allResidents.map((resident) => ({
 			id: resident.id,
 			name: resident.name,
@@ -27,7 +35,10 @@ export async function getMyResidents(clerkUserId: string) {
 	}
 
 	const filteredResidents = await db.query.residents.findMany({
-		where: or(...userLocations.map(location => eq(residents.location, location))),
+		where: and(
+			activeResidentsOnly(),
+			or(...userLocations.map((location) => eq(residents.location, location)))
+		),
 	});
 
 	return filteredResidents.map((resident) => ({

@@ -4,7 +4,17 @@
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
 import {requireAdminOrSupervisorAccess, logAudit} from '@/lib/db-helpers';
-import {updateResident} from '@/db/mutations/residents';
+import {
+	updateResident,
+	retireResidentNotices,
+	reinstateResidentNotices,
+} from '@/db/mutations/residents';
+import {
+	INACTIVE_REASONS,
+	RESIDENT_ACTIVE,
+	RESIDENT_INACTIVE,
+	isInactiveResident,
+} from '@/lib/resident-status';
 import {db} from '@/db/index';
 import {residents} from '@/db/schema';
 import {eq} from 'drizzle-orm';
@@ -50,22 +60,58 @@ export async function PATCH(
 
 		const {id: residentId} = await params;
 		const body = await request.json();
-		const status = body.status === 'inactive' ? 'inactive' : 'active';
-		const inactiveReason =
-			status === 'inactive' &&
-			['deceased', 'placement_terminated', 'discharged'].includes(
-				body.inactiveReason
-			)
-				? body.inactiveReason
-				: null;
+
+		// Read the status as it stands before the write, so the TRANSITION --
+		// not merely the new value -- drives the side effects below. Saving an
+		// unrelated field on an already-inactive resident must not re-run the
+		// retirement sweep and stamp a fresh dismissedAt on alerts that were
+		// closed weeks ago.
+		const previous = await db.query.residents.findFirst({
+			where: eq(residents.id, residentId),
+			columns: {status: true, inactiveReason: true, inactiveDate: true},
+		});
+		if (!previous) {
+			return NextResponse.json({error: 'Resident not found'}, {status: 404});
+		}
+		const wasInactive = isInactiveResident(previous);
+
+		// This is a PATCH, so an absent `status` means "leave it alone", not
+		// "make them active". The admin form always sends the whole resident so
+		// the distinction never comes up there, but reviving a resident is now
+		// a side-effecting operation and it should take an explicit request.
+		const nowInactive =
+			body.status === undefined
+				? wasInactive
+				: body.status === RESIDENT_INACTIVE;
+		const status = nowInactive ? RESIDENT_INACTIVE : RESIDENT_ACTIVE;
+
+		// A reason only survives while the resident is inactive, and only if it
+		// is one the UI actually offers. An inactive resident whose reason is
+		// left out of the request keeps the one already on file.
+		const submittedReason = (INACTIVE_REASONS as readonly string[]).includes(
+			body.inactiveReason
+		)
+			? body.inactiveReason
+			: null;
+		const inactiveReason = !nowInactive
+			? null
+			: body.inactiveReason === undefined
+				? previous.inactiveReason
+				: submittedReason;
+
 		// Only an inactive resident has a leaving date; accept a plain
-		// YYYY-MM-DD calendar date and drop anything else.
-		const inactiveDate =
-			status === 'inactive' &&
+		// YYYY-MM-DD calendar date and drop anything else. Same PATCH rule as
+		// the reason: left out of the request, the date on file stands.
+		const submittedDate =
 			typeof body.inactiveDate === 'string' &&
 			/^\d{4}-\d{2}-\d{2}$/.test(body.inactiveDate)
 				? body.inactiveDate
 				: null;
+		const inactiveDate = !nowInactive
+			? null
+			: body.inactiveDate === undefined
+				? previous.inactiveDate
+				: submittedDate;
 
 		const updated = await updateResident(residentId, {
 			name: body.name,
@@ -109,6 +155,43 @@ export async function PATCH(
 			deviceId: 'system',
 			location: body.location || '',
 		});
+
+		// Status transitions carry side effects beyond the row itself. Audited
+		// separately from the profile save: "who stopped this resident's alerts,
+		// and when" is a question an inspector can reasonably ask.
+		if (!wasInactive && nowInactive) {
+			const retired = await retireResidentNotices(residentId);
+			await logAudit({
+				clerkUserId: userId,
+				event: 'DEACTIVATE_RESIDENT',
+				details:
+					`Marked resident ${residentId} inactive (${inactiveReason ?? 'no reason given'}); ` +
+					`deactivated ${retired.alertsDeactivated} compliance alert(s), ` +
+					`revoked ${retired.checklistLinksRevoked} guardian checklist link(s)`,
+				deviceId: 'system',
+				location: updated?.location || body.location || '',
+			});
+		} else if (wasInactive && !nowInactive) {
+			// Residents do not return to the facility, so this branch is always a
+			// correction of an earlier mis-tick rather than a re-admission. Worth
+			// auditing loudly for exactly that reason -- it should be rare, and
+			// reversing a `deceased` marking in particular is not something that
+			// should pass unrecorded.
+			//
+			// `updated` has already had inactiveReason cleared, so the reason the
+			// resident was marked inactive has to come from the pre-update read.
+			const reinstated = await reinstateResidentNotices(
+				residentId,
+				previous.inactiveReason
+			);
+			await logAudit({
+				clerkUserId: userId,
+				event: 'REACTIVATE_RESIDENT',
+				details: `Marked resident ${residentId} active again; ${reinstated.note}`,
+				deviceId: 'system',
+				location: updated?.location || body.location || '',
+			});
+		}
 
 		return NextResponse.json(updated);
 	} catch (error: any) {

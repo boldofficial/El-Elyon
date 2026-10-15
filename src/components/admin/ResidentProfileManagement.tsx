@@ -44,6 +44,14 @@ interface RelationshipContact {
 	address: string;
 }
 
+// Mirrors the <option> labels on the Inactive Reason select below, so the
+// deactivation confirmation names the reason the way the admin just picked it.
+const INACTIVE_REASON_LABELS: Record<string, string> = {
+	deceased: 'Deceased',
+	placement_terminated: 'Placement Terminated',
+	discharged: 'Discharged',
+};
+
 const emptyRelationshipContact = (): RelationshipContact => ({
 	name: '',
 	relationship: '',
@@ -102,6 +110,10 @@ export default function ResidentProfileManagement({
 	const [relationshipContacts, setRelationshipContacts] = useState<
 		RelationshipContact[]
 	>([emptyRelationshipContact()]);
+	// The status as it stands ON THE SERVER, not in the form. The confirmation
+	// below must fire on the active -> inactive transition, so comparing against
+	// the edited form state would be circular.
+	const [savedStatus, setSavedStatus] = useState<Resident['status']>('active');
 
 	useEffect(() => {
 		async function fetchResident() {
@@ -111,6 +123,7 @@ export default function ResidentProfileManagement({
 
 				const data = await res.json();
 				setResident(data);
+				setSavedStatus(data.status === 'inactive' ? 'inactive' : 'active');
 				setRelationshipContacts(
 					parseRelationshipContacts(data.importantRelationships)
 				);
@@ -143,8 +156,81 @@ export default function ResidentProfileManagement({
 		});
 	};
 
+	/**
+	 * Counts the guardian checklists that saving would revoke, so the
+	 * confirmation can name a real number instead of a vague warning.
+	 *
+	 * Best-effort on purpose: if the count cannot be fetched we still confirm,
+	 * just without the number. Failing to load a nicety must never be the reason
+	 * an admin cannot close out a resident who has left.
+	 */
+	const countRevocableChecklists = async (): Promise<number | null> => {
+		try {
+			const res = await fetch(
+				`/api/guardian-checklists/links?residentId=${residentId}&pendingOnly=true`
+			);
+			if (!res.ok) return null;
+			const links = await res.json();
+			if (!Array.isArray(links)) return null;
+			// Already-expired links are not revoked by saving -- they are spent.
+			return links.filter((l: {expired?: boolean}) => !l.expired).length;
+		} catch {
+			return null;
+		}
+	};
+
+	/**
+	 * Confirms the one change on this form that cannot be cleanly undone.
+	 *
+	 * Deliberately at SAVE time rather than on the dropdown's change event.
+	 * Changing the dropdown commits nothing -- an admin can flip it, think
+	 * better of it and navigate away -- so confirming there would ask a heavy
+	 * question for an action that may never happen, and ask it again on every
+	 * toggle. This is the moment the alerts actually stop.
+	 *
+	 * Returns false only when the admin explicitly declines.
+	 */
+	const confirmDeactivation = async (target: Resident): Promise<boolean> => {
+		const revocable = await countRevocableChecklists();
+		const reason = target.inactiveReason
+			? INACTIVE_REASON_LABELS[target.inactiveReason] ?? target.inactiveReason
+			: null;
+
+		const lines = [
+			`Mark ${target.name} as inactive${reason ? ` (${reason})` : ''}?`,
+			'',
+			'This will:',
+			'  - Stop all compliance alerts and reminders about them',
+			'  - Remove them from care portal resident lists',
+			'  - Make their record read-only (no new care logs)',
+		];
+
+		if (revocable === null) {
+			lines.push('  - Revoke any pending guardian checklists');
+		} else if (revocable > 0) {
+			lines.push(
+				`  - Revoke ${revocable} pending guardian checklist${revocable === 1 ? '' : 's'}`
+			);
+		}
+
+		lines.push(
+			'',
+			'Their records, logs and documents are kept and stay readable.',
+			'Reversing this does not restore revoked checklists -- they must be re-sent.'
+		);
+
+		return window.confirm(lines.join('\n'));
+	};
+
 	const handleSave = async () => {
 		if (!resident) return;
+
+		// Only the active -> inactive transition is confirmed. Editing an
+		// unrelated field on someone already inactive changes nothing about their
+		// alerts, and should not nag.
+		const isDeactivating =
+			savedStatus !== 'inactive' && resident.status === 'inactive';
+		if (isDeactivating && !(await confirmDeactivation(resident))) return;
 
 		const importantRelationships =
 			serializeRelationshipContacts(relationshipContacts);
@@ -161,6 +247,7 @@ export default function ResidentProfileManagement({
 
 			const updated = await res.json();
 			setResident(updated);
+			setSavedStatus(updated.status === 'inactive' ? 'inactive' : 'active');
 			setRelationshipContacts(
 				parseRelationshipContacts(updated.importantRelationships)
 			);
