@@ -4,7 +4,16 @@ import {db} from '@/db/index';
 import {residents, shifts} from '@/db/schema';
 import {getFullUserData} from '@/db/queries/users';
 import {and, desc, eq, inArray, isNull} from 'drizzle-orm';
+import {activeResidentsOnly} from '@/lib/resident-status-sql';
 
+// Resident LISTS here exclude residents who have left the facility -- these
+// feed the care portal pickers and the supervisor compliance workspace, which
+// are about who is in the house right now.
+//
+// Lookups by `residentId` deliberately do NOT filter. A former resident's case
+// page, logs and documents must still open on a direct link; that is the whole
+// point of keeping the record. What stops for them is new writes (blocked in
+// db/mutations) and outbound notices, not reading.
 export async function GET(request: Request) {
 	try {
 		const {userId} = await auth();
@@ -34,7 +43,9 @@ export async function GET(request: Request) {
 			}
 
 			const residentList = await db.query.residents.findMany({
-				where: location ? eq(residents.location, location) : undefined,
+				where: location
+					? and(eq(residents.location, location), activeResidentsOnly())
+					: activeResidentsOnly(),
 			});
 			return NextResponse.json(residentList);
 		}
@@ -68,7 +79,8 @@ export async function GET(request: Request) {
 		const locationResidents = await db.query.residents.findMany({
 			where: and(
 				inArray(residents.location, userData.locations),
-				eq(residents.location, currentShift.location)
+				eq(residents.location, currentShift.location),
+				activeResidentsOnly()
 			),
 		});
 

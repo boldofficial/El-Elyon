@@ -11,10 +11,15 @@ import {
 } from '../schema';
 import {eq, and, desc, gte, lte, sql, inArray} from 'drizzle-orm';
 import {requireCareAccess, getUserRoleDoc} from '@/lib/db-helpers';
+import {activeResidentsOnly} from '@/lib/resident-status-sql';
 
-// Internal: List all residents (no auth)
+// Internal: List residents still placed at the facility (no auth).
+//
+// Every caller of this is an alert/reminder generator, so it is scoped to
+// active residents. Anything that needs the historical roster -- a records
+// export, an inspector view -- should query residents directly and say so.
 export async function internalListResidents() {
-	return await db.query.residents.findMany();
+	return await db.query.residents.findMany({where: activeResidentsOnly()});
 }
 
 // Internal: List all ISP files for a resident (no auth)
@@ -38,8 +43,15 @@ export async function getComplianceOverview(clerkUserId: string) {
 
 	const items = [];
 
-	// Get ISP items from new isp_files table - filter by user"s locations
-	const allResidents = await db.query.residents.findMany();
+	// Get ISP items from new isp_files table - filter by user"s locations.
+	// Inactive residents are dropped here rather than per-item: every row this
+	// function builds is a deadline ("ISP overdue", "No plan on file"), and a
+	// resident who has left cannot be overdue for anything. This also feeds
+	// the reminder-email route, so leaving them in would mail admins about
+	// former residents.
+	const allResidents = await db.query.residents.findMany({
+		where: activeResidentsOnly(),
+	});
 	const filteredResidents = isAdmin
 		? allResidents
 		: allResidents.filter((r) => userLocations.includes(r.location));
@@ -147,6 +159,13 @@ export async function getGuardianChecklistLinks(clerkUserId: string) {
 	const isAdmin = role.role === 'admin';
 
 	const links = await db.query.guardianChecklistLinks.findMany();
+	// Every resident, active or not, on purpose. This list resolves names and
+	// locations for links that already exist; the loop below drops any link
+	// whose resident is missing, so filtering to active residents here would
+	// not hide a former resident's checklist -- it would delete it from the
+	// record. Links belonging to a resident who has left are already revoked
+	// (retireResidentNotices pulls expiresAt back), so they surface here as
+	// expired, which is what the compliance workspace should show.
 	const residentsList = await db.query.residents.findMany();
 	const templates = await db.query.guardianChecklistTemplates.findMany();
 
@@ -183,7 +202,9 @@ export async function getFireEvacPlans(clerkUserId: string) {
 	const userLocations = role.locations ?? [];
 	const isAdmin = role.role === 'admin';
 
-	const residentsList = await db.query.residents.findMany();
+	const residentsList = await db.query.residents.findMany({
+		where: activeResidentsOnly(),
+	});
 	const filteredResidents = isAdmin
 		? residentsList
 		: residentsList.filter((r) => userLocations.includes(r.location));
@@ -228,7 +249,9 @@ export async function getFireEvacPlans(clerkUserId: string) {
 
 // Internal: List latest fire evac per resident (no auth)
 export async function internalListLatestFireEvac() {
-	const residentsList = await db.query.residents.findMany();
+	const residentsList = await db.query.residents.findMany({
+		where: activeResidentsOnly(),
+	});
 	const result = [];
 
 	for (const resident of residentsList) {

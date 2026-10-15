@@ -24,6 +24,7 @@ import {
 	type GlucoseThresholds,
 } from '@/lib/blood-glucose';
 import {getOperationalTimeZone} from '../queries/care';
+import {isInactiveResident} from '@/lib/resident-status';
 
 /** Bad input from the client; the message is safe to show to the user. */
 export {GlucoseEntryError as GlucoseLogValidationError};
@@ -78,6 +79,7 @@ export async function createGlucoseLog(
 		columns: {
 			id: true,
 			location: true,
+			status: true,
 			glucoseTrackingEnabled: true,
 			glucoseCriticalLowMgDl: true,
 			glucoseTargetLowMgDl: true,
@@ -86,6 +88,13 @@ export async function createGlucoseLog(
 		},
 	});
 	if (!resident) throw new GlucoseEntryError('Resident not found');
+	// Same rule and order as the carb log: a resident who has left gets the
+	// clearer message, and the tracking flag is often still on when they go.
+	if (isInactiveResident(resident)) {
+		throw new GlucoseEntryError(
+			'This resident is no longer at the facility; their record is read-only'
+		);
+	}
 	if (!resident.glucoseTrackingEnabled) {
 		throw new GlucoseEntryError('Blood sugar tracking is not turned on for this resident');
 	}

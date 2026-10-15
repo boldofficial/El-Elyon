@@ -23,6 +23,7 @@ import {
 	toLocalDate,
 	type DetectorKind,
 } from '@/lib/life-safety-reporting';
+import {activeResidentsOnly} from '@/lib/resident-status-sql';
 
 /**
  * CRON JOB: Generates (and clears) compliance reminders.
@@ -42,6 +43,10 @@ import {
  *
  * Admission drills never satisfy the semiannual cadence and vice versa: the
  * fire-drill pass reads only drill_type = 'scheduled' reports.
+ *
+ * Residents marked inactive (`residents.status`) are excluded from every
+ * resident-scoped pass: they have left the facility, so nothing about them is
+ * still due. Their records remain; only the reminders stop.
  *
  * Each pass is idempotent: it ensures exactly one active alert per subject while
  * the item is due, and deactivates the alert once the item is updated (the
@@ -210,7 +215,16 @@ export async function GET(req: NextRequest) {
 			return count;
 		}
 
-		const allResidents = await db.query.residents.findMany();
+		// Residents who have left the facility are excluded from every pass
+		// below. Their records stay, but nothing about them is still "due".
+		// Because clearStale retires any active alert a pass no longer
+		// produces, dropping them here is also what closes reminders raised
+		// while they were still placed -- retireResidentNotices does that
+		// immediately at flip time, and this is the backstop for anything
+		// deactivated out-of-band (a direct DB edit, a restored backup).
+		const allResidents = await db.query.residents.findMany({
+			where: activeResidentsOnly(),
+		});
 
 		// ---------- ISP (effectiveDate + 6 months) ----------
 		const ispDueResidentIds = new Set<string>();

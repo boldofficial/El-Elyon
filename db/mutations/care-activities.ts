@@ -4,6 +4,7 @@ import {eq} from 'drizzle-orm';
 import {requireCareAccess} from '@/lib/db-helpers';
 import {logAudit} from './audit';
 import {InferSelectModel} from 'drizzle-orm';
+import {isInactiveResident} from '@/lib/resident-status';
 
 type ResidentLogActivitySelect = InferSelectModel<typeof residentLogActivities>;
 type ResidentLogActivityInsert = typeof residentLogActivities.$inferInsert;
@@ -35,6 +36,14 @@ export async function createResidentLogActivity(
 		throw new Error('Resident not found for log');
 	}
 
+	// Activities hang off a care log and are recorded as they happen, so the
+	// same rule applies as to the log itself: nothing new gets added to a
+	// departed resident's record.
+	if (isInactiveResident(resident)) {
+		throw new Error(
+			'This resident is no longer at the facility; their record is read-only'
+		);
+	}
 
 	const [newActivity] = await db
 		.insert(residentLogActivities)

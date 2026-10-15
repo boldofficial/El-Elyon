@@ -28,6 +28,7 @@ import {
 	type GlucoseThresholds,
 	type GlucoseUnit,
 } from '@/lib/blood-glucose';
+import {activeResidentsOnly} from '@/lib/resident-status-sql';
 import {getOperationalTimeZone} from './care';
 import {shiftDate} from './carb-logs';
 
@@ -367,7 +368,7 @@ export async function getGlucoseRemindersForUser(
 	const tracked = await db.query.residents.findMany({
 		where: and(
 			eq(residents.glucoseTrackingEnabled, true),
-			eq(residents.status, 'active'),
+			activeResidentsOnly(),
 			isAdmin ? undefined : inArray(residents.location, locationNames)
 		),
 		columns: SETTINGS_COLUMNS,
