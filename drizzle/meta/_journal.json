@@ -176,6 +176,13 @@
       "when": 1792088070772,
       "tag": "0024_add_blood_glucose_logs",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1792120891784,
+      "tag": "0025_blood_glucose_critical_only",
+      "breakpoints": true
     }
   ]
 }

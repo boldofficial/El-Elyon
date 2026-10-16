@@ -102,8 +102,6 @@ function toDto({log, recheckId, residentName}: JoinedRow): GlucoseLogDto {
 		status: log.status as GlucoseStatus,
 		thresholds: {
 			criticalLow: log.criticalLowMgDl,
-			low: log.targetLowMgDl,
-			high: log.targetHighMgDl,
 			criticalHigh: log.criticalHighMgDl,
 		},
 		symptoms: (log.symptoms ?? []) as GlucoseSymptom[],
@@ -136,8 +134,6 @@ function selectLogs() {
 
 export function settingsFromResident(resident: {
 	glucoseCriticalLowMgDl: number | null;
-	glucoseTargetLowMgDl: number | null;
-	glucoseTargetHighMgDl: number | null;
 	glucoseCriticalHighMgDl: number | null;
 	glucoseScheduledChecks: string[] | null;
 	glucoseCareInstructions: string | null;
@@ -146,8 +142,6 @@ export function settingsFromResident(resident: {
 		thresholds: resolveGlucoseThresholds(resident),
 		usingDefaultThresholds:
 			resident.glucoseCriticalLowMgDl === null &&
-			resident.glucoseTargetLowMgDl === null &&
-			resident.glucoseTargetHighMgDl === null &&
 			resident.glucoseCriticalHighMgDl === null,
 		scheduledChecks: normalizeScheduledChecks(resident.glucoseScheduledChecks),
 		careInstructions: resident.glucoseCareInstructions,
@@ -160,8 +154,6 @@ const SETTINGS_COLUMNS = {
 	location: true,
 	glucoseTrackingEnabled: true,
 	glucoseCriticalLowMgDl: true,
-	glucoseTargetLowMgDl: true,
-	glucoseTargetHighMgDl: true,
 	glucoseCriticalHighMgDl: true,
 	glucoseScheduledChecks: true,
 	glucoseCareInstructions: true,
@@ -188,7 +180,7 @@ export type GlucoseResidentView = {
 	entries: GlucoseLogDto[];
 	today: {operationalDate: string; slots: SlotState[]};
 	settings: GlucoseResidentSettings;
-	/** Out-of-range readings from the last 24 hours that still need a recheck. */
+	/** Critical readings from the last 24 hours that still need a recheck. */
 	pendingRechecks: GlucoseLogDto[];
 	viewer: {clerkUserId: string; canReview: boolean};
 };
@@ -326,7 +318,7 @@ export type GlucoseReminders = {
 		operationalDate: string;
 		slots: SlotState[];
 	}>;
-	/** Out-of-range readings still waiting for a recheck. */
+	/** Critical readings still waiting for a recheck. */
 	rechecks: Array<{
 		logId: string;
 		residentId: string;
@@ -336,7 +328,7 @@ export type GlucoseReminders = {
 		checkedAt: string;
 		recheckDueAt: string;
 	}>;
-	/** Supervisors/admins only: out-of-range readings from the last 3 days not yet reviewed. */
+	/** Supervisors/admins only: critical readings from the last 3 days not yet reviewed. */
 	unreviewed: Array<{
 		logId: string;
 		residentId: string;
@@ -350,7 +342,7 @@ export type GlucoseReminders = {
 };
 
 const UNREVIEWED_LOOKBACK_DAYS = 3;
-const OUT_OF_RANGE: GlucoseStatus[] = ['critical_low', 'low', 'high', 'critical_high'];
+const CRITICAL: GlucoseStatus[] = ['critical_low', 'critical_high'];
 
 /**
  * Dashboard feed for the caller's locations (all locations for admins).
@@ -403,7 +395,7 @@ export async function getGlucoseRemindersForUser(
 					.where(
 						and(
 							inArray(bloodGlucoseLogs.residentId, ids),
-							inArray(bloodGlucoseLogs.status, OUT_OF_RANGE),
+							inArray(bloodGlucoseLogs.status, CRITICAL),
 							isNull(bloodGlucoseLogs.reviewedAt),
 							gte(
 								bloodGlucoseLogs.operationalDate,
@@ -469,7 +461,7 @@ export type GlucoseScopeFilters = {
 	residentId?: string;
 	from?: string;
 	to?: string;
-	/** 'attention' = out of range or refused; 'unreviewed' = out of range and not yet reviewed. */
+	/** 'attention' = critical or refused; 'unreviewed' = critical and not yet reviewed. */
 	show?: 'all' | 'attention' | 'unreviewed';
 };
 
@@ -538,12 +530,12 @@ export async function getGlucoseLogsForScope(
 	if (filters.show === 'attention') {
 		conditions.push(
 			or(
-				inArray(bloodGlucoseLogs.status, OUT_OF_RANGE),
+				inArray(bloodGlucoseLogs.status, CRITICAL),
 				eq(bloodGlucoseLogs.refused, true)
 			) as SQL
 		);
 	} else if (filters.show === 'unreviewed') {
-		conditions.push(inArray(bloodGlucoseLogs.status, OUT_OF_RANGE));
+		conditions.push(inArray(bloodGlucoseLogs.status, CRITICAL));
 		conditions.push(isNull(bloodGlucoseLogs.reviewedAt));
 	}
 

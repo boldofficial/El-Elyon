@@ -18,7 +18,7 @@ import {
 } from './blood-glucose';
 import {deriveSlotStates} from './custom-log-schedule';
 
-const T = DEFAULT_GLUCOSE_THRESHOLDS; // 54 / 70 / 180 / 400
+const T = DEFAULT_GLUCOSE_THRESHOLDS; // critical below 54, above 400
 
 const inRange = {checkType: 'before_breakfast', method: 'fingerstick', readingValue: 120};
 
@@ -29,69 +29,71 @@ test('converts mmol/L to whole mg/dL and back', () => {
 	assert.equal(mgDlToMmolL(142), 7.9);
 });
 
-test('classifies readings against the limits, edges included in range', () => {
+test('only readings past the critical limits are flagged; the limits themselves are normal', () => {
 	assert.equal(classifyReading(53, T), 'critical_low');
-	assert.equal(classifyReading(54, T), 'low');
-	assert.equal(classifyReading(69, T), 'low');
-	assert.equal(classifyReading(70, T), 'in_range');
-	assert.equal(classifyReading(180, T), 'in_range');
-	assert.equal(classifyReading(181, T), 'high');
-	assert.equal(classifyReading(400, T), 'high');
+	assert.equal(classifyReading(54, T), 'in_range');
+	assert.equal(classifyReading(65, T), 'in_range');
+	assert.equal(classifyReading(250, T), 'in_range');
+	assert.equal(classifyReading(400, T), 'in_range');
 	assert.equal(classifyReading(401, T), 'critical_high');
 });
 
 test('resident limits override defaults one by one', () => {
-	const t = resolveGlucoseThresholds({glucoseTargetHighMgDl: 250, glucoseCriticalLowMgDl: null});
-	assert.deepEqual(t, {...T, high: 250});
-	assert.equal(classifyReading(220, t), 'in_range');
+	const t = resolveGlucoseThresholds({glucoseCriticalHighMgDl: 300, glucoseCriticalLowMgDl: null});
+	assert.deepEqual(t, {criticalLow: 54, criticalHigh: 300});
+	assert.equal(classifyReading(320, t), 'critical_high');
 });
 
-test('limits must be whole numbers in rising order', () => {
+test('limits must be whole numbers with low below high', () => {
 	assert.equal(validateGlucoseThresholds(T), null);
-	assert.match(validateGlucoseThresholds({...T, low: 50}) ?? '', /go up in order/);
-	assert.match(validateGlucoseThresholds({...T, high: 180.5}) ?? '', /whole numbers/);
+	assert.match(validateGlucoseThresholds({criticalLow: 300, criticalHigh: 250}) ?? '', /below the critical high/);
+	assert.match(validateGlucoseThresholds({...T, criticalLow: 54.5}) ?? '', /whole numbers/);
 	assert.match(validateGlucoseThresholds({...T, criticalHigh: 900}) ?? '', /between/);
 });
 
-test('an in-range reading needs no symptoms or actions', () => {
-	const entry = normalizeGlucoseEntry(inRange, T);
-	assert.equal(entry.status, 'in_range');
-	assert.equal(entry.readingUnit, 'mg_dl');
-	assert.equal(entry.readingMgDl, 120);
-	assert.deepEqual(entry.symptoms, []);
+test('a normal reading needs nothing else, even if it would once have been "low" or "high"', () => {
+	for (const readingValue of [60, 120, 260]) {
+		const entry = normalizeGlucoseEntry({...inRange, readingValue}, T);
+		assert.equal(entry.status, 'in_range');
+		assert.deepEqual(entry.symptoms, []);
+		assert.deepEqual(entry.actionsTaken, []);
+	}
 });
 
 test('mmol/L readings are stored as entered and classified in mg/dL', () => {
-	const entry = normalizeGlucoseEntry(
-		{...inRange, readingValue: 3.5, readingUnit: 'mmol_l', symptoms: ['shaky'], actionsTaken: ['juice_or_glucose']},
-		T
-	);
+	const entry = normalizeGlucoseEntry({...inRange, readingValue: 3.5, readingUnit: 'mmol_l'}, T);
 	assert.equal(entry.readingValue, 3.5);
 	assert.equal(entry.readingMgDl, 63);
-	assert.equal(entry.status, 'low');
+	assert.equal(entry.status, 'in_range');
+	const crit = normalizeGlucoseEntry(
+		{...inRange, readingValue: 2.8, readingUnit: 'mmol_l', symptoms: ['none']},
+		T
+	);
+	assert.equal(crit.status, 'critical_low');
 });
 
-test('an out-of-range reading requires symptoms and an action', () => {
+test('a critical reading requires symptoms; an action only when there are symptoms', () => {
+	assert.throws(() => normalizeGlucoseEntry({...inRange, readingValue: 45}, T), /symptoms/);
+	// Critical but no symptoms: recorded, nothing else required.
+	const quiet = normalizeGlucoseEntry({...inRange, readingValue: 45, symptoms: ['none']}, T);
+	assert.equal(quiet.status, 'critical_low');
+	assert.deepEqual(quiet.actionsTaken, []);
+	// Critical with symptoms: staff must record what they did.
 	assert.throws(
-		() => normalizeGlucoseEntry({...inRange, readingValue: 60}, T),
-		/symptoms/
-	);
-	assert.throws(
-		() => normalizeGlucoseEntry({...inRange, readingValue: 60, symptoms: ['none']}, T),
+		() => normalizeGlucoseEntry({...inRange, readingValue: 45, symptoms: ['shaky']}, T),
 		/what was done/
 	);
-	const ok = normalizeGlucoseEntry(
-		{...inRange, readingValue: 60, symptoms: ['none'], actionsTaken: ['juice_or_glucose']},
+	const treated = normalizeGlucoseEntry(
+		{...inRange, readingValue: 45, symptoms: ['shaky'], actionsTaken: ['juice_or_glucose']},
 		T
 	);
-	assert.equal(ok.status, 'low');
-	// Recording insulin counts as the action for a high.
+	assert.deepEqual(treated.actionsTaken, ['juice_or_glucose']);
+	// Recording insulin counts as the action for a critical high.
 	const high = normalizeGlucoseEntry(
-		{...inRange, readingValue: 260, symptoms: ['none'], insulinGiven: true, insulinType: 'Lispro', insulinUnits: 2},
+		{...inRange, readingValue: 450, symptoms: ['very_thirsty'], insulinGiven: true, insulinType: 'Lispro', insulinUnits: 2},
 		T
 	);
-	assert.equal(high.status, 'high');
-	assert.deepEqual(high.actionsTaken, []);
+	assert.equal(high.status, 'critical_high');
 });
 
 test('notifying someone requires their name; "other" requires notes', () => {
@@ -168,9 +170,9 @@ test('insulin needs a name and a dose in half units', () => {
 	assert.equal(none.insulinUnits, null);
 });
 
-test('rechecks are due 15 minutes after a low and 60 after a high', () => {
+test('rechecks are due 15 minutes after a critical low and 60 after a critical high', () => {
 	const at = new Date('2026-10-15T12:00:00Z');
-	assert.equal(computeRecheckDueAt(at, 'low')?.toISOString(), '2026-10-15T12:15:00.000Z');
+	assert.equal(computeRecheckDueAt(at, 'critical_low')?.toISOString(), '2026-10-15T12:15:00.000Z');
 	assert.equal(computeRecheckDueAt(at, 'critical_high')?.toISOString(), '2026-10-15T13:00:00.000Z');
 	assert.equal(computeRecheckDueAt(at, 'in_range'), null);
 	assert.equal(computeRecheckDueAt(at, 'refused'), null);

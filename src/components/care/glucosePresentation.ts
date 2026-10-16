@@ -10,9 +10,7 @@ import {
 
 export const GLUCOSE_STATUS_CHIP: Record<GlucoseStatus, string> = {
 	critical_low: 'bg-red-600 text-white',
-	low: 'bg-orange-100 text-orange-800 border border-orange-300',
 	in_range: 'bg-green-100 text-green-800 border border-green-300',
-	high: 'bg-orange-100 text-orange-800 border border-orange-300',
 	critical_high: 'bg-red-600 text-white',
 	refused: 'bg-gray-100 text-gray-700 border border-gray-300',
 };
@@ -22,13 +20,9 @@ export function glucoseGuidance(status: GlucoseStatus): string | null {
 	const minutes = RECHECK_MINUTES[status];
 	switch (status) {
 		case 'critical_low':
-			return `Critical low. Treat right away per the resident's orders, tell the nurse or supervisor now, and recheck in ${minutes} minutes. Call 911 if the resident cannot swallow safely or is not responding.`;
-		case 'low':
-			return `Low. Treat per the resident's orders (for example juice or glucose tabs) and recheck in ${minutes} minutes.`;
-		case 'high':
-			return `High. Follow the resident's orders and recheck in ${minutes} minutes.`;
+			return `Critical low. Record any symptoms. If the resident has symptoms, give juice or sugar per their orders and tell the nurse or supervisor. Recheck in ${minutes} minutes. Call 911 if the resident cannot swallow safely or is not responding.`;
 		case 'critical_high':
-			return `Critical high. Tell the nurse or supervisor now, follow the resident's orders, and recheck in ${minutes} minutes.`;
+			return `Critical high. Record any symptoms. If the resident has symptoms, follow their orders and tell the nurse or supervisor. Recheck in ${minutes} minutes.`;
 		default:
 			return null;
 	}
