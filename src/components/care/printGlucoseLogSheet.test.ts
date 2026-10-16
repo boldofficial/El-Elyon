@@ -43,17 +43,17 @@ test('lists checks oldest first with the resident limits in the header', () => {
 		entry({}),
 	]);
 	assert.ok(html.indexOf('10-02') < html.indexOf('10-03'));
-	assert.match(html, /TARGET: <span>70-180 mg\/dL/);
+	assert.doesNotMatch(html, /TARGET/);
 	assert.match(html, /below 54 \/ above 400/);
 	assert.match(html, /Joy &lt;Lackey&gt;/);
 });
 
-test('out-of-range rows are shaded and show what was done and who reviewed', () => {
+test('critical rows are shaded and show what was done and who reviewed', () => {
 	const html = build([
 		entry({
-			readingValue: 3.2,
+			readingValue: 2.8,
 			readingUnit: 'mmol_l',
-			status: 'low',
+			status: 'critical_low',
 			symptoms: ['shaky'],
 			actionsTaken: ['juice_or_glucose', 'nurse_notified'],
 			notifiedWho: 'Nurse Ada',
@@ -63,7 +63,7 @@ test('out-of-range rows are shaded and show what was done and who reviewed', () 
 		}),
 	]);
 	assert.match(html, /<tr class="flag">/);
-	assert.match(html, /3\.2 mmol\/L/);
+	assert.match(html, /2\.8 mmol\/L/);
 	assert.match(html, /Symptoms: Shaky/);
 	assert.match(html, /Done: Gave juice or glucose tabs, Nurse notified/);
 	assert.match(html, /Notified: Nurse Ada/);

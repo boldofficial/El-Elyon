@@ -20,42 +20,24 @@ import {
 export interface GlucoseSettingsValues {
 	glucoseTrackingEnabled?: boolean;
 	glucoseCriticalLowMgDl?: number | null;
-	glucoseTargetLowMgDl?: number | null;
-	glucoseTargetHighMgDl?: number | null;
 	glucoseCriticalHighMgDl?: number | null;
 	glucoseScheduledChecks?: string[] | null;
 	glucoseCareInstructions?: string | null;
 }
 
-type LimitKey =
-	| 'glucoseCriticalLowMgDl'
-	| 'glucoseTargetLowMgDl'
-	| 'glucoseTargetHighMgDl'
-	| 'glucoseCriticalHighMgDl';
+type LimitKey = 'glucoseCriticalLowMgDl' | 'glucoseCriticalHighMgDl';
 
 const LIMIT_FIELDS: Array<{key: LimitKey; label: string; help: string; fallback: number}> = [
 	{
 		key: 'glucoseCriticalLowMgDl',
 		label: 'Critical low (below)',
-		help: 'Urgent: treat and tell the nurse right away',
+		help: 'Below this is flagged critical',
 		fallback: DEFAULT_GLUCOSE_THRESHOLDS.criticalLow,
-	},
-	{
-		key: 'glucoseTargetLowMgDl',
-		label: 'Target range from',
-		help: 'Below this is flagged low',
-		fallback: DEFAULT_GLUCOSE_THRESHOLDS.low,
-	},
-	{
-		key: 'glucoseTargetHighMgDl',
-		label: 'Target range to',
-		help: 'Above this is flagged high',
-		fallback: DEFAULT_GLUCOSE_THRESHOLDS.high,
 	},
 	{
 		key: 'glucoseCriticalHighMgDl',
 		label: 'Critical high (above)',
-		help: 'Urgent: tell the nurse right away',
+		help: 'Above this is flagged critical',
 		fallback: DEFAULT_GLUCOSE_THRESHOLDS.criticalHigh,
 	},
 ];
@@ -71,8 +53,6 @@ export default function GlucoseTrackingSettings({values, onChange}: Props) {
 	const limitsError = validateGlucoseThresholds(
 		resolveGlucoseThresholds({
 			glucoseCriticalLowMgDl: values.glucoseCriticalLowMgDl ?? null,
-			glucoseTargetLowMgDl: values.glucoseTargetLowMgDl ?? null,
-			glucoseTargetHighMgDl: values.glucoseTargetHighMgDl ?? null,
 			glucoseCriticalHighMgDl: values.glucoseCriticalHighMgDl ?? null,
 		})
 	);
@@ -99,12 +79,14 @@ export default function GlucoseTrackingSettings({values, onChange}: Props) {
 			{enabled && (
 				<div className="ml-8 space-y-5 border-l-2 border-gray-100 pl-4">
 					<div>
-						<h3 className="font-medium text-gray-900">Limits (mg/dL)</h3>
+						<h3 className="font-medium text-gray-900">Critical limits (mg/dL)</h3>
 						<p className="text-sm text-gray-600 mb-3">
-							Use the numbers from this resident&apos;s physician orders. Leave a box blank to use
-							the facility default shown in grey.
+							Readings between these are just recorded. Only a reading outside them is
+							flagged, and staff then record symptoms and what was done. Use the numbers from
+							this resident&apos;s physician orders, or leave a box blank to use the default
+							shown in grey.
 						</p>
-						<div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+						<div className="grid grid-cols-2 gap-3 max-w-md">
 							{LIMIT_FIELDS.map((field) => {
 								const value = values[field.key];
 								return (

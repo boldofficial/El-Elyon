@@ -4,8 +4,8 @@
 //
 // One form for logging a blood sugar check, logging a recheck and editing an
 // entry. The status chip updates as the reading is typed, and the
-// "what happened" section opens (and becomes required) once the reading is
-// out of the resident's range. The server applies the same rules
+// "what happened" section opens once the reading is critical. Symptoms are
+// then required, and an action is required only if the resident has symptoms. The server applies the same rules
 // (lib/blood-glucose.ts) and has the final say.
 
 import React, {useMemo, useState} from 'react';
@@ -25,7 +25,7 @@ import {
 	SYMPTOMS,
 	SYMPTOM_LABELS,
 	classifyReading,
-	isOutOfRange,
+	isCritical,
 	mgDlToMmolL,
 	toMgDl,
 	type GlucoseAction,
@@ -141,8 +141,9 @@ export default function GlucoseEntryForm({
 		setValues((prev) => ({...prev, [key]: value}));
 
 	const status = useMemo(() => liveStatus(values, thresholds), [values, thresholds]);
-	const outOfRange = status !== null && isOutOfRange(status);
-	const detailsOpen = outOfRange || values.refused || showDetails;
+	const critical = status !== null && isCritical(status);
+	const hasSymptoms = values.symptoms.some((s) => s !== 'none');
+	const detailsOpen = critical || values.refused || showDetails;
 	const needsNotifiedWho = values.actionsTaken.some((a) => NOTIFY_ACTIONS.has(a));
 	const guidance = status ? glucoseGuidance(status) : null;
 	const id = (name: string) => `${idPrefix}-${name}`;
@@ -309,11 +310,7 @@ export default function GlucoseEntryForm({
 			{guidance && (
 				<div
 					role="alert"
-					className={`rounded border p-3 text-sm ${
-						status === 'critical_low' || status === 'critical_high'
-							? 'border-red-300 bg-red-50 text-red-900'
-							: 'border-orange-300 bg-orange-50 text-orange-900'
-					}`}>
+					className="rounded border p-3 text-sm border-red-300 bg-red-50 text-red-900">
 					{guidance}
 				</div>
 			)}
@@ -332,7 +329,7 @@ export default function GlucoseEntryForm({
 					<fieldset>
 						<legend className="text-sm font-medium mb-2">
 							Symptoms seen{' '}
-							{outOfRange ? (
+							{critical ? (
 								<span className="text-red-700">(required, tick &quot;None&quot; if there were none)</span>
 							) : (
 								<span className="text-gray-400 font-normal">(optional)</span>
@@ -360,7 +357,7 @@ export default function GlucoseEntryForm({
 					<fieldset>
 						<legend className="text-sm font-medium mb-2">
 							What was done{' '}
-							{outOfRange ? (
+							{critical && hasSymptoms ? (
 								<span className="text-red-700">(required, or record insulin below)</span>
 							) : (
 								<span className="text-gray-400 font-normal">(optional)</span>

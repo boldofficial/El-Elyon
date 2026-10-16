@@ -135,27 +135,25 @@ export const NOTIFY_ACTIONS: ReadonlySet<GlucoseAction> = new Set([
 
 // ── Thresholds and classification ────────────────────────────────────────
 
-/** All values in mg/dL. A reading is classified against these, low to high. */
+/**
+ * The resident's critical limits in mg/dL. The log is informational: a
+ * reading between these is simply recorded. Only a reading below
+ * `criticalLow` or above `criticalHigh` is flagged and asks staff for more.
+ */
 export interface GlucoseThresholds {
 	/** Below this is a critical low. */
 	criticalLow: number;
-	/** Below this is low (bottom of the resident's target range). */
-	low: number;
-	/** Above this is high (top of the resident's target range). */
-	high: number;
 	/** Above this is a critical high. */
 	criticalHigh: number;
 }
 
 /**
- * Placeholder defaults used when a resident has no thresholds of their own.
+ * Placeholder defaults used when a resident has no limits of their own.
  * The real numbers should come from the resident's physician orders and are
  * set per resident on the profile.
  */
 export const DEFAULT_GLUCOSE_THRESHOLDS: GlucoseThresholds = {
 	criticalLow: 54,
-	low: 70,
-	high: 180,
 	criticalHigh: 400,
 };
 
@@ -163,27 +161,23 @@ export const THRESHOLD_LIMITS = {min: 20, max: 600};
 
 export type ResidentThresholdColumns = {
 	glucoseCriticalLowMgDl?: number | null;
-	glucoseTargetLowMgDl?: number | null;
-	glucoseTargetHighMgDl?: number | null;
 	glucoseCriticalHighMgDl?: number | null;
 };
 
-/** The resident's own thresholds, falling back to defaults for any blank. */
+/** The resident's own limits, falling back to defaults for any blank. */
 export function resolveGlucoseThresholds(
 	resident: ResidentThresholdColumns
 ): GlucoseThresholds {
 	return {
 		criticalLow: resident.glucoseCriticalLowMgDl ?? DEFAULT_GLUCOSE_THRESHOLDS.criticalLow,
-		low: resident.glucoseTargetLowMgDl ?? DEFAULT_GLUCOSE_THRESHOLDS.low,
-		high: resident.glucoseTargetHighMgDl ?? DEFAULT_GLUCOSE_THRESHOLDS.high,
 		criticalHigh:
 			resident.glucoseCriticalHighMgDl ?? DEFAULT_GLUCOSE_THRESHOLDS.criticalHigh,
 	};
 }
 
-/** Returns an error message, or null when the thresholds are usable. */
+/** Returns an error message, or null when the limits are usable. */
 export function validateGlucoseThresholds(t: GlucoseThresholds): string | null {
-	const values = [t.criticalLow, t.low, t.high, t.criticalHigh];
+	const values = [t.criticalLow, t.criticalHigh];
 	if (
 		values.some(
 			(v) =>
@@ -192,46 +186,26 @@ export function validateGlucoseThresholds(t: GlucoseThresholds): string | null {
 	) {
 		return `Blood sugar limits must be whole numbers between ${THRESHOLD_LIMITS.min} and ${THRESHOLD_LIMITS.max} mg/dL`;
 	}
-	if (!(t.criticalLow < t.low && t.low < t.high && t.high < t.criticalHigh)) {
-		return 'Blood sugar limits must go up in order: critical low, target low, target high, critical high';
+	if (!(t.criticalLow < t.criticalHigh)) {
+		return 'The critical low limit must be below the critical high limit';
 	}
 	return null;
 }
 
-export const GLUCOSE_STATUSES = [
-	'critical_low',
-	'low',
-	'in_range',
-	'high',
-	'critical_high',
-	'refused',
-] as const;
+export const GLUCOSE_STATUSES = ['critical_low', 'in_range', 'critical_high', 'refused'] as const;
 export type GlucoseStatus = (typeof GLUCOSE_STATUSES)[number];
 
 export const GLUCOSE_STATUS_LABELS: Record<GlucoseStatus, string> = {
 	critical_low: 'Critical low',
-	low: 'Low',
-	in_range: 'In range',
-	high: 'High',
+	in_range: 'Normal',
 	critical_high: 'Critical high',
 	refused: 'Refused',
 };
 
 export function classifyReading(mgDl: number, t: GlucoseThresholds): GlucoseStatus {
 	if (mgDl < t.criticalLow) return 'critical_low';
-	if (mgDl < t.low) return 'low';
 	if (mgDl > t.criticalHigh) return 'critical_high';
-	if (mgDl > t.high) return 'high';
 	return 'in_range';
-}
-
-export function isOutOfRange(status: GlucoseStatus): boolean {
-	return (
-		status === 'critical_low' ||
-		status === 'low' ||
-		status === 'high' ||
-		status === 'critical_high'
-	);
 }
 
 export function isCritical(status: GlucoseStatus): boolean {
@@ -239,14 +213,12 @@ export function isCritical(status: GlucoseStatus): boolean {
 }
 
 /**
- * How long after an out-of-range reading the recheck is due. Lows follow the
+ * How long after a critical reading the recheck is due. Lows follow the
  * usual "15 minutes after treating" rule; highs get an hour. Adjust here if
  * the facility's protocol differs.
  */
 export const RECHECK_MINUTES: Partial<Record<GlucoseStatus, number>> = {
 	critical_low: 15,
-	low: 15,
-	high: 60,
 	critical_high: 60,
 };
 
@@ -417,12 +389,11 @@ export function normalizeGlucoseEntry(
 		readingMgDl = toMgDl(raw, readingUnit);
 		status = classifyReading(readingMgDl, thresholds);
 
-		if (isOutOfRange(status)) {
-			if (symptoms.length === 0) {
-				throw new GlucoseEntryError(
-					'This reading is out of range. Record any symptoms (or tick "None")'
-				);
-			}
+		// Only a critical reading asks for more: what the resident showed.
+		if (isCritical(status) && symptoms.length === 0) {
+			throw new GlucoseEntryError(
+				'This reading is critical. Record any symptoms (or tick "None")'
+			);
 		}
 	}
 
@@ -454,10 +425,12 @@ export function normalizeGlucoseEntry(
 		insulinUnits = units;
 	}
 
-	// Insulin is recorded in its own section and counts as an action taken.
-	if (status !== 'refused' && isOutOfRange(status) && actionsTaken.length === 0 && !insulinGiven) {
+	// Staff act when a critical reading comes with symptoms. Insulin is
+	// recorded in its own section and counts as an action taken.
+	const hasSymptoms = symptoms.some((sym) => sym !== 'none');
+	if (isCritical(status) && hasSymptoms && actionsTaken.length === 0 && !insulinGiven) {
 		throw new GlucoseEntryError(
-			'This reading is out of range. Record what was done about it (or the insulin given)'
+			'This reading is critical and the resident has symptoms. Record what was done (or the insulin given)'
 		);
 	}
 

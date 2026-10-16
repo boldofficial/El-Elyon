@@ -9,7 +9,7 @@
 
 import React, {useCallback, useEffect, useState} from 'react';
 import {toast} from 'sonner';
-import {CHECK_TYPE_LABELS, formatGlucoseReading, isOutOfRange} from '@/lib/blood-glucose';
+import {CHECK_TYPE_LABELS, formatGlucoseReading, isCritical} from '@/lib/blood-glucose';
 import {
 	EntryDetails,
 	ReviewDialog,
@@ -25,8 +25,8 @@ const RANGE_OPTIONS = [
 ];
 
 const SHOW_OPTIONS = [
-	{value: 'unreviewed', label: 'Out of range, not reviewed'},
-	{value: 'attention', label: 'Out of range or refused'},
+	{value: 'unreviewed', label: 'Critical, not reviewed'},
+	{value: 'attention', label: 'Critical or refused'},
 	{value: 'all', label: 'All checks'},
 ];
 
@@ -227,7 +227,7 @@ export default function BloodGlucoseOverview() {
 							</thead>
 							<tbody className="divide-y">
 								{entries.map((entry) => (
-									<tr key={entry.id} className={isOutOfRange(entry.status) ? 'bg-red-50/40' : ''}>
+									<tr key={entry.id} className={isCritical(entry.status) ? 'bg-red-50/40' : ''}>
 										<td className="px-3 py-2 whitespace-nowrap text-gray-700">
 											{formatDay(entry.operationalDate)}
 											<span className="block text-xs text-gray-500">

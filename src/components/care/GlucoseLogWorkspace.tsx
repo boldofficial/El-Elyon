@@ -18,7 +18,7 @@ import {
 	SYMPTOM_LABELS,
 	formatGlucoseReading,
 	isGlucoseUnit,
-	isOutOfRange,
+	isCritical,
 	type GlucoseAction,
 	type GlucoseCheckMethod,
 	type GlucoseCheckType,
@@ -425,7 +425,7 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 			const data = await res.json().catch(() => ({}));
 			if (!res.ok) throw new Error(data.error || 'Failed to save');
 			const status = data.status as GlucoseStatus;
-			if (isOutOfRange(status)) {
+			if (isCritical(status)) {
 				toast.warning(`Saved: ${GLUCOSE_STATUS_LABELS[status]}. A recheck is now due.`);
 			} else {
 				toast.success('Blood sugar check saved');
@@ -533,9 +533,6 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 			<section className="rounded-lg border bg-gray-50 p-4">
 				<div className="flex flex-wrap items-start justify-between gap-3">
 					<div className="text-sm text-gray-800 space-y-1">
-						<p>
-							<span className="font-semibold">Target range:</span> {t.low} to {t.high} mg/dL
-						</p>
 						<p>
 							<span className="font-semibold">Critical:</span> below {t.criticalLow} or above{' '}
 							{t.criticalHigh} mg/dL
@@ -680,7 +677,7 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 								{entries.map((entry) => (
 									<tr
 										key={entry.id}
-										className={isOutOfRange(entry.status) ? 'bg-red-50/40' : ''}>
+										className={isCritical(entry.status) ? 'bg-red-50/40' : ''}>
 										<td className="px-3 py-2 whitespace-nowrap">
 											{formatDay(entry.operationalDate)}
 											<span className="block text-xs text-gray-500">

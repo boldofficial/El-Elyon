@@ -24,12 +24,7 @@ import {
 	validateGlucoseThresholds,
 } from '@/lib/blood-glucose';
 
-const GLUCOSE_LIMIT_FIELDS = [
-	'glucoseCriticalLowMgDl',
-	'glucoseTargetLowMgDl',
-	'glucoseTargetHighMgDl',
-	'glucoseCriticalHighMgDl',
-] as const;
+const GLUCOSE_LIMIT_FIELDS = ['glucoseCriticalLowMgDl', 'glucoseCriticalHighMgDl'] as const;
 
 /**
  * Blood sugar settings from the profile form. Only keys present in the body

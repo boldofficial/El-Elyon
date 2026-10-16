@@ -70,14 +70,12 @@ export const residents = pgTable(
 			.notNull()
 			.default(false),
 		// Per-resident opt-in for the blood sugar log (see bloodGlucoseLogs),
-		// plus the resident's own alert limits in mg/dL. A null limit falls
+		// plus the resident's critical limits in mg/dL. A null limit falls
 		// back to DEFAULT_GLUCOSE_THRESHOLDS in lib/blood-glucose.ts.
 		glucoseTrackingEnabled: boolean('glucose_tracking_enabled')
 			.notNull()
 			.default(false),
 		glucoseCriticalLowMgDl: integer('glucose_critical_low_mg_dl'),
-		glucoseTargetLowMgDl: integer('glucose_target_low_mg_dl'),
-		glucoseTargetHighMgDl: integer('glucose_target_high_mg_dl'),
 		glucoseCriticalHighMgDl: integer('glucose_critical_high_mg_dl'),
 		// Check types expected every day (e.g. ['before_breakfast', 'bedtime']);
 		// drives the "due / missed" reminders.
@@ -1654,7 +1652,7 @@ export const carbLogs = pgTable(
 // One row per blood sugar check for residents with
 // `residents.glucoseTrackingEnabled`. The reading is kept as entered
 // (value + unit) and as canonical mg/dL; `status` is classified at write time
-// against the resident's limits, which are snapshotted on the row so the
+// against the resident's critical limits, which are snapshotted on the row so the
 // record keeps meaning the same thing if the limits change later. Rows are
 // never deleted; every edit writes the previous values to
 // bloodGlucoseLogRevisions first.
@@ -1683,8 +1681,6 @@ export const bloodGlucoseLogs = pgTable(
 		readingMgDl: integer('reading_mg_dl'),
 		status: varchar('status', {length: 20}).notNull(),
 		criticalLowMgDl: integer('critical_low_mg_dl').notNull(),
-		targetLowMgDl: integer('target_low_mg_dl').notNull(),
-		targetHighMgDl: integer('target_high_mg_dl').notNull(),
 		criticalHighMgDl: integer('critical_high_mg_dl').notNull(),
 		symptoms: jsonb('symptoms').$type<string[]>().notNull().default([]),
 		actionsTaken: jsonb('actions_taken')
@@ -1750,7 +1746,7 @@ export const bloodGlucoseLogs = pgTable(
 		),
 		statusCheck: check(
 			'blood_glucose_logs_status_check',
-			sql`${table.status} in ('critical_low', 'low', 'in_range', 'high', 'critical_high', 'refused')`
+			sql`${table.status} in ('critical_low', 'in_range', 'critical_high', 'refused')`
 		),
 		// A refused check has no reading; any other check must have one.
 		readingPresenceCheck: check(

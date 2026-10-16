@@ -1,7 +1,7 @@
 // src/components/care/printGlucoseLogSheet.ts
 //
 // Pure builder + print trigger for the monthly BLOOD GLUCOSE LOG: one row per
-// check, oldest first, with what was done about out-of-range readings and
+// check, oldest first, with what was done about critical readings and
 // who reviewed them. Letter landscape so the action column has room.
 
 import {escapePrintHtml, printDocument} from '../shared/printDocument';
@@ -12,7 +12,7 @@ import {
 	GLUCOSE_STATUS_LABELS,
 	SYMPTOM_LABELS,
 	formatGlucoseReading,
-	isOutOfRange,
+	isCritical,
 	type GlucoseAction,
 	type GlucoseCheckMethod,
 	type GlucoseCheckType,
@@ -71,7 +71,7 @@ export function buildGlucoseLogSheetHtml(input: GlucoseSheetInput): string {
 	const rows = sorted
 		.map((e) => {
 			const {date, time} = format(e.checkedAt);
-			const flagged = isOutOfRange(e.status);
+			const flagged = isCritical(e.status);
 			const details = [
 				e.refused && e.refusalReason ? `Not done: ${e.refusalReason}` : '',
 				e.symptoms.length ? `Symptoms: ${e.symptoms.map((s) => SYMPTOM_LABELS[s]).join(', ')}` : '',
@@ -146,7 +146,6 @@ export function buildGlucoseLogSheetHtml(input: GlucoseSheetInput): string {
 	<div class="meta">
 		<div>RESIDENT: <span>${escapePrintHtml(input.residentName)}</span></div>
 		<div>MONTH: <span>${escapePrintHtml(input.monthLabel)}</span></div>
-		<div>TARGET: <span>${t.low}-${t.high} mg/dL</span></div>
 		<div>CRITICAL: <span>below ${t.criticalLow} / above ${t.criticalHigh} mg/dL</span></div>
 	</div>
 	<table>
@@ -157,7 +156,7 @@ export function buildGlucoseLogSheetHtml(input: GlucoseSheetInput): string {
 		<thead><tr><th>Date / time</th><th>Check</th><th>Reading</th><th>Status</th><th>Symptoms and action taken</th><th>Insulin</th><th>Staff</th><th>Reviewed by</th></tr></thead>
 		<tbody>${body}</tbody>
 	</table>
-	<p class="footer">Shaded rows were outside the resident's limits. Limits shown are the resident's current limits; each entry was classified against the limits in place when it was logged.</p>
+	<p class="footer">Shaded rows were critical readings. Limits shown are the resident's current limits; each entry was classified against the limits in place when it was logged.</p>
 </body>
 </html>`;
 }

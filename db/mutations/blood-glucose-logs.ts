@@ -16,7 +16,7 @@ import {
 	MAX_BACKDATE_HOURS,
 	MAX_FUTURE_MINUTES,
 	computeRecheckDueAt,
-	isOutOfRange,
+	isCritical,
 	normalizeGlucoseEntry,
 	resolveGlucoseThresholds,
 	validateCheckedAt,
@@ -82,8 +82,6 @@ export async function createGlucoseLog(
 			status: true,
 			glucoseTrackingEnabled: true,
 			glucoseCriticalLowMgDl: true,
-			glucoseTargetLowMgDl: true,
-			glucoseTargetHighMgDl: true,
 			glucoseCriticalHighMgDl: true,
 		},
 	});
@@ -104,7 +102,7 @@ export async function createGlucoseLog(
 	const now = new Date();
 	const checkedAt = validateCheckedAt(input.checkedAt, now);
 
-	// A recheck is tied to the out-of-range reading it follows up.
+	// A recheck is tied to the critical reading it follows up.
 	let recheckOfId: string | null = null;
 	if (input.recheckOfId !== undefined && input.recheckOfId !== null && input.recheckOfId !== '') {
 		if (typeof input.recheckOfId !== 'string' || !UUID_RE.test(input.recheckOfId)) {
@@ -183,8 +181,6 @@ export async function createGlucoseLog(
 function thresholdColumns(t: GlucoseThresholds) {
 	return {
 		criticalLowMgDl: t.criticalLow,
-		targetLowMgDl: t.low,
-		targetHighMgDl: t.high,
 		criticalHighMgDl: t.criticalHigh,
 	};
 }
@@ -273,8 +269,6 @@ export async function updateGlucoseLog(
 	}
 	const thresholds: GlucoseThresholds = {
 		criticalLow: existing.criticalLowMgDl,
-		low: existing.targetLowMgDl,
-		high: existing.targetHighMgDl,
 		criticalHigh: existing.criticalHighMgDl,
 	};
 	const entry = normalizeGlucoseEntry(merged, thresholds);
@@ -398,7 +392,7 @@ export async function reviewGlucoseLog(
 		clerkUserId,
 		event: 'REVIEW_BLOOD_GLUCOSE_LOG',
 		details: `Reviewed blood sugar log ${logId} (${existing.status as GlucoseStatus}${
-			isOutOfRange(existing.status as GlucoseStatus) ? ', out of range' : ''
+			isCritical(existing.status as GlucoseStatus) ? ', critical' : ''
 		}) for resident ${existing.residentId}`,
 		deviceId: 'system',
 		location: existing.location,
