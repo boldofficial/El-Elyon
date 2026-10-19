@@ -15,7 +15,7 @@ export interface PrintableRoster {
 	roster: {
 		name: string;
 		title: string | null;
-		rosterHireDate: string | null;
+		dateOfHire: string | null;
 		employmentStatus: string | null;
 	}[];
 	generatedAt?: Date;
@@ -58,7 +58,7 @@ export function buildStaffRosterHtml({home, roster, generatedAt = new Date()}: P
 				(row, i) =>
 					`<tr><td class="num">${i + 1}</td><td>${esc(row.name)}</td><td>${esc(
 						row.title || '—'
-					)}</td><td>${esc(formatDate(row.rosterHireDate))}</td><td>${esc(
+					)}</td><td>${esc(formatDate(row.dateOfHire))}</td><td>${esc(
 						formatStatus(row.employmentStatus)
 					)}</td></tr>`
 			)
