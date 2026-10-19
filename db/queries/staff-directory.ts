@@ -5,6 +5,11 @@ import {getRosterHomesByEmployee} from '@/db/queries/staff-documents';
 import {canViewStaffDocument, type StaffDocumentViewer} from '@/lib/staff-documents';
 import {canViewHome} from '@/lib/staff-directory';
 
+// date_of_hire is a timestamp stored at UTC midnight; show it as YYYY-MM-DD.
+function toCalendarDate(value: Date | null) {
+	return value ? value.toISOString().slice(0, 10) : null;
+}
+
 /** Homes this viewer can open, with roster and home-document counts. */
 export async function listDirectoryHomes(viewer: StaffDocumentViewer) {
 	const [homeRows, rosterCounts, documentCounts] = await Promise.all([
@@ -54,7 +59,7 @@ export async function getDirectoryHome(viewer: StaffDocumentViewer, name: string
 			employeeId: employees.id,
 			name: employees.name,
 			title: staffRosterEntries.title,
-			rosterHireDate: staffRosterEntries.rosterHireDate,
+			dateOfHire: employees.dateOfHire,
 			employmentStatus: employees.employmentStatus,
 			phone: employees.phone,
 		})
@@ -73,7 +78,12 @@ export async function getDirectoryHome(viewer: StaffDocumentViewer, name: string
 		addable = all.filter((employee) => !onRoster.has(employee.id));
 	}
 
-	return {home, roster, addable};
+	// One hire date per person, the profile's, on every home's roster.
+	return {
+		home,
+		roster: roster.map((row) => ({...row, dateOfHire: toCalendarDate(row.dateOfHire)})),
+		addable,
+	};
 }
 
 /**
@@ -115,7 +125,6 @@ export async function getStaffProfile(viewer: StaffDocumentViewer, employeeId: s
 		.select({
 			location: staffRosterEntries.location,
 			title: staffRosterEntries.title,
-			rosterHireDate: staffRosterEntries.rosterHireDate,
 		})
 		.from(staffRosterEntries)
 		.where(eq(staffRosterEntries.employeeId, employeeId))
@@ -123,7 +132,7 @@ export async function getStaffProfile(viewer: StaffDocumentViewer, employeeId: s
 
 	return {
 		...employee,
-		dateOfHire: employee.dateOfHire ? employee.dateOfHire.toISOString().slice(0, 10) : null,
+		dateOfHire: toCalendarDate(employee.dateOfHire),
 		// A supervisor only sees the homes they share with this person.
 		homes: rosterRows.filter((row) => canViewHome(viewer, row.location)),
 	};

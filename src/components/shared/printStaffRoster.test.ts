@@ -9,8 +9,8 @@ test('lists every rostered staff member with title, hire date and status', () =>
 	const html = buildStaffRosterHtml({
 		home,
 		roster: [
-			{name: 'Ada Lovelace', title: 'DSP', rosterHireDate: '2025-03-04', employmentStatus: 'active'},
-			{name: 'Grace Hopper', title: null, rosterHireDate: null, employmentStatus: 'inactive'},
+			{name: 'Ada Lovelace', title: 'DSP', dateOfHire: '2025-03-04', employmentStatus: 'active'},
+			{name: 'Grace Hopper', title: null, dateOfHire: null, employmentStatus: 'inactive'},
 		],
 	});
 	assert.match(html, /STAFF ROSTER/);
@@ -25,7 +25,7 @@ test('lists every rostered staff member with title, hire date and status', () =>
 test('escapes names so roster data cannot inject markup', () => {
 	const html = buildStaffRosterHtml({
 		home,
-		roster: [{name: '<script>x</script>', title: null, rosterHireDate: null, employmentStatus: null}],
+		roster: [{name: '<script>x</script>', title: null, dateOfHire: null, employmentStatus: null}],
 	});
 	assert.doesNotMatch(html, /<script>x<\/script>/);
 });

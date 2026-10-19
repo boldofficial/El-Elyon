@@ -861,7 +861,8 @@ export const staffRosterEntries = pgTable(
 			.notNull()
 			.references(() => employees.id, {onDelete: 'cascade'}),
 		title: varchar('title', {length: 255}),
-		// Start date at THIS home; the same person can differ per home.
+		// No longer read or written: a person has one hire date
+		// (employees.date_of_hire) across every home. Kept so old rows load.
 		rosterHireDate: date('roster_hire_date'),
 		createdAt: timestamp('created_at').notNull().defaultNow(),
 		createdBy: varchar('created_by', {length: 255}).notNull(),

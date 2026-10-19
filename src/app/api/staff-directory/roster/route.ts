@@ -1,6 +1,7 @@
 // src/app/api/staff-directory/roster/route.ts
 // POST adds a staff member to a home's roster (admins only). Re-adding
-// someone already on that roster updates their title / start date instead.
+// someone already on that roster updates their title instead. The hire date
+// lives on the employee's profile, not here.
 // The roster never changes employees.locations (clock-in and resident
 // access) — see staffRosterEntries in db/schema.ts.
 
@@ -10,7 +11,6 @@ import {eq} from 'drizzle-orm';
 import {db} from '@/db/index';
 import {employees, locations, staffRosterEntries} from '@/db/schema';
 import {AccessDeniedError, logAudit, requireAdminAccess} from '@/lib/db-helpers';
-import {isCalendarDate} from '@/lib/staff-directory';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -28,15 +28,10 @@ export async function POST(req: NextRequest) {
 		const employeeId = typeof body.employeeId === 'string' ? body.employeeId : '';
 		const title =
 			typeof body.title === 'string' && body.title.trim() ? body.title.trim().slice(0, 255) : null;
-		const rosterHireDate =
-			typeof body.rosterHireDate === 'string' && body.rosterHireDate ? body.rosterHireDate : null;
 
 		if (!location) return NextResponse.json({error: 'Choose a home'}, {status: 400});
 		if (!UUID_PATTERN.test(employeeId)) {
 			return NextResponse.json({error: 'Choose a staff member'}, {status: 400});
-		}
-		if (rosterHireDate && !isCalendarDate(rosterHireDate)) {
-			return NextResponse.json({error: 'Enter a valid start date'}, {status: 400});
 		}
 
 		const [home, employee] = await Promise.all([
@@ -48,17 +43,17 @@ export async function POST(req: NextRequest) {
 
 		const [entry] = await db
 			.insert(staffRosterEntries)
-			.values({location, employeeId, title, rosterHireDate, createdBy: userId})
+			.values({location, employeeId, title, createdBy: userId})
 			.onConflictDoUpdate({
 				target: [staffRosterEntries.location, staffRosterEntries.employeeId],
-				set: {title, rosterHireDate, updatedAt: new Date(), updatedBy: userId},
+				set: {title, updatedAt: new Date(), updatedBy: userId},
 			})
 			.returning({id: staffRosterEntries.id});
 
 		await logAudit({
 			clerkUserId: userId,
 			event: 'staff_roster.saved',
-			details: `employee=${employeeId} (${employee.name}),title=${title ?? ''},start=${rosterHireDate ?? ''}`,
+			details: `employee=${employeeId} (${employee.name}),title=${title ?? ''}`,
 			deviceId: 'system',
 			location,
 		});

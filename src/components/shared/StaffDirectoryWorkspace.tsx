@@ -33,7 +33,7 @@ interface RosterRow {
 	employeeId: string;
 	name: string;
 	title: string | null;
-	rosterHireDate: string | null;
+	dateOfHire: string | null;
 	employmentStatus: string | null;
 	phone: string | null;
 }
@@ -60,7 +60,7 @@ interface StaffProfile {
 	emergencyContactPhone: string | null;
 	emergencyContactRelationship: string | null;
 	profileNotes: string | null;
-	homes: {location: string; title: string | null; rosterHireDate: string | null}[];
+	homes: {location: string; title: string | null}[];
 	canEdit: boolean;
 }
 
@@ -315,7 +315,7 @@ function HomeView({
 												</td>
 												<td className="px-4 py-3 text-gray-700">{row.title || '—'}</td>
 												<td className="whitespace-nowrap px-4 py-3 text-gray-700">
-													{formatDate(row.rosterHireDate)}
+													{formatDate(row.dateOfHire)}
 												</td>
 												<td className="px-4 py-3">
 													<StatusBadge status={row.employmentStatus} />
@@ -362,7 +362,6 @@ function AddToRosterForm({
 }) {
 	const [employeeId, setEmployeeId] = useState('');
 	const [title, setTitle] = useState('');
-	const [rosterHireDate, setRosterHireDate] = useState('');
 	const [saving, setSaving] = useState(false);
 
 	async function submit(e: React.FormEvent) {
@@ -373,13 +372,12 @@ function AddToRosterForm({
 				await fetch('/api/staff-directory/roster', {
 					method: 'POST',
 					headers: {'Content-Type': 'application/json'},
-					body: JSON.stringify({location: home, employeeId, title, rosterHireDate}),
+					body: JSON.stringify({location: home, employeeId, title}),
 				})
 			);
 			toast.success('Added to the roster');
 			setEmployeeId('');
 			setTitle('');
-			setRosterHireDate('');
 			onAdded();
 		} catch (e: any) {
 			toast.error(e.message);
@@ -411,15 +409,6 @@ function AddToRosterForm({
 					value={title}
 					onChange={(e) => setTitle(e.target.value)}
 					placeholder="e.g. Staff, Live-in Staff"
-					className="rounded-md border border-gray-300 px-3 py-2"
-				/>
-			</label>
-			<label className="text-sm">
-				<span className="mb-1 block font-medium text-gray-700">Date of hire (this home)</span>
-				<input
-					type="date"
-					value={rosterHireDate}
-					onChange={(e) => setRosterHireDate(e.target.value)}
 					className="rounded-md border border-gray-300 px-3 py-2"
 				/>
 			</label>
