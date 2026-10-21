@@ -266,9 +266,30 @@ export const waterTemperatureManualCreateSchema = z
 	})
 	.strict();
 
+// Staff back-fill of a missed check at one of their own houses, dated from
+// the 1st of the current month through today (enforced server-side against
+// the operational date). Unlike the manual path the staff identity is never
+// client-supplied -- it is always the caller -- and the reason is optional.
+export const waterTemperatureStaffBackfillCreateSchema = z
+	.object({
+		source: z.literal('backfill'),
+		locationId: waterTemperatureUuidSchema,
+		shiftSlot: shiftSlotSchema,
+		operationalDate: operationalDateSchema,
+		kitchenTempF: fahrenheitReadingSchema,
+		bathTempF: fahrenheitReadingSchema,
+		observedAt: z.coerce.date(),
+		comments: waterTemperatureCommentsSchema,
+		action: waterTemperatureOptionalActionTextSchema,
+		reason: optionalWaterTemperatureNarrativeText('Reason', MAX_VOID_REASON_LENGTH),
+		idempotencyKey: waterTemperatureIdempotencyKeySchema,
+	})
+	.strict();
+
 export const waterTemperatureCreateRequestSchema = z.discriminatedUnion('source', [
 	waterTemperatureStaffCreateSchema,
 	waterTemperatureManualCreateSchema,
+	waterTemperatureStaffBackfillCreateSchema,
 ]);
 
 export const waterTemperatureActionRequestSchema = z

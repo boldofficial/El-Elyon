@@ -14,10 +14,12 @@ import {
   fahrenheitReadingSchema,
   isAboveFormGuidance,
   isValidIanaTimeZone,
+  isWithinStaffBackfillWindow,
   nextRecheckSequence,
   operationalDateSchema,
   organizationTimeZoneSchema,
   shiftSlotSchema,
+  staffBackfillWindow,
   tenthsToFahrenheit,
   toFahrenheitTenths,
   waterTemperatureActionInputSchema,
@@ -509,4 +511,19 @@ test("waterTemperatureVoidInputSchema requires an expected version and a reason"
     }).success,
     false,
   );
+});
+
+test("staff back-fill window runs from the 1st of the month through today", () => {
+  assert.deepEqual(staffBackfillWindow("2026-10-21"), {
+    earliest: "2026-10-01",
+    latest: "2026-10-21",
+  });
+  assert.equal(isWithinStaffBackfillWindow("2026-10-01", "2026-10-21"), true);
+  assert.equal(isWithinStaffBackfillWindow("2026-10-21", "2026-10-21"), true);
+  assert.equal(isWithinStaffBackfillWindow("2026-09-30", "2026-10-21"), false);
+  // Never a day that has not arrived yet.
+  assert.equal(isWithinStaffBackfillWindow("2026-10-22", "2026-10-21"), false);
+  // On the 1st only that day is open; last month is the supervisor's.
+  assert.equal(isWithinStaffBackfillWindow("2026-10-31", "2026-11-01"), false);
+  assert.equal(isWithinStaffBackfillWindow("2026-11-01", "2026-11-01"), true);
 });

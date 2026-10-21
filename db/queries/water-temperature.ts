@@ -66,6 +66,16 @@ export class WaterTemperatureShiftRequiredError extends Error {
 	}
 }
 
+// Raised when a staff back-fill targets a date outside the staff window (the
+// 1st of the current operational month through today), or an observation
+// time that has not happened yet.
+export class WaterTemperatureBackfillWindowError extends Error {
+	constructor(message = 'Staff can only record past checks from the 1st of this month through today.') {
+		super(message);
+		this.name = 'WaterTemperatureBackfillWindowError';
+	}
+}
+
 export type WaterTemperatureConflictCode =
 	| 'VERSION_CONFLICT'
 	| 'UNIQUE_CONFLICT'

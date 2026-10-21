@@ -1,4 +1,5 @@
 import {
+	WaterTemperatureBackfillWindowError,
 	WaterTemperatureConflictError,
 	WaterTemperatureNotFoundError,
 	WaterTemperatureShiftRequiredError,
@@ -69,6 +70,12 @@ export function waterTemperatureErrorResponse(error: unknown) {
 		return waterTemperatureJson(
 			{error: error.message, code: 'NO_ACTIVE_SHIFT'},
 			{status: 409}
+		);
+	}
+	if (error instanceof WaterTemperatureBackfillWindowError) {
+		return waterTemperatureJson(
+			{error: error.message, code: 'OUTSIDE_BACKFILL_WINDOW'},
+			{status: 422}
 		);
 	}
 	if (error instanceof WaterTemperatureNotFoundError) {

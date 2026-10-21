@@ -23,14 +23,17 @@ import {
 	daysInMonth,
 	describeCell,
 	emptyManualEntryDraft,
+	emptyStaffBackfillDraft,
 	isWaterTemperatureScopeReady,
 	mapWorkspaceMutationFailure,
 	ordinalDayLabel,
 	partitionMonthRecords,
+	restrictToStaffBackfill,
 	sameWaterTemperatureScope,
 	unresolvedFixturesFor,
 	validateCorrectionDraft,
 	validateManualEntryDraft,
+	validateStaffBackfillDraft,
 	validateVoidDraft,
 	voidWouldReopenObligation,
 } from './waterTemperatureModel';
@@ -526,6 +529,69 @@ test('a manual missing-slot entry requires a reason, an observer, and an in-day 
 	assert.equal(valid.values?.locationId, 'loc-1');
 	assert.equal(valid.values?.reason, 'Backfilled from the paper log');
 	assert.ok(valid.values?.observedAt.endsWith('Z'));
+});
+
+// ---------------------------------------------------------------------------
+// staff back-fill
+// ---------------------------------------------------------------------------
+
+test('staff may open only missing cells from the 1st of the month through today', () => {
+	const view = restrictToStaffBackfill(
+		buildWaterTemperatureMonth({
+			year: 2026,
+			month: 1,
+			records: [dto({operationalDate: '2026-01-05', shiftSlot: 1})],
+			todayLocalDate: '2026-01-10',
+		}),
+		'2026-01-10'
+	);
+
+	const recorded = view.rows[4]!.cells[0]!;
+	assert.equal(recorded.status, 'complete');
+	assert.equal(recorded.canRecordManualEntry, false);
+	assert.equal(recorded.canCorrect, false);
+	assert.equal(recorded.canVoid, false);
+
+	assert.equal(view.rows[0]!.cells[2]!.canRecordManualEntry, true);
+	assert.equal(view.rows[9]!.cells[2]!.canRecordManualEntry, true);
+	assert.equal(view.rows[10]!.cells[0]!.canRecordManualEntry, false);
+
+	// A previous month is outside the window even where cells are missing.
+	const lastMonth = restrictToStaffBackfill(
+		buildWaterTemperatureMonth({year: 2025, month: 12, records: [], todayLocalDate: '2026-01-10'}),
+		'2026-01-10'
+	);
+	assert.ok(
+		lastMonth.rows.every((row) => row.cells.every((cell) => !cell.canRecordManualEntry))
+	);
+});
+
+test('a staff back-fill needs readings and an in-day time, but no reason or observer', () => {
+	const draft = emptyStaffBackfillDraft('2026-01-12');
+	const empty = validateStaffBackfillDraft({
+		draft,
+		locationId: 'loc-1',
+		operationalDate: '2026-01-12',
+		shiftSlot: 3,
+	});
+	assert.equal(empty.isValid, false);
+	assert.deepEqual(
+		empty.summary.map((issue) => issue.fieldId),
+		[WATER_TEMPERATURE_WORKSPACE_IDS.kitchen, WATER_TEMPERATURE_WORKSPACE_IDS.bath]
+	);
+
+	const valid = validateStaffBackfillDraft({
+		draft: {...draft, kitchenTempF: '112', bathTempF: '124.5', action: 'Turned the heater down'},
+		locationId: 'loc-1',
+		operationalDate: '2026-01-12',
+		shiftSlot: 3,
+	});
+	assert.equal(valid.isValid, true);
+	assert.equal(valid.values?.reason, null);
+	assert.equal(valid.values?.action, 'Turned the heater down');
+	assert.equal(valid.values?.shiftSlot, 3);
+	assert.ok(valid.values?.observedAt.endsWith('Z'));
+	assert.equal('staffName' in (valid.values ?? {}), false);
 });
 
 test('a void requires a reason and the current version', () => {

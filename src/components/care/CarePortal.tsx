@@ -462,11 +462,12 @@ export default function CarePortal() {
 				return <VacationRequests isAdmin={false} />;
 			case 'life-safety':
 				return <LifeSafetyDocuments />;
-			// Staff get the read-only guidance panel; the current-shift entry
-			// action stays on U4's persistent reminder banner. Supervisors and
-			// delegated document managers additionally get the month grid,
-			// summary counts, print, and audit controls. The server enforces
-			// the same boundary independently (R11/R18).
+			// Staff get this month's grid, where they can back-fill a missed
+			// check from the 1st through today; the current-shift entry action
+			// stays on U4's persistent reminder banner. Supervisors and delegated
+			// document managers additionally get any month, print, correction,
+			// and void controls. The server enforces the same boundary
+			// independently (R11/R18).
 			case 'water-temperature':
 				return (
 					<WaterTemperatureWorkspace
