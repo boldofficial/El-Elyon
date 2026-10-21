@@ -2,6 +2,7 @@ import {auth} from '@clerk/nextjs/server';
 import {
 	createWaterTemperatureCheckFromShift,
 	createWaterTemperatureCheckManual,
+	createWaterTemperatureCheckStaffBackfill,
 } from '@/db/mutations/water-temperature';
 import {listWaterTemperatureChecksForMonth} from '@/db/queries/water-temperature';
 import {
@@ -45,6 +46,9 @@ export async function GET(request: Request) {
 //     request body carries no identity fields at all.
 //   - "manual": supervisor/admin reasoned backfill/missing-slot entry,
 //     scoped to their currently authorized locations (R11).
+//   - "backfill": staff catching up on a missed check at one of their own
+//     houses, from the 1st of this month through today, attributed to the
+//     caller; reason optional.
 export async function POST(request: Request) {
 	try {
 		const {userId} = await auth();
@@ -59,6 +63,20 @@ export async function POST(request: Request) {
 						bathTempTenths: input.bathTempF,
 						comments: input.comments,
 						action: input.action,
+						idempotencyKey: input.idempotencyKey,
+					})
+				: input.source === 'backfill'
+				? await createWaterTemperatureCheckStaffBackfill({
+						clerkUserId: userId,
+						locationId: input.locationId,
+						shiftSlot: input.shiftSlot,
+						operationalDate: input.operationalDate,
+						kitchenTempTenths: input.kitchenTempF,
+						bathTempTenths: input.bathTempF,
+						observedAt: input.observedAt,
+						comments: input.comments,
+						action: input.action,
+						reason: input.reason,
 						idempotencyKey: input.idempotencyKey,
 					})
 				: await createWaterTemperatureCheckManual({

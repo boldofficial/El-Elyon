@@ -86,6 +86,30 @@ test('manual create requires locationId/shiftSlot/operationalDate/staff snapshot
 	assert.equal(waterTemperatureManualCreateSchema.safeParse({...valid, shiftSlot: 4}).success, false);
 });
 
+test('staff back-fill carries the slot identity but never a staff snapshot, and the reason is optional', () => {
+	const valid = {
+		source: 'backfill' as const,
+		locationId: LOCATION_ID,
+		shiftSlot: 1 as const,
+		operationalDate: '2026-03-04',
+		kitchenTempF: 112.0,
+		bathTempF: 114.0,
+		observedAt: '2026-03-04T09:00:00.000Z',
+		comments: null,
+		idempotencyKey: 'client-key-4',
+	};
+	assert.equal(waterTemperatureCreateRequestSchema.safeParse(valid).success, true);
+	assert.equal(
+		waterTemperatureCreateRequestSchema.safeParse({...valid, reason: 'Forgot at shift start'}).success,
+		true
+	);
+	// Identity is always the caller; a client-supplied staff snapshot is refused.
+	assert.equal(
+		waterTemperatureCreateRequestSchema.safeParse({...valid, staffName: 'Someone Else'}).success,
+		false
+	);
+});
+
 test('create request discriminates cleanly and rejects an unknown source', () => {
 	assert.equal(waterTemperatureCreateRequestSchema.safeParse({source: 'other'}).success, false);
 });

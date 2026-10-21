@@ -21,6 +21,7 @@ import {
 	MAX_ACTION_LENGTH,
 	MAX_COMMENT_LENGTH,
 	MAX_VOID_REASON_LENGTH,
+	isWithinStaffBackfillWindow,
 	type ShiftSlot,
 	type WaterTemperatureCheckState,
 	type WaterTemperatureFixture,
@@ -813,6 +814,139 @@ export function validateManualEntryDraft(args: {
 						staffInitials: staffInitials.value,
 						observedAt: observedAt.value,
 						comments: comments.value,
+						reason: reason.value,
+					}
+				: null,
+	};
+}
+
+// ============================================================================
+// STAFF BACK-FILL
+//
+// Staff may fill a missing slot at their own house from the 1st of the month
+// through today. They never correct or void, and the reading is always theirs,
+// so the form has no staff fields and the reason is optional.
+// ============================================================================
+
+/** Narrows a month grid to what staff may do: open a missing cell inside the
+ * back-fill window, and nothing else. Recorded cells stay visible but inert. */
+export function restrictToStaffBackfill(
+	view: WaterTemperatureMonthView,
+	todayLocalDate: string
+): WaterTemperatureMonthView {
+	return {
+		...view,
+		rows: view.rows.map((row) => ({
+			...row,
+			cells: row.cells.map((cell) => ({
+				...cell,
+				canRecordManualEntry:
+					cell.status === 'missing' &&
+					cell.date !== null &&
+					isWithinStaffBackfillWindow(cell.date, todayLocalDate),
+				canCorrect: false,
+				canVoid: false,
+			})),
+		})),
+	};
+}
+
+export type StaffBackfillDraft = {
+	kitchenTempF: string;
+	bathTempF: string;
+	comments: string;
+	action: string;
+	/** `YYYY-MM-DDTHH:mm` from a datetime-local input. */
+	observedAt: string;
+	reason: string;
+};
+
+export type StaffBackfillValues = {
+	locationId: string;
+	shiftSlot: ShiftSlot;
+	operationalDate: string;
+	kitchenTempF: number;
+	bathTempF: number;
+	observedAt: string;
+	comments: string | null;
+	action: string | null;
+	reason: string | null;
+};
+
+export function emptyStaffBackfillDraft(operationalDate: string): StaffBackfillDraft {
+	return {
+		kitchenTempF: '',
+		bathTempF: '',
+		comments: '',
+		action: '',
+		observedAt: `${operationalDate}T08:00`,
+		reason: '',
+	};
+}
+
+export function validateStaffBackfillDraft(args: {
+	draft: StaffBackfillDraft;
+	locationId: string;
+	operationalDate: string;
+	shiftSlot: ShiftSlot;
+}): DraftValidation<StaffBackfillValues> {
+	const ids = WATER_TEMPERATURE_WORKSPACE_IDS;
+	const kitchen = parseTemperatureField(args.draft.kitchenTempF);
+	const bath = parseTemperatureField(args.draft.bathTempF);
+	const comments = validateText({
+		raw: args.draft.comments,
+		label: 'Comments',
+		maxLength: MAX_COMMENT_LENGTH,
+		required: false,
+	});
+	const action = validateText({
+		raw: args.draft.action,
+		label: 'Action taken',
+		maxLength: MAX_ACTION_LENGTH,
+		required: false,
+	});
+	const reason = validateText({
+		raw: args.draft.reason,
+		label: 'Reason',
+		maxLength: MAX_REASON_LENGTH,
+		required: false,
+	});
+	const observedAt = parseObservedAt(args.draft.observedAt, args.operationalDate);
+
+	const fieldErrors: Record<string, string | null> = {
+		[ids.kitchen]: kitchen.ok ? null : kitchen.message,
+		[ids.bath]: bath.ok ? null : bath.message,
+		[ids.comments]: comments.message,
+		[ids.action]: action.message,
+		[ids.observedAt]: observedAt.message,
+		[ids.reason]: reason.message,
+	};
+
+	const summary = buildSummary([
+		[ids.kitchen, fieldErrors[ids.kitchen] && `Kitchen temperature: ${fieldErrors[ids.kitchen]}`],
+		[ids.bath, fieldErrors[ids.bath] && `Bath/shower temperature: ${fieldErrors[ids.bath]}`],
+		[ids.observedAt, fieldErrors[ids.observedAt]],
+		[ids.comments, fieldErrors[ids.comments]],
+		[ids.action, fieldErrors[ids.action]],
+		[ids.reason, fieldErrors[ids.reason]],
+	]);
+
+	const isValid = summary.length === 0;
+	return {
+		isValid,
+		summary,
+		fieldErrors,
+		values:
+			isValid && kitchen.ok && bath.ok && observedAt.value
+				? {
+						locationId: args.locationId,
+						shiftSlot: args.shiftSlot,
+						operationalDate: args.operationalDate,
+						kitchenTempF: kitchen.value,
+						bathTempF: bath.value,
+						observedAt: observedAt.value,
+						comments: comments.value,
+						action: action.value,
 						reason: reason.value,
 					}
 				: null,

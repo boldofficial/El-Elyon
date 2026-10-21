@@ -257,6 +257,33 @@ export function nextRecheckSequence(
   return existingSequences.length === 0 ? 1 : Math.max(...existingSequences) + 1;
 }
 
+/**
+ * The dates a staff member may back-fill a missed check for: the 1st of the
+ * current operational month through today. Supervisors and admins are not
+ * bound by this; their reasoned manual entry reaches any date.
+ *
+ * The window resets on the 1st, so on that day only that day is open. Earlier
+ * months belong to the supervisor's review of the month.
+ *
+ * @param today Organization-local "today" (YYYY-MM-DD) from
+ *              computeOperationalDate, never the browser's or server's locale.
+ */
+export function staffBackfillWindow(today: string): {
+  earliest: string;
+  latest: string;
+} {
+  return { earliest: `${today.slice(0, 7)}-01`, latest: today };
+}
+
+/** Local dates are YYYY-MM-DD strings, so string comparison is date order. */
+export function isWithinStaffBackfillWindow(
+  operationalDate: string,
+  today: string,
+): boolean {
+  const { earliest, latest } = staffBackfillWindow(today);
+  return operationalDate >= earliest && operationalDate <= latest;
+}
+
 const UUID_SCHEMA = z.string().uuid();
 
 const boundedText = (label: string, maximum: number) =>

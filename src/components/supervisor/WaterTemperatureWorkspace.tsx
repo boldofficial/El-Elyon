@@ -31,28 +31,32 @@ import {
 	correctionDraftFromCheck,
 	describeCell,
 	emptyManualEntryDraft,
+	emptyStaffBackfillDraft,
 	formatTemperature,
 	isValidReportMonth,
 	isValidReportYear,
 	isWaterTemperatureScopeReady,
 	mapWorkspaceMutationFailure,
 	partitionMonthRecords,
+	restrictToStaffBackfill,
 	sameWaterTemperatureScope,
 	type CorrectionDraft,
 	type ManualEntryDraft,
+	type StaffBackfillDraft,
 	type WaterTemperatureCellTone,
 	type WaterTemperatureLoadState,
 	type WaterTemperatureMonthCell,
 	type WaterTemperatureScope,
 	validateCorrectionDraft,
 	validateManualEntryDraft,
+	validateStaffBackfillDraft,
 	validateVoidDraft,
 } from './waterTemperatureModel';
 import type {ShiftSlot} from '@/lib/water-temperature';
 
 type LocationOption = {id: string; name: string};
 
-type EditorMode = 'correct' | 'manual' | 'void';
+type EditorMode = 'correct' | 'manual' | 'backfill' | 'void';
 
 type EditorState = {
 	scope: WaterTemperatureScope;
@@ -88,6 +92,7 @@ export default function WaterTemperatureWorkspace({canManage = false}: {canManag
 	const [editor, setEditor] = useState<EditorState | null>(null);
 	const [correctionDraft, setCorrectionDraft] = useState<CorrectionDraft | null>(null);
 	const [manualDraft, setManualDraft] = useState<ManualEntryDraft | null>(null);
+	const [backfillDraft, setBackfillDraft] = useState<StaffBackfillDraft | null>(null);
 	const [voidReason, setVoidReason] = useState('');
 	const [saving, setSaving] = useState(false);
 	const [conflictMessage, setConflictMessage] = useState('');
@@ -102,22 +107,26 @@ export default function WaterTemperatureWorkspace({canManage = false}: {canManag
 			: null;
 	const recordsReady = isWaterTemperatureScopeReady({currentScope, loadedScope, recordsState});
 
+	// Staff see the same month grid, narrowed to back-filling missing cells
+	// from the 1st of the month through today. The server enforces the same
+	// window against the operational date.
 	const view = useMemo(
-		() =>
-			buildWaterTemperatureMonth({
+		() => {
+			const grid = buildWaterTemperatureMonth({
 				year: validYear ? year : now.getFullYear(),
 				month: validMonth ? month : 1,
 				records: recordsReady ? records : [],
 				todayLocalDate: localToday(),
-			}),
+			});
+			return canManage ? grid : restrictToStaffBackfill(grid, localToday());
+		},
 		// `now` is only a fallback for an invalid selector value.
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-		[records, recordsReady, year, month, validYear, validMonth]
+		[records, recordsReady, year, month, validYear, validMonth, canManage]
 	);
 	const activeRecords = useMemo(() => partitionMonthRecords(records).active, [records]);
 
 	useEffect(() => {
-		if (!canManage) return;
 		let cancelled = false;
 		async function loadLocations() {
 			setLocationsState('loading');
@@ -197,10 +206,6 @@ export default function WaterTemperatureWorkspace({canManage = false}: {canManag
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [selectedLocationId, year, month, validYear, validMonth, reloadToken]);
 
-	if (!canManage) {
-		return <StaffPanel />;
-	}
-
 	if (locationsState === 'loading') {
 		return <StatusPanel title="Loading houses…" detail="Checking your authorized houses." />;
 	}
@@ -230,6 +235,13 @@ export default function WaterTemperatureWorkspace({canManage = false}: {canManag
 					Safe water temperature is {SAFE_RANGE_LABEL}. Check and document water temperatures at
 					the beginning of each shift.
 				</p>
+				{!canManage && (
+					<p className="mt-2 text-sm text-gray-600">
+						Record your current shift&rsquo;s check from the reminder banner at the top of the
+						portal. If a check was missed earlier this month, select its Missing cell below to
+						record it.
+					</p>
+				)}
 			</header>
 
 			<section
@@ -256,47 +268,53 @@ export default function WaterTemperatureWorkspace({canManage = false}: {canManag
 								))}
 							</select>
 						</div>
-						<div>
-							<label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="water-month">
-								Month
-							</label>
-							<select
-								id="water-month"
-								className={inputClass}
-								value={month}
-								onChange={(event) => setMonth(Number(event.target.value))}>
-								{WATER_TEMPERATURE_MONTH_NAMES.map((name, index) => (
-									<option key={name} value={index + 1}>
-										{name}
-									</option>
-								))}
-							</select>
-						</div>
-						<div>
-							<label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="water-year">
-								Year
-							</label>
-							<input
-								id="water-year"
-								type="number"
-								min={2020}
-								max={2100}
-								className={inputClass}
-								value={year}
-								onChange={(event) => setYear(Number(event.target.value))}
-							/>
-							{!validYear && (
-								<p className="mt-1 text-xs text-red-700">Choose a year from 2020 through 2100.</p>
-							)}
-						</div>
+						{canManage && (
+							<>
+							<div>
+								<label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="water-month">
+									Month
+								</label>
+								<select
+									id="water-month"
+									className={inputClass}
+									value={month}
+									onChange={(event) => setMonth(Number(event.target.value))}>
+									{WATER_TEMPERATURE_MONTH_NAMES.map((name, index) => (
+										<option key={name} value={index + 1}>
+											{name}
+										</option>
+									))}
+								</select>
+							</div>
+							<div>
+								<label className="mb-1 block text-sm font-medium text-gray-700" htmlFor="water-year">
+									Year
+								</label>
+								<input
+									id="water-year"
+									type="number"
+									min={2020}
+									max={2100}
+									className={inputClass}
+									value={year}
+									onChange={(event) => setYear(Number(event.target.value))}
+								/>
+								{!validYear && (
+									<p className="mt-1 text-xs text-red-700">Choose a year from 2020 through 2100.</p>
+								)}
+							</div>
+							</>
+						)}
 					</div>
-					<button
-						type="button"
-						onClick={() => void printReport()}
-						disabled={!recordsReady || printing}
-						className="inline-flex min-h-10 items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">
-						{printing ? 'Preparing sheet…' : 'Print monthly log'}
-					</button>
+					{canManage && (
+						<button
+							type="button"
+							onClick={() => void printReport()}
+							disabled={!recordsReady || printing}
+							className="inline-flex min-h-10 items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-300">
+							{printing ? 'Preparing sheet…' : 'Print monthly log'}
+						</button>
+					)}
 				</div>
 			</section>
 
@@ -391,11 +409,13 @@ export default function WaterTemperatureWorkspace({canManage = false}: {canManag
 					houseName={selectedLocation?.name ?? ''}
 					correctionDraft={correctionDraft}
 					manualDraft={manualDraft}
+					backfillDraft={backfillDraft}
 					voidReason={voidReason}
 					saving={saving}
 					conflictMessage={conflictMessage}
 					onCorrectionChange={setCorrectionDraft}
 					onManualChange={setManualDraft}
+					onBackfillChange={setBackfillDraft}
 					onVoidReasonChange={setVoidReason}
 					onModeChange={(mode) => setEditor({...editor, mode})}
 					onSubmit={() => void submitEditor()}
@@ -416,13 +436,14 @@ export default function WaterTemperatureWorkspace({canManage = false}: {canManag
 		setConflictMessage('');
 		setVoidReason('');
 		setCorrectionDraft(cell.check ? correctionDraftFromCheck(cell.check) : null);
-		setManualDraft(cell.check ? null : emptyManualEntryDraft(cell.date));
+		setManualDraft(cell.check || !canManage ? null : emptyManualEntryDraft(cell.date));
+		setBackfillDraft(cell.check || canManage ? null : emptyStaffBackfillDraft(cell.date));
 		setEditor({
 			scope: currentScope,
 			date: cell.date,
 			slot: cell.slot,
 			cell,
-			mode: cell.check ? 'correct' : 'manual',
+			mode: cell.check ? 'correct' : canManage ? 'manual' : 'backfill',
 		});
 	}
 
@@ -431,6 +452,7 @@ export default function WaterTemperatureWorkspace({canManage = false}: {canManag
 		setEditor(null);
 		setCorrectionDraft(null);
 		setManualDraft(null);
+		setBackfillDraft(null);
 		setVoidReason('');
 		setConflictMessage('');
 	}
@@ -506,6 +528,27 @@ export default function WaterTemperatureWorkspace({canManage = false}: {canManag
 				payload: {source: 'manual', ...validation.values, idempotencyKey: mintIdempotencyKey('manual')},
 				operation: 'manual-create',
 				successMessage: 'Missing shift recorded with a reason',
+			};
+		}
+
+		if (editor.mode === 'backfill') {
+			if (!backfillDraft) return null;
+			const validation = validateStaffBackfillDraft({
+				draft: backfillDraft,
+				locationId: editor.scope.locationId,
+				operationalDate: editor.date,
+				shiftSlot: editor.slot,
+			});
+			if (!validation.isValid || !validation.values) {
+				setConflictMessage(validation.summary.map((issue) => issue.message).join(' '));
+				return null;
+			}
+			return {
+				url: '/api/documents/water-temperature-checks',
+				method: 'POST',
+				payload: {source: 'backfill', ...validation.values, idempotencyKey: mintIdempotencyKey('backfill')},
+				operation: 'manual-create',
+				successMessage: 'Missed check recorded',
 			};
 		}
 
@@ -677,11 +720,13 @@ function CellEditor(props: {
 	houseName: string;
 	correctionDraft: CorrectionDraft | null;
 	manualDraft: ManualEntryDraft | null;
+	backfillDraft: StaffBackfillDraft | null;
 	voidReason: string;
 	saving: boolean;
 	conflictMessage: string;
 	onCorrectionChange: (draft: CorrectionDraft) => void;
 	onManualChange: (draft: ManualEntryDraft) => void;
+	onBackfillChange: (draft: StaffBackfillDraft) => void;
 	onVoidReasonChange: (reason: string) => void;
 	onModeChange: (mode: EditorMode) => void;
 	onSubmit: () => void;
@@ -704,7 +749,11 @@ function CellEditor(props: {
 				<div className="flex items-start justify-between gap-4">
 					<div>
 						<h3 id="water-temperature-admin-title" className="text-lg font-semibold text-gray-900">
-							{check ? 'Review and correct' : 'Record a missing shift'}
+							{check
+								? 'Review and correct'
+								: props.editor.mode === 'backfill'
+									? 'Record a missed check'
+									: 'Record a missing shift'}
 						</h3>
 						<p className="mt-1 text-sm text-gray-600">
 							{props.houseName} · {props.editor.date} · {SHIFT_SLOT_LABELS[props.editor.slot]}
@@ -796,6 +845,9 @@ function CellEditor(props: {
 					{props.editor.mode === 'manual' && props.manualDraft && (
 						<ManualFields draft={props.manualDraft} onChange={props.onManualChange} />
 					)}
+					{props.editor.mode === 'backfill' && props.backfillDraft && (
+						<StaffBackfillFields draft={props.backfillDraft} onChange={props.onBackfillChange} />
+					)}
 					{props.editor.mode === 'correct' && props.correctionDraft && (
 						<CorrectionFields draft={props.correctionDraft} onChange={props.onCorrectionChange} />
 					)}
@@ -836,7 +888,9 @@ function CellEditor(props: {
 								? 'Saving…'
 								: props.editor.mode === 'manual'
 									? 'Record missing shift'
-									: props.editor.mode === 'void'
+									: props.editor.mode === 'backfill'
+										? 'Record check'
+										: props.editor.mode === 'void'
 										? 'Confirm void'
 										: 'Save correction'}
 						</button>
@@ -1067,29 +1121,67 @@ function NarrativeField({
 	);
 }
 
-function StaffPanel() {
+function StaffBackfillFields({
+	draft,
+	onChange,
+}: {
+	draft: StaffBackfillDraft;
+	onChange: (draft: StaffBackfillDraft) => void;
+}) {
+	const ids = WATER_TEMPERATURE_WORKSPACE_IDS;
 	return (
-		<div className="space-y-4">
-			<header>
-				<h2 className="text-2xl font-bold text-gray-900">Daily Water Temperature Check</h2>
-				<p className="mt-1 text-gray-600">
-					Safe water temperature is {SAFE_RANGE_LABEL}. Check and document water temperatures at
-					the beginning of each shift.
-				</p>
-			</header>
-			<div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700 shadow-sm">
-				<p>
-					Your current shift&rsquo;s check is recorded from the reminder banner at the top of the
-					portal, which stays visible until the check is complete.
-				</p>
-				<p className="mt-2">
-					Monthly review, correction, and printing are available to supervisors and administrators.
-				</p>
-			</div>
-			<p className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-900">
-				{ABOVE_115_ESCALATION_INSTRUCTIONS}
+		<>
+			<p className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+				Enter the temperatures exactly as they were read. This check is recorded under your name.
 			</p>
-		</div>
+			<div className="grid gap-4 sm:grid-cols-2">
+				<TemperatureField
+					id={ids.kitchen}
+					label={`${FIXTURE_LABELS.kitchen} (°F)`}
+					value={draft.kitchenTempF}
+					onChange={(value) => onChange({...draft, kitchenTempF: value})}
+				/>
+				<TemperatureField
+					id={ids.bath}
+					label={`${FIXTURE_LABELS.bath_shower} (°F)`}
+					value={draft.bathTempF}
+					onChange={(value) => onChange({...draft, bathTempF: value})}
+				/>
+			</div>
+			<div>
+				<label className="mb-1 block text-sm font-medium text-gray-700" htmlFor={ids.observedAt}>
+					When the temperatures were read
+				</label>
+				<input
+					id={ids.observedAt}
+					type="datetime-local"
+					className={inputClass}
+					value={draft.observedAt}
+					onChange={(event) => onChange({...draft, observedAt: event.target.value})}
+				/>
+			</div>
+			<NarrativeField
+				id={ids.comments}
+				label="Comments / notes"
+				value={draft.comments}
+				maxLength={2000}
+				onChange={(value) => onChange({...draft, comments: value})}
+			/>
+			<NarrativeField
+				id={ids.action}
+				label="Action taken (optional)"
+				value={draft.action}
+				maxLength={2000}
+				onChange={(value) => onChange({...draft, action: value})}
+			/>
+			<NarrativeField
+				id={ids.reason}
+				label="Why it is being recorded late (optional)"
+				value={draft.reason}
+				maxLength={1000}
+				onChange={(value) => onChange({...draft, reason: value})}
+			/>
+		</>
 	);
 }
 
@@ -1118,7 +1210,7 @@ function StatusPanel({
 
 /** Retry-safe identifier for a privileged write (R17): one attempt keeps one
  * key, so a retried or duplicated request cannot apply the change twice. */
-function mintIdempotencyKey(prefix: 'manual' | 'correct' | 'void'): string {
+function mintIdempotencyKey(prefix: 'manual' | 'backfill' | 'correct' | 'void'): string {
 	const random =
 		globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function'
 			? globalThis.crypto.randomUUID()

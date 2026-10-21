@@ -2,6 +2,7 @@ import {db} from '@/db/index';
 import {requireAdminOrSupervisorAccess} from '@/lib/db-helpers';
 import {
 	deriveWaterTemperatureState,
+	isWithinStaffBackfillWindow,
 	nextRecheckSequence,
 	tenthsToFahrenheit,
 	classifyFixtureReading,
@@ -10,8 +11,11 @@ import {
 	type WaterTemperatureFixture,
 	type WaterTemperatureRecheckFact,
 } from '@/lib/water-temperature';
+import {computeOperationalDate} from '@/lib/operational-time';
 import {sql, type SQL} from 'drizzle-orm';
+import {getOperationalTimeZone} from '@/db/queries/care';
 import {
+	WaterTemperatureBackfillWindowError,
 	WaterTemperatureConflictError,
 	WaterTemperatureNotFoundError,
 	WaterTemperatureShiftRequiredError,
@@ -955,6 +959,62 @@ export async function createWaterTemperatureCheckManual(args: {
 		action: args.action,
 		actorId: args.clerkUserId,
 		actorName: actor.staffName,
+		reason: args.reason,
+		idempotencyKey: args.idempotencyKey,
+	});
+}
+
+// Staff catching up on a missed check. Any slot at one of the caller's own
+// houses, dated from the 1st of the current operational month through today;
+// the reading is always attributed to the caller. Left with shiftId null like
+// a manual entry, so it stays distinguishable from a live current-shift check.
+export async function createWaterTemperatureCheckStaffBackfill(args: {
+	clerkUserId: string;
+	locationId: string;
+	shiftSlot: ShiftSlot;
+	operationalDate: string;
+	kitchenTempTenths: number;
+	bathTempTenths: number;
+	observedAt: Date;
+	comments: string | null;
+	action: string | null;
+	reason: string | null;
+	idempotencyKey: string;
+}): Promise<WaterTemperatureCheckDto> {
+	const context = await getWaterTemperatureAccessContext(args.clerkUserId);
+	const location = await resolveAuthorizedWaterTemperatureLocation(context, args.locationId);
+
+	const now = new Date();
+	const timeZone = await getOperationalTimeZone();
+	if (!isWithinStaffBackfillWindow(args.operationalDate, computeOperationalDate(now, timeZone))) {
+		throw new WaterTemperatureBackfillWindowError();
+	}
+	if (args.observedAt.getTime() > now.getTime()) {
+		throw new WaterTemperatureBackfillWindowError('The observation time cannot be in the future.');
+	}
+	if (computeOperationalDate(args.observedAt, timeZone) !== args.operationalDate) {
+		throw new WaterTemperatureBackfillWindowError(
+			`The observation time must fall on ${args.operationalDate}.`
+		);
+	}
+
+	const staff = await resolveStaffSnapshot(args.clerkUserId);
+	return createWaterTemperatureCheckAggregate(db, {
+		locationId: location.id,
+		houseName: location.name,
+		operationalDate: args.operationalDate,
+		shiftSlot: args.shiftSlot,
+		shiftId: null,
+		kitchenTempTenths: args.kitchenTempTenths,
+		bathTempTenths: args.bathTempTenths,
+		staffId: staff.staffId,
+		staffName: staff.staffName,
+		staffInitials: staff.staffInitials,
+		observedAt: args.observedAt,
+		comments: args.comments,
+		action: args.action,
+		actorId: args.clerkUserId,
+		actorName: staff.staffName,
 		reason: args.reason,
 		idempotencyKey: args.idempotencyKey,
 	});
