@@ -47,7 +47,9 @@ interface CareLogWithActivitiesProps {
 const COMMON_ACTIVITIES = [
 	'7 AM Meds',
 	'8 AM Meds',
+	'12 PM Meds',
 	'2 PM Meds',
+	'4 PM Meds',
 	'5 PM Meds',
 	'8 PM Meds',
 	'PRN Meds',
