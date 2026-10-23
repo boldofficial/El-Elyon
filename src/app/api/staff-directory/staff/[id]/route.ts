@@ -2,17 +2,22 @@
 // GET: one staff member's directory profile — admins, or a privileged
 // supervisor at a home this person is rostered at. Supervisor views are
 // audit-logged (the profile holds date of birth and home address).
-// PATCH: admins edit profile fields. Name and email stay in People
-// management because they're tied to the login.
+// PATCH: admins, or supervisors with manage_staff_directory for staff
+// rostered at their homes, edit profile fields. Only admins edit an admin's
+// profile. Name and email stay in People management because they're tied to
+// the login.
 
 import {auth} from '@clerk/nextjs/server';
 import {NextRequest, NextResponse} from 'next/server';
 import {eq} from 'drizzle-orm';
 import {db} from '@/db/index';
 import {employees} from '@/db/schema';
-import {AccessDeniedError, logAudit, requireAdminAccess} from '@/lib/db-helpers';
+import {AccessDeniedError, logAudit} from '@/lib/db-helpers';
 import {parseStaffProfileUpdate} from '@/lib/staff-directory';
-import {requireStaffDocumentViewer} from '@/db/queries/staff-documents';
+import {
+	requireStaffDirectoryManager,
+	requireStaffDocumentViewer,
+} from '@/db/queries/staff-documents';
 import {getStaffProfile} from '@/db/queries/staff-directory';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -47,7 +52,7 @@ export async function GET(
 		}
 
 		return NextResponse.json(
-			{...profile, canEdit: viewer.role === 'admin'},
+			{...profile, canEdit: viewer.canManage && (viewer.role === 'admin' || !profile.isAdmin)},
 			{headers: privateNoStore}
 		);
 	} catch (error) {
@@ -69,10 +74,24 @@ export async function PATCH(
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		const viewer = await requireStaffDirectoryManager(userId);
 		const {id} = await params;
 		if (!UUID_PATTERN.test(id)) {
 			return NextResponse.json({error: 'Staff member not found'}, {status: 404});
+		}
+
+		if (viewer.role !== 'admin') {
+			// Not rostered at one of their homes reads the same as missing.
+			const profile = await getStaffProfile(viewer, id);
+			if (!profile) {
+				return NextResponse.json({error: 'Staff member not found'}, {status: 404});
+			}
+			if (profile.isAdmin) {
+				return NextResponse.json(
+					{error: "Only an admin can edit an admin's profile"},
+					{status: 403}
+				);
+			}
 		}
 
 		const today = new Date().toISOString().slice(0, 10);

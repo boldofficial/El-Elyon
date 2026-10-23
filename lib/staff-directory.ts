@@ -3,7 +3,8 @@
 // Pure rules shared by the API routes, the UI and the tests. Access follows
 // lib/staff-documents.ts: admins see everything; supervisors holding
 // `view_staff_documents` see the homes they're assigned to, and the staff
-// ROSTERED at those homes. Only admins edit profiles and rosters.
+// ROSTERED at those homes. Admins edit profiles and rosters anywhere;
+// supervisors holding `manage_staff_directory` edit them at their own homes.
 
 export const STAFF_SEX_OPTIONS = ['female', 'male'] as const;
 export type StaffSex = (typeof STAFF_SEX_OPTIONS)[number];
@@ -105,4 +106,20 @@ export function parseStaffProfileUpdate(
 /** A home a supervisor can open: admins any, everyone else their own. */
 export function canViewHome(viewer: {role: string | null; locations: string[]}, home: string) {
 	return (viewer.role || '').toLowerCase() === 'admin' || viewer.locations.includes(home);
+}
+
+/**
+ * Who a manager may add to a home's roster. Admins: anyone. A supervisor:
+ * only staff the app already assigns to that home (employees.locations).
+ * Rostering someone opens their profile and documents to that home's
+ * supervisors, so a supervisor must not be able to roster an arbitrary
+ * employee just to read their background check.
+ */
+export function canAddToRoster(
+	viewer: {role: string | null; locations: string[]},
+	home: string,
+	employeeLocations: readonly string[]
+) {
+	if ((viewer.role || '').toLowerCase() === 'admin') return true;
+	return viewer.locations.includes(home) && employeeLocations.includes(home);
 }

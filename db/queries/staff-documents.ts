@@ -1,33 +1,30 @@
 import {and, desc, eq, inArray, isNull} from 'drizzle-orm';
 import {db} from '@/db/index';
 import {employees, locations, staffDocuments, staffRosterEntries} from '@/db/schema';
-import {hasAdminPrivilege} from '@/db/queries/admin-privileges';
+import {getActiveAdminPrivileges} from '@/db/queries/admin-privileges';
 import {AccessDeniedError, getUserRoleDoc, logAudit} from '@/lib/db-helpers';
 import {
 	canViewStaffDocument,
+	staffDirectoryAccess,
+	type StaffDirectoryViewer,
 	type StaffDocumentViewer,
 } from '@/lib/staff-documents';
 
 /**
- * Admins, plus supervisors the admin granted `view_staff_documents`.
- *
- * The role check is deliberate: the privileges screen also lists regular
- * staff, and a box ticked on the wrong row must not open background checks
- * to a care worker. Denials are audited like every other access gate.
+ * Admins, plus supervisors the admin granted `view_staff_documents` or
+ * `manage_staff_directory` — see staffDirectoryAccess for why the role is
+ * checked too. Denials are audited like every other access gate.
  */
 export async function requireStaffDocumentViewer(
 	clerkUserId: string
-): Promise<StaffDocumentViewer> {
+): Promise<StaffDirectoryViewer> {
 	const userRole = await getUserRoleDoc(clerkUserId);
 	const role = userRole?.role?.toLowerCase() || '';
-	const viewer = {role, locations: userRole?.locations || []};
+	const privileges = role === 'admin' ? [] : await getActiveAdminPrivileges(clerkUserId);
+	const access = staffDirectoryAccess(role, privileges);
 
-	if (role === 'admin') return viewer;
-	if (
-		role === 'supervisor' &&
-		(await hasAdminPrivilege(clerkUserId, 'view_staff_documents'))
-	) {
-		return viewer;
+	if (access) {
+		return {role, locations: userRole?.locations || [], canManage: access === 'manage'};
 	}
 
 	await logAudit({
@@ -38,6 +35,26 @@ export async function requireStaffDocumentViewer(
 		location: '',
 	});
 	throw new AccessDeniedError('You do not have access to the staff directory');
+}
+
+/**
+ * Admins, plus supervisors granted `manage_staff_directory`. Callers still
+ * scope each write to the manager's own homes.
+ */
+export async function requireStaffDirectoryManager(
+	clerkUserId: string
+): Promise<StaffDirectoryViewer> {
+	const viewer = await requireStaffDocumentViewer(clerkUserId);
+	if (viewer.canManage) return viewer;
+
+	await logAudit({
+		clerkUserId,
+		event: 'access_denied',
+		details: `staff_directory_manage_actual_${viewer.role}`,
+		deviceId: 'system',
+		location: '',
+	});
+	throw new AccessDeniedError('You can view the staff directory but not change it');
 }
 
 /**

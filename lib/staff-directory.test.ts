@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {canViewHome, isCalendarDate, parseStaffProfileUpdate} from './staff-directory';
+import {canAddToRoster, canViewHome, isCalendarDate, parseStaffProfileUpdate} from './staff-directory';
 
 const TODAY = '2026-10-12';
 
@@ -49,4 +49,15 @@ test('admins open any home; supervisors only their own', () => {
 	assert.equal(canViewHome({role: 'admin', locations: []}, 'PRAISE HOME'), true);
 	assert.equal(canViewHome({role: 'supervisor', locations: ['PRAISE HOME']}, 'PRAISE HOME'), true);
 	assert.equal(canViewHome({role: 'supervisor', locations: ['PRAISE HOME']}, 'SHALOM FAMILY HOME'), false);
+});
+
+test('a supervisor rosters only staff the app assigns to one of their homes', () => {
+	const manager = {role: 'supervisor', locations: ['PRAISE HOME']};
+	assert.equal(canAddToRoster(manager, 'PRAISE HOME', ['PRAISE HOME', 'GRACE FAMILY HOME']), true);
+	// Not assigned there: rostering would open their file to this supervisor.
+	assert.equal(canAddToRoster(manager, 'PRAISE HOME', ['GRACE FAMILY HOME']), false);
+	assert.equal(canAddToRoster(manager, 'PRAISE HOME', []), false);
+	// Assigned there, but it isn't the supervisor's home.
+	assert.equal(canAddToRoster(manager, 'GRACE FAMILY HOME', ['GRACE FAMILY HOME']), false);
+	assert.equal(canAddToRoster({role: 'admin', locations: []}, 'GRACE FAMILY HOME', []), true);
 });

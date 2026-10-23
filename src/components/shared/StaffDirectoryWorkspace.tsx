@@ -2,9 +2,11 @@
 // Staff Directory for state inspectors: homes → a home's roster and its own
 // compliance documents → a staff member's profile and documents.
 //
-// Admins edit rosters and profiles and upload; supervisors with "View Staff
-// Directory" browse their own homes read-only. Every rule is enforced by
-// the server — canEdit in each response only decides which controls render.
+// Admins edit rosters and profiles and upload anywhere; supervisors with
+// "Manage Staff Directory" do the same at their own homes, and those with
+// "View Staff Directory" browse their own homes read-only. Every rule is
+// enforced by the server — canEdit in each response only decides which
+// controls render.
 
 'use client';
 
@@ -151,7 +153,7 @@ function HomesView({
 	onOpenHome: (name: string) => void;
 	onOpenAllDocuments: () => void;
 }) {
-	const [data, setData] = useState<{homes: HomeSummary[]; canEdit: boolean} | null>(null);
+	const [data, setData] = useState<{homes: HomeSummary[]; allHomes: boolean} | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -171,7 +173,7 @@ function HomesView({
 					<h2 className="text-xl font-semibold text-gray-900">Staff Directory</h2>
 					<p className="text-sm text-gray-600">
 						Staff rosters, profiles and personnel documents for state inspectors.
-						{!data.canEdit && ' Showing your homes. Every download is logged.'}
+						{!data.allHomes && ' Showing your homes. Every download is logged.'}
 					</p>
 				</div>
 				<button

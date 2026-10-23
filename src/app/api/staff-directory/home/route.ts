@@ -1,5 +1,5 @@
 // src/app/api/staff-directory/home/route.ts
-// One home: its roster (and, for admins, who can still be added). Home
+// One home: its roster (and, for managers, who can still be added). Home
 // documents come from /api/staff-documents?location=… like any other list.
 
 import {auth} from '@clerk/nextjs/server';
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 		if (!home) {
 			return NextResponse.json({error: 'Home not found'}, {status: 404});
 		}
-		return NextResponse.json({...home, canEdit: viewer.role === 'admin'}, {headers: privateNoStore});
+		return NextResponse.json({...home, canEdit: viewer.canManage}, {headers: privateNoStore});
 	} catch (error) {
 		if (error instanceof AccessDeniedError) {
 			return NextResponse.json({error: error.message}, {status: 403});

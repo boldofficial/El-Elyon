@@ -2,6 +2,8 @@
 //
 // Admins upload; supervisors the admin has granted `view_staff_documents`
 // can view and download, but only for staff at their own location(s).
+// Supervisors granted `manage_staff_directory` also upload and remove, at
+// those same locations.
 // Everything here is pure so the rules can be tested without a database —
 // the API routes and the UI both import from this file.
 
@@ -124,6 +126,31 @@ export type StaffDocumentViewer = {
 	role: string | null;
 	locations: string[];
 };
+
+export type StaffDirectoryViewer = StaffDocumentViewer & {
+	// May upload, remove, and edit rosters and profiles. A manager changes
+	// only what they can see: canViewStaffDocument and canViewHome scope
+	// writes exactly as they scope reads.
+	canManage: boolean;
+};
+
+/**
+ * Admins manage everything. Supervisors view with `view_staff_documents`
+ * and manage with `manage_staff_directory` (which implies view). Anyone
+ * else gets nothing, whatever boxes are ticked: the privileges screen lists
+ * care staff too, and a stray tick must not open background checks.
+ */
+export function staffDirectoryAccess(
+	role: string | null,
+	privileges: readonly string[]
+): 'manage' | 'view' | null {
+	const normalized = (role || '').toLowerCase();
+	if (normalized === 'admin') return 'manage';
+	if (normalized !== 'supervisor') return null;
+	if (privileges.includes('manage_staff_directory')) return 'manage';
+	if (privileges.includes('view_staff_documents')) return 'view';
+	return null;
+}
 
 export type StaffDocumentPlacement = {
 	// Set for facility-wide documents.
