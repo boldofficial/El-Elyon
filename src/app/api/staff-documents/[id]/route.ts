@@ -1,14 +1,20 @@
 // src/app/api/staff-documents/[id]/route.ts
-// DELETE archives a staff document (admins only). The row and the S3 object
-// are kept: these are personnel records, and an accidental removal should be
-// recoverable from the database rather than gone.
+// DELETE archives a staff document (admins, or supervisors with
+// manage_staff_directory for documents at their own homes). The row and the
+// S3 object are kept: these are personnel records, and an accidental removal
+// should be recoverable from the database rather than gone.
 
 import {auth} from '@clerk/nextjs/server';
 import {NextRequest, NextResponse} from 'next/server';
 import {and, eq, isNull} from 'drizzle-orm';
 import {db} from '@/db/index';
 import {staffDocuments} from '@/db/schema';
-import {AccessDeniedError, logAudit, requireAdminAccess} from '@/lib/db-helpers';
+import {AccessDeniedError, logAudit} from '@/lib/db-helpers';
+import {
+	documentAuditLocation,
+	getVisibleStaffDocument,
+	requireStaffDirectoryManager,
+} from '@/db/queries/staff-documents';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -22,9 +28,15 @@ export async function DELETE(
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		const viewer = await requireStaffDirectoryManager(userId);
 		const {id} = await params;
 		if (!UUID_PATTERN.test(id)) {
+			return NextResponse.json({error: 'Document not found'}, {status: 404});
+		}
+
+		// Outside the manager's homes reads the same as missing.
+		const document = await getVisibleStaffDocument(viewer, id);
+		if (!document) {
 			return NextResponse.json({error: 'Document not found'}, {status: 404});
 		}
 
@@ -43,7 +55,7 @@ export async function DELETE(
 			event: 'staff_document.archived',
 			details: `id=${archived.id},title=${archived.title}`,
 			deviceId: 'system',
-			location: '',
+			location: documentAuditLocation(document),
 		});
 
 		return NextResponse.json({success: true});

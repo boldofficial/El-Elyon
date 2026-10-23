@@ -1,6 +1,7 @@
 // src/app/api/staff-directory/route.ts
 // Staff Directory landing: the homes this viewer can open. Admins see every
-// home; supervisors holding view_staff_documents see their own.
+// home; supervisors holding view_staff_documents or manage_staff_directory
+// see their own.
 
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
@@ -19,7 +20,10 @@ export async function GET() {
 	try {
 		const viewer = await requireStaffDocumentViewer(userId);
 		const homes = await listDirectoryHomes(viewer);
-		return NextResponse.json({homes, canEdit: viewer.role === 'admin'}, {headers: privateNoStore});
+		return NextResponse.json(
+			{homes, canEdit: viewer.canManage, allHomes: viewer.role === 'admin'},
+			{headers: privateNoStore}
+		);
 	} catch (error) {
 		if (error instanceof AccessDeniedError) {
 			return NextResponse.json({error: error.message}, {status: 403});

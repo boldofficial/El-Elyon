@@ -1,5 +1,6 @@
 // src/app/api/staff-directory/roster/route.ts
-// POST adds a staff member to a home's roster (admins only). Re-adding
+// POST adds a staff member to a home's roster (admins, or supervisors with
+// manage_staff_directory at their own homes — see canAddToRoster). Re-adding
 // someone already on that roster updates their title instead. The hire date
 // lives on the employee's profile, not here.
 // The roster never changes employees.locations (clock-in and resident
@@ -10,7 +11,9 @@ import {NextRequest, NextResponse} from 'next/server';
 import {eq} from 'drizzle-orm';
 import {db} from '@/db/index';
 import {employees, locations, staffRosterEntries} from '@/db/schema';
-import {AccessDeniedError, logAudit, requireAdminAccess} from '@/lib/db-helpers';
+import {AccessDeniedError, logAudit} from '@/lib/db-helpers';
+import {canAddToRoster, canViewHome} from '@/lib/staff-directory';
+import {requireStaffDirectoryManager} from '@/db/queries/staff-documents';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,7 +24,7 @@ export async function POST(req: NextRequest) {
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		const viewer = await requireStaffDirectoryManager(userId);
 		const body = await req.json().catch(() => ({}));
 
 		const location = typeof body.location === 'string' ? body.location.trim() : '';
@@ -36,10 +39,21 @@ export async function POST(req: NextRequest) {
 
 		const [home, employee] = await Promise.all([
 			db.query.locations.findFirst({where: eq(locations.name, location), columns: {id: true}}),
-			db.query.employees.findFirst({where: eq(employees.id, employeeId), columns: {name: true}}),
+			db.query.employees.findFirst({
+				where: eq(employees.id, employeeId),
+				columns: {name: true, locations: true},
+			}),
 		]);
-		if (!home) return NextResponse.json({error: 'Home not found'}, {status: 400});
+		if (!home || !canViewHome(viewer, location)) {
+			return NextResponse.json({error: 'Home not found'}, {status: 400});
+		}
 		if (!employee) return NextResponse.json({error: 'Staff member not found'}, {status: 400});
+		if (!canAddToRoster(viewer, location, employee.locations || [])) {
+			return NextResponse.json(
+				{error: `${employee.name} isn't assigned to ${location}. Ask an admin to add them.`},
+				{status: 400}
+			);
+		}
 
 		const [entry] = await db
 			.insert(staffRosterEntries)

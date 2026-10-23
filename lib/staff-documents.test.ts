@@ -6,6 +6,7 @@ import {
 	STAFF_DOCUMENT_CATEGORY_SCOPE,
 	canViewStaffDocument,
 	resolveStaffDocumentTarget,
+	staffDirectoryAccess,
 } from './staff-documents';
 
 const EMPLOYEE = '5a000000-0000-4000-8000-000000000001';
@@ -106,4 +107,19 @@ test('a supervisor with no locations sees nothing', () => {
 		canViewStaffDocument(unassigned, {location: null, employeeId: EMPLOYEE, employeeLocations: [MAPLE]}),
 		false
 	);
+});
+
+test('only supervisors get directory access from privileges; manage implies view', () => {
+	assert.equal(staffDirectoryAccess('admin', []), 'manage');
+	assert.equal(staffDirectoryAccess('Admin', []), 'manage');
+	assert.equal(staffDirectoryAccess('supervisor', ['view_staff_documents']), 'view');
+	assert.equal(staffDirectoryAccess('supervisor', ['manage_staff_directory']), 'manage');
+	assert.equal(
+		staffDirectoryAccess('supervisor', ['view_staff_documents', 'manage_staff_directory']),
+		'manage'
+	);
+	assert.equal(staffDirectoryAccess('supervisor', ['manage_employees']), null);
+	// A box ticked on a care worker's row opens nothing.
+	assert.equal(staffDirectoryAccess('staff', ['manage_staff_directory']), null);
+	assert.equal(staffDirectoryAccess(null, ['view_staff_documents']), null);
 });

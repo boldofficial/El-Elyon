@@ -1,6 +1,7 @@
 // src/components/shared/StaffDocumentsWorkspace.tsx
 // Staff documents for state inspectors. Admins upload and remove; supervisors
-// with "View Staff Documents" see and download what's at their own locations.
+// with "Manage Staff Directory" do the same at their own locations, and those
+// with "View Staff Directory" see and download what's there.
 // The server decides both what's listed and whether upload controls show
 // (canUpload) — this component never infers access on its own.
 
@@ -41,6 +42,7 @@ interface StaffDocumentsResponse {
 	employees: EmployeeOption[];
 	locations: string[];
 	canUpload: boolean;
+	allHomes: boolean;
 }
 
 const ACCEPT = '.pdf,.doc,.docx,.xls,.xlsx,.csv,.jpg,.jpeg,.png';
@@ -147,8 +149,8 @@ export default function StaffDocumentsWorkspace({
 					<h2 className="text-xl font-semibold text-gray-900">Staff Documents</h2>
 					<p className="text-sm text-gray-600">
 						Personnel records for state inspectors.{' '}
-						{data.canUpload
-							? 'Supervisors you grant "View Staff Documents" can download what is at their own locations.'
+						{data.allHomes
+							? 'Supervisors you grant "View Staff Directory" can download what is at their own locations.'
 							: 'Showing staff at your locations. Every download is logged.'}
 					</p>
 				</div>

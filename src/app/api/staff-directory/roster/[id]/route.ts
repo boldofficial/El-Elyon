@@ -1,13 +1,16 @@
 // src/app/api/staff-directory/roster/[id]/route.ts
-// DELETE takes a staff member off one home's roster (admins only). Their
-// employee record, documents and app access are untouched.
+// DELETE takes a staff member off one home's roster (admins, or supervisors
+// with manage_staff_directory at their own homes). Their employee record,
+// documents and app access are untouched.
 
 import {auth} from '@clerk/nextjs/server';
 import {NextRequest, NextResponse} from 'next/server';
 import {eq} from 'drizzle-orm';
 import {db} from '@/db/index';
 import {staffRosterEntries} from '@/db/schema';
-import {AccessDeniedError, logAudit, requireAdminAccess} from '@/lib/db-helpers';
+import {AccessDeniedError, logAudit} from '@/lib/db-helpers';
+import {canViewHome} from '@/lib/staff-directory';
+import {requireStaffDirectoryManager} from '@/db/queries/staff-documents';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -21,9 +24,18 @@ export async function DELETE(
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		const viewer = await requireStaffDirectoryManager(userId);
 		const {id} = await params;
 		if (!UUID_PATTERN.test(id)) {
+			return NextResponse.json({error: 'Roster entry not found'}, {status: 404});
+		}
+
+		// Another home's entry reads the same as missing.
+		const entry = await db.query.staffRosterEntries.findFirst({
+			where: eq(staffRosterEntries.id, id),
+			columns: {location: true},
+		});
+		if (!entry || !canViewHome(viewer, entry.location)) {
 			return NextResponse.json({error: 'Roster entry not found'}, {status: 404});
 		}
 

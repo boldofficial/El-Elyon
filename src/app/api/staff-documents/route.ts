@@ -1,24 +1,28 @@
 // src/app/api/staff-documents/route.ts
 // Staff documents for state inspectors. GET lists what the caller may see
-// (admin: everything; supervisor with view_staff_documents: own locations).
-// POST uploads a document — admins only.
+// (admin: everything; supervisor with view_staff_documents or
+// manage_staff_directory: own locations). POST uploads a document — admins,
+// or supervisors with manage_staff_directory filing at their own homes.
 
 import {auth} from '@clerk/nextjs/server';
 import {NextRequest, NextResponse} from 'next/server';
 import {eq} from 'drizzle-orm';
 import {db} from '@/db/index';
 import {employees, locations, staffDocuments} from '@/db/schema';
-import {AccessDeniedError, logAudit, requireAdminAccess} from '@/lib/db-helpers';
+import {AccessDeniedError, logAudit} from '@/lib/db-helpers';
 import {generateFileKey, uploadFile} from '@/lib/aws-s3';
 import {
 	STAFF_DOCUMENT_CATEGORY_LABELS,
 	STAFF_DOCUMENT_CONTENT_TYPES,
 	STAFF_DOCUMENT_MAX_BYTES,
+	canViewStaffDocument,
 	resolveStaffDocumentTarget,
 } from '@/lib/staff-documents';
 import {
+	getRosterHomesByEmployee,
 	listStaffDocumentFilterOptions,
 	listVisibleStaffDocuments,
+	requireStaffDirectoryManager,
 	requireStaffDocumentViewer,
 } from '@/db/queries/staff-documents';
 
@@ -47,7 +51,7 @@ export async function GET(req: NextRequest) {
 		]);
 
 		return NextResponse.json(
-			{documents, ...options, canUpload: viewer.role === 'admin'},
+			{documents, ...options, canUpload: viewer.canManage, allHomes: viewer.role === 'admin'},
 			{headers: privateNoStore}
 		);
 	} catch (error) {
@@ -66,7 +70,7 @@ export async function POST(req: NextRequest) {
 	}
 
 	try {
-		await requireAdminAccess(userId);
+		const viewer = await requireStaffDirectoryManager(userId);
 
 		const form = await req.formData();
 		const file = form.get('file');
@@ -93,7 +97,8 @@ export async function POST(req: NextRequest) {
 		}
 
 		// A typo'd location would file the document somewhere no supervisor
-		// can see it, so both targets must exist.
+		// can see it, so both targets must exist. A supervisor may only file
+		// what they could then see; outside their homes reads as not found.
 		let auditLocation = target.location ?? '';
 		if (target.employeeId) {
 			if (!UUID_PATTERN.test(target.employeeId)) {
@@ -103,7 +108,16 @@ export async function POST(req: NextRequest) {
 				where: eq(employees.id, target.employeeId),
 				columns: {locations: true},
 			});
-			if (!employee) {
+			const rosterHomes =
+				(await getRosterHomesByEmployee([target.employeeId])).get(target.employeeId) || [];
+			if (
+				!employee ||
+				!canViewStaffDocument(viewer, {
+					location: null,
+					employeeId: target.employeeId,
+					employeeLocations: rosterHomes,
+				})
+			) {
 				return NextResponse.json({error: 'Employee not found'}, {status: 400});
 			}
 			auditLocation = employee.locations.join('|');
@@ -112,7 +126,14 @@ export async function POST(req: NextRequest) {
 				where: eq(locations.name, target.location),
 				columns: {id: true},
 			});
-			if (!location) {
+			if (
+				!location ||
+				!canViewStaffDocument(viewer, {
+					location: target.location,
+					employeeId: null,
+					employeeLocations: null,
+				})
+			) {
 				return NextResponse.json({error: 'Location not found'}, {status: 400});
 			}
 		}

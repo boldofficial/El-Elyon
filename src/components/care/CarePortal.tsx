@@ -54,7 +54,8 @@ type AdminPrivilege =
 	| 'manage_guardian_checklists'
 	| 'manage_data_cleanup'
 	| 'manage_settings'
-	| 'view_staff_documents';
+	| 'view_staff_documents'
+	| 'manage_staff_directory';
 
 const PRIVILEGE_TO_VIEW: Record<AdminPrivilege, string> = {
 	manage_employees: 'manage-people',
@@ -70,6 +71,7 @@ const PRIVILEGE_TO_VIEW: Record<AdminPrivilege, string> = {
 	manage_data_cleanup: 'manage-data-cleanup',
 	manage_settings: 'manage-settings',
 	view_staff_documents: 'staff-directory',
+	manage_staff_directory: 'staff-directory',
 };
 
 const MANAGEMENT_VIEW_LABELS: Record<string, {label: string; icon: string; description: string}> = {
@@ -130,11 +132,12 @@ export default function CarePortal() {
 	const delegatedManagementViews = Array.from(
 		new Set(
 			adminPrivileges
-				// Staff documents are supervisor-only even when granted to staff
+				// The Staff Directory is supervisor-only even when granted to staff
 				// by mistake; requireStaffDocumentViewer enforces the same rule.
 				.filter(
 					(privilege) =>
-						privilege !== 'view_staff_documents' || sessionInfo?.role === 'supervisor'
+						PRIVILEGE_TO_VIEW[privilege] !== 'staff-directory' ||
+						sessionInfo?.role === 'supervisor'
 				)
 				.map((privilege) => PRIVILEGE_TO_VIEW[privilege])
 				.filter((viewId) => Boolean(MANAGEMENT_VIEW_LABELS[viewId]))

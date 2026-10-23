@@ -1,9 +1,13 @@
 import {and, asc, count, eq, isNull} from 'drizzle-orm';
 import {db} from '@/db/index';
-import {employees, locations, staffDocuments, staffRosterEntries} from '@/db/schema';
+import {employees, locations, roles, staffDocuments, staffRosterEntries} from '@/db/schema';
 import {getRosterHomesByEmployee} from '@/db/queries/staff-documents';
-import {canViewStaffDocument, type StaffDocumentViewer} from '@/lib/staff-documents';
-import {canViewHome} from '@/lib/staff-directory';
+import {
+	canViewStaffDocument,
+	type StaffDirectoryViewer,
+	type StaffDocumentViewer,
+} from '@/lib/staff-documents';
+import {canAddToRoster, canViewHome} from '@/lib/staff-directory';
 
 // date_of_hire is a timestamp stored at UTC midnight; show it as YYYY-MM-DD.
 function toCalendarDate(value: Date | null) {
@@ -41,9 +45,9 @@ export async function listDirectoryHomes(viewer: StaffDocumentViewer) {
 
 /**
  * One home's roster, or null when it doesn't exist or isn't the viewer's.
- * Admins also get the employees not yet on this roster, for the add picker.
+ * Managers also get who they may add (canAddToRoster), for the add picker.
  */
-export async function getDirectoryHome(viewer: StaffDocumentViewer, name: string) {
+export async function getDirectoryHome(viewer: StaffDirectoryViewer, name: string) {
 	if (!canViewHome(viewer, name)) return null;
 
 	const [home] = await db
@@ -69,13 +73,18 @@ export async function getDirectoryHome(viewer: StaffDocumentViewer, name: string
 		.orderBy(asc(employees.name));
 
 	let addable: {id: string; name: string}[] = [];
-	if (viewer.role === 'admin') {
+	if (viewer.canManage) {
 		const onRoster = new Set(roster.map((row) => row.employeeId));
 		const all = await db
-			.select({id: employees.id, name: employees.name})
+			.select({id: employees.id, name: employees.name, locations: employees.locations})
 			.from(employees)
 			.orderBy(asc(employees.name));
-		addable = all.filter((employee) => !onRoster.has(employee.id));
+		addable = all
+			.filter(
+				(employee) =>
+					!onRoster.has(employee.id) && canAddToRoster(viewer, name, employee.locations || [])
+			)
+			.map(({id, name: employeeName}) => ({id, name: employeeName}));
 	}
 
 	// One hire date per person, the profile's, on every home's roster.
@@ -108,11 +117,14 @@ export async function getStaffProfile(viewer: StaffDocumentViewer, employeeId: s
 			emergencyContactPhone: employees.emergencyContactPhone,
 			emergencyContactRelationship: employees.emergencyContactRelationship,
 			profileNotes: employees.profileNotes,
+			role: roles.role,
 		})
 		.from(employees)
+		.leftJoin(roles, eq(employees.clerkUserId, roles.clerkUserId))
 		.where(eq(employees.id, employeeId))
 		.limit(1);
 	if (!employee) return null;
+	const {role, ...details} = employee;
 
 	const homes = (await getRosterHomesByEmployee([employeeId])).get(employeeId) || [];
 	if (
@@ -131,8 +143,10 @@ export async function getStaffProfile(viewer: StaffDocumentViewer, employeeId: s
 		.orderBy(asc(staffRosterEntries.location));
 
 	return {
-		...employee,
-		dateOfHire: toCalendarDate(employee.dateOfHire),
+		...details,
+		dateOfHire: toCalendarDate(details.dateOfHire),
+		// Only admins edit an admin's profile (see the PATCH route).
+		isAdmin: role?.toLowerCase() === 'admin',
 		// A supervisor only sees the homes they share with this person.
 		homes: rosterRows.filter((row) => canViewHome(viewer, row.location)),
 	};
