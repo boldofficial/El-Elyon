@@ -44,7 +44,7 @@ export const STAFF_DOCUMENT_CATEGORY_SCOPE: Record<StaffDocumentCategory, StaffD
 	tb_test: 'employee',
 	job_application: 'employee',
 	prn_staff: 'location',
-	cla: 'location',
+	cla: 'either',
 	miscellaneous: 'either',
 };
 
