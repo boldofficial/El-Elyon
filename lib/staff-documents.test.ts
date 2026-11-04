@@ -33,10 +33,14 @@ test('per-person categories must be filed under an employee', () => {
 });
 
 test('facility-wide categories must be filed under a location', () => {
-	for (const category of ['prn_staff', 'cla']) {
-		assert.equal(resolveStaffDocumentTarget({category, employeeId: EMPLOYEE}).ok, false);
-		assert.equal(resolveStaffDocumentTarget({category, location: ` ${MAPLE} `}).ok, true);
-	}
+	assert.equal(resolveStaffDocumentTarget({category: 'prn_staff', employeeId: EMPLOYEE}).ok, false);
+	assert.equal(resolveStaffDocumentTarget({category: 'prn_staff', location: ` ${MAPLE} `}).ok, true);
+});
+
+test('CLA documents can be filed under a person or a house', () => {
+	assert.equal(resolveStaffDocumentTarget({category: 'cla', employeeId: EMPLOYEE}).ok, true);
+	assert.equal(resolveStaffDocumentTarget({category: 'cla', location: MAPLE}).ok, true);
+	assert.equal(resolveStaffDocumentTarget({category: 'cla'}).ok, false);
 });
 
 test('staff rosters can no longer be uploaded; they print from the directory', () => {
