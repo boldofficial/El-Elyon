@@ -71,8 +71,8 @@ export default function BootstrapAdmin() {
 	}
 
 	if (hasAdmin) {
-		// If admin already exists, redirect to sign-in or home
-		router.push('/sign-in');
+		// If admin already exists, redirect home (`/` renders the sign-in form)
+		router.push('/');
 		return null;
 	}
 
@@ -89,7 +89,7 @@ export default function BootstrapAdmin() {
 						Clerk to become the first administrator.
 					</p>
 					<button
-						onClick={() => router.push('/sign-in')}
+						onClick={() => router.push('/')}
 						className="w-full bg-blue-600 text-white py-3 rounded-md font-semibold hover:bg-blue-700 transition-colors"
 					>
 						Sign In / Sign Up
