@@ -1,7 +1,8 @@
 // src/app/api/staff-directory/roster/[id]/route.ts
-// DELETE takes a staff member off one home's roster (admins, or supervisors
-// with manage_staff_directory at their own homes). Their employee record,
-// documents and app access are untouched.
+// PATCH changes a roster entry's title; DELETE takes a staff member off one
+// home's roster. Both: admins, or supervisors with manage_staff_directory at
+// their own homes. The employee record, documents and app access are
+// untouched either way.
 
 import {auth} from '@clerk/nextjs/server';
 import {NextRequest, NextResponse} from 'next/server';
@@ -9,10 +10,60 @@ import {eq} from 'drizzle-orm';
 import {db} from '@/db/index';
 import {staffRosterEntries} from '@/db/schema';
 import {AccessDeniedError, logAudit} from '@/lib/db-helpers';
-import {canViewHome} from '@/lib/staff-directory';
+import {canViewHome, parseRosterTitle} from '@/lib/staff-directory';
 import {requireStaffDirectoryManager} from '@/db/queries/staff-documents';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function PATCH(
+	req: NextRequest,
+	{params}: {params: Promise<{id: string}>}
+) {
+	const {userId} = await auth();
+	if (!userId) {
+		return NextResponse.json({error: 'Unauthorized'}, {status: 401});
+	}
+
+	try {
+		const viewer = await requireStaffDirectoryManager(userId);
+		const {id} = await params;
+		if (!UUID_PATTERN.test(id)) {
+			return NextResponse.json({error: 'Roster entry not found'}, {status: 404});
+		}
+		const body = await req.json().catch(() => ({}));
+		const title = parseRosterTitle(body.title);
+
+		// Another home's entry reads the same as missing.
+		const entry = await db.query.staffRosterEntries.findFirst({
+			where: eq(staffRosterEntries.id, id),
+			columns: {location: true, employeeId: true, title: true},
+		});
+		if (!entry || !canViewHome(viewer, entry.location)) {
+			return NextResponse.json({error: 'Roster entry not found'}, {status: 404});
+		}
+
+		await db
+			.update(staffRosterEntries)
+			.set({title, updatedAt: new Date(), updatedBy: userId})
+			.where(eq(staffRosterEntries.id, id));
+
+		await logAudit({
+			clerkUserId: userId,
+			event: 'staff_roster.title_changed',
+			details: `employee=${entry.employeeId},from=${entry.title ?? ''},to=${title ?? ''}`,
+			deviceId: 'system',
+			location: entry.location,
+		});
+
+		return NextResponse.json({title});
+	} catch (error) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: error.message}, {status: 403});
+		}
+		console.error('Staff roster title error:', error);
+		return NextResponse.json({error: 'Failed to update the roster'}, {status: 500});
+	}
+}
 
 export async function DELETE(
 	_req: NextRequest,

@@ -1,6 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {canAddToRoster, canViewHome, isCalendarDate, parseStaffProfileUpdate} from './staff-directory';
+import {
+	canAddToRoster,
+	canViewHome,
+	isCalendarDate,
+	parseRosterTitle,
+	parseStaffProfileUpdate,
+} from './staff-directory';
+
+test('roster titles are trimmed; blank or missing clears them', () => {
+	assert.equal(parseRosterTitle('  Live-in Staff  '), 'Live-in Staff');
+	assert.equal(parseRosterTitle('   '), null);
+	assert.equal(parseRosterTitle(''), null);
+	assert.equal(parseRosterTitle(undefined), null);
+	assert.equal(parseRosterTitle(42), null);
+	assert.equal(parseRosterTitle('x'.repeat(300))?.length, 255);
+});
 
 const TODAY = '2026-10-12';
 

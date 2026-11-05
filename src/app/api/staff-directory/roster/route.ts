@@ -12,7 +12,7 @@ import {eq} from 'drizzle-orm';
 import {db} from '@/db/index';
 import {employees, locations, staffRosterEntries} from '@/db/schema';
 import {AccessDeniedError, logAudit} from '@/lib/db-helpers';
-import {canAddToRoster, canViewHome} from '@/lib/staff-directory';
+import {canAddToRoster, canViewHome, parseRosterTitle} from '@/lib/staff-directory';
 import {requireStaffDirectoryManager} from '@/db/queries/staff-documents';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -29,8 +29,7 @@ export async function POST(req: NextRequest) {
 
 		const location = typeof body.location === 'string' ? body.location.trim() : '';
 		const employeeId = typeof body.employeeId === 'string' ? body.employeeId : '';
-		const title =
-			typeof body.title === 'string' && body.title.trim() ? body.title.trim().slice(0, 255) : null;
+		const title = parseRosterTitle(body.title);
 
 		if (!location) return NextResponse.json({error: 'Choose a home'}, {status: 400});
 		if (!UUID_PATTERN.test(employeeId)) {

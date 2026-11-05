@@ -315,7 +315,13 @@ function HomeView({
 														{row.name}
 													</button>
 												</td>
-												<td className="px-4 py-3 text-gray-700">{row.title || '—'}</td>
+												<td className="px-4 py-3 text-gray-700">
+													{data.canEdit ? (
+														<RosterTitleCell row={row} onSaved={load} />
+													) : (
+														row.title || '—'
+													)}
+												</td>
 												<td className="whitespace-nowrap px-4 py-3 text-gray-700">
 													{formatDate(row.dateOfHire)}
 												</td>
@@ -419,6 +425,84 @@ function AddToRosterForm({
 				disabled={saving || !employeeId}
 				className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
 				{saving ? 'Adding…' : 'Add to roster'}
+			</button>
+		</form>
+	);
+}
+
+// A roster title managers can change in place. Saving a blank clears it.
+function RosterTitleCell({row, onSaved}: {row: RosterRow; onSaved: () => void}) {
+	const [editing, setEditing] = useState(false);
+	const [value, setValue] = useState(row.title ?? '');
+	const [saving, setSaving] = useState(false);
+
+	function start() {
+		setValue(row.title ?? '');
+		setEditing(true);
+	}
+
+	async function save(e: React.FormEvent) {
+		e.preventDefault();
+		setSaving(true);
+		try {
+			await readJson(
+				await fetch(`/api/staff-directory/roster/${row.entryId}`, {
+					method: 'PATCH',
+					headers: {'Content-Type': 'application/json'},
+					body: JSON.stringify({title: value}),
+				})
+			);
+			toast.success(`Title updated for ${row.name}`);
+			setEditing(false);
+			onSaved();
+		} catch (e: any) {
+			toast.error(e.message);
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	if (!editing) {
+		return (
+			<span className="flex items-center gap-2">
+				<span>{row.title || '—'}</span>
+				<button
+					type="button"
+					onClick={start}
+					aria-label={`Edit title for ${row.name}`}
+					className="text-xs font-medium text-blue-600 hover:underline">
+					Edit
+				</button>
+			</span>
+		);
+	}
+
+	return (
+		<form onSubmit={save} className="flex items-center gap-2">
+			<input
+				value={value}
+				onChange={(e) => setValue(e.target.value)}
+				onKeyDown={(e) => {
+					if (e.key === 'Escape') setEditing(false);
+				}}
+				maxLength={255}
+				autoFocus
+				placeholder="e.g. Staff, Live-in Staff"
+				aria-label={`Title for ${row.name}`}
+				className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm"
+			/>
+			<button
+				type="submit"
+				disabled={saving}
+				className="text-xs font-medium text-blue-600 hover:underline disabled:opacity-50">
+				{saving ? 'Saving…' : 'Save'}
+			</button>
+			<button
+				type="button"
+				onClick={() => setEditing(false)}
+				disabled={saving}
+				className="text-xs font-medium text-gray-500 hover:underline">
+				Cancel
 			</button>
 		</form>
 	);

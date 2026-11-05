@@ -103,6 +103,17 @@ export function parseStaffProfileUpdate(
 	return {ok: true, update};
 }
 
+/**
+ * A roster title from a request body: trimmed and capped at the column's
+ * 255 characters. Blank or missing clears it (null), which the roster
+ * shows as "—".
+ */
+export function parseRosterTitle(value: unknown): string | null {
+	if (typeof value !== 'string') return null;
+	const title = value.trim();
+	return title ? title.slice(0, 255) : null;
+}
+
 /** A home a supervisor can open: admins any, everyone else their own. */
 export function canViewHome(viewer: {role: string | null; locations: string[]}, home: string) {
 	return (viewer.role || '').toLowerCase() === 'admin' || viewer.locations.includes(home);
