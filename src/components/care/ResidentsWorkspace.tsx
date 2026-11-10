@@ -1,6 +1,6 @@
 // src/components/care/ResidentsWorkspace.tsx
 
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import {toast} from 'sonner';
 import ResidentOnboardingForm from './ResidentOnboardingForm';
 import ResidentCase from './ResidentCase';
@@ -38,6 +38,13 @@ export default function ResidentsWorkspace({
 	);
 	// Resident whose status badge was clicked to reveal its date.
 	const [openStatusId, setOpenStatusId] = useState<string | null>(null);
+	const caseRef = useRef<HTMLDivElement>(null);
+
+	// Opening a resident swaps the list for the case view; without this the
+	// scroll offset from the list is kept and the top of the case is hidden.
+	useEffect(() => {
+		if (selectedResident) caseRef.current?.scrollIntoView({block: 'start'});
+	}, [selectedResident]);
 
 	const fetchResidentsAndRole = async () => {
 		setLoadingData(true);
@@ -125,10 +132,12 @@ export default function ResidentsWorkspace({
 		}
 
 		return (
-			<ResidentCase
-				residentId={resident.id}
-				onBack={() => setSelectedResident(null)}
-			/>
+			<div ref={caseRef} className="scroll-mt-4">
+				<ResidentCase
+					residentId={resident.id}
+					onBack={() => setSelectedResident(null)}
+				/>
+			</div>
 		);
 	}
 

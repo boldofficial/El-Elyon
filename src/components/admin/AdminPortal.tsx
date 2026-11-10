@@ -1,6 +1,6 @@
 'use client';
 
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import {useUser} from '@clerk/nextjs';
 import {getDeviceId} from '@/lib/device';
 import {SignOutButton} from '../auth/SignOutButton';
@@ -35,6 +35,13 @@ export default function AdminPortal() {
 	const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
 	const [selectedResidentId, setSelectedResidentId] = useState<string | null>(null);
 	const deviceId = getDeviceId();
+	// <main> is the scroll container (not the window), so a view change
+	// would otherwise keep the old scroll offset and land mid-page.
+	const mainRef = useRef<HTMLElement>(null);
+
+	useEffect(() => {
+		mainRef.current?.scrollTo({top: 0});
+	}, [activeView, selectedEmployeeId, selectedResidentId]);
 
 	useEffect(() => {
 		async function fetchData() {
@@ -164,7 +171,7 @@ export default function AdminPortal() {
 				selected={activeView}
 				setSelected={setActiveView}
 			/>
-			<main className="flex-1 overflow-y-auto p-8">
+			<main ref={mainRef} className="flex-1 overflow-y-auto p-8">
 				<div className="flex justify-between items-center mb-8">
 					<h1 className="text-3xl font-bold text-gray-900">
 						{getNavLabel(activeView)}

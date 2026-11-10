@@ -2,7 +2,7 @@
 
 'use client';
 
-import React, {useState, useEffect, useCallback} from 'react';
+import React, {useState, useEffect, useCallback, useRef} from 'react';
 import {toast} from 'sonner';
 
 // Define interfaces for data structures
@@ -45,6 +45,17 @@ export default function EmployeeWorkspace({
 	const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
 	const [showAddForm, setShowAddForm] = useState(false);
 	const [showEditForm, setShowEditForm] = useState(false);
+	const editFormRef = useRef<HTMLDivElement>(null);
+
+	// The edit form renders above the employee list, so bring it into view
+	// (and focus the first field) whenever Edit is clicked.
+	useEffect(() => {
+		if (!showEditForm) return;
+		editFormRef.current?.scrollIntoView({behavior: 'smooth', block: 'start'});
+		editFormRef.current
+			?.querySelector<HTMLInputElement>('#edit-name')
+			?.focus({preventScroll: true});
+	}, [showEditForm, selectedEmployee]);
 	const [deletingId, setDeletingId] = useState<string | null>(null);
 
 	const [newEmployeeForm, setNewEmployeeForm] = useState({
@@ -308,7 +319,9 @@ export default function EmployeeWorkspace({
 
 			{/* Edit Employee Form */}
 			{showEditForm && selectedEmployee && (
-				<div className="bg-white rounded-lg shadow-sm border p-6 mb-4">
+				<div
+					ref={editFormRef}
+					className="bg-white rounded-lg shadow-sm border p-6 mb-4 scroll-mt-4">
 					<h3 className="text-lg font-semibold mb-4">Edit Employee</h3>
 					<form onSubmit={handleUpdateEmployee} className="space-y-4">
 						<div>
