@@ -25,6 +25,8 @@ import VacationRequests from '../shared/VacationRequests';
 import AdminPrivilegesWorkspace from './AdminPrivilegesWorkspace';
 import InspectorAccessWorkspace from './InspectorAccessWorkspace';
 import StaffDirectoryWorkspace from '../shared/StaffDirectoryWorkspace';
+import TasksWorkspace from '../shared/TasksWorkspace';
+import OverdueTasksBanner from '../shared/OverdueTasksBanner';
 
 
 export default function AdminPortal() {
@@ -136,6 +138,8 @@ export default function AdminPortal() {
 				return <WaterTemperatureWorkspace canManage />;
 			case 'care-logs':
 				return <CareLogsWorkspace />;
+			case 'tasks':
+				return <TasksWorkspace />;
 			case 'inspector-access':
 				return <InspectorAccessWorkspace />;
 			case 'staff-directory':
@@ -180,6 +184,9 @@ export default function AdminPortal() {
 				</div>
 
 				{deviceCheck && <AdminDeviceBadge deviceCheck={deviceCheck} />}
+				<OverdueTasksBanner
+					onOpenTasks={activeView !== 'tasks' ? () => handleNavigate('tasks') : undefined}
+				/>
 				<ComplianceAlerts />
 				{renderContent()}
 			</main>

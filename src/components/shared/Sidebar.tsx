@@ -25,6 +25,7 @@ const NAV_GROUPS: NavGroup[] = [
 		icon: '🩺',
 		items: [
 			{key: 'care-logs', label: 'Logs & Incidents', icon: '📋'},
+			{key: 'tasks', label: 'Tasks', icon: '📝'},
 			{key: 'documents', label: 'Life-Safety Reports', icon: '🧯'},
 			{key: 'water-temperature', label: 'Water Temperature', icon: '🌡️'},
 			{key: 'guardian-checklists', label: 'Guardian Checklists', icon: '🛡️'},

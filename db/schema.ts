@@ -1779,6 +1779,83 @@ export const bloodGlucoseLogRevisions = pgTable(
 	})
 );
 
+// Tasks Table
+//
+// One-off, non-routine work for a home: an appointment to book, a refill to
+// chase, a document to renew. Routine daily duties live in the care logs, not
+// here. A task belongs to the home (anyone on shift can do it) unless
+// `assignedStaffId` tags one named person. `visibility` decides who else can
+// see it; supervisors of the home and admins always can.
+//
+// `kind` is validated against TASK_KINDS in lib/tasks.ts and deliberately has
+// no CHECK constraint, so a new kind is a code change with no migration.
+// Rows are never deleted: done and cancelled tasks stay as the record.
+export const tasks = pgTable(
+	'tasks',
+	{
+		id: uuid('id').primaryKey().defaultRandom(),
+		kind: varchar('kind', {length: 40}).notNull(),
+		title: varchar('title', {length: 200}).notNull(),
+		description: text('description'),
+		location: varchar('location', {length: 255}).notNull(),
+		residentId: uuid('resident_id').references(() => residents.id, {
+			onDelete: 'cascade'
+		}),
+		// Clerk user id of the named person, when the task is tagged to one.
+		assignedStaffId: varchar('assigned_staff_id', {length: 255}),
+		assignedNameSnapshot: varchar('assigned_name_snapshot', {length: 255}),
+		visibility: varchar('visibility', {length: 20}).notNull().default('home'),
+		// Operational date the task is due; overdue from the day after.
+		dueDate: date('due_date', {mode: 'string'}).notNull(),
+		// Optional "HH:MM", display only (e.g. an appointment time).
+		dueTime: varchar('due_time', {length: 5}),
+		status: varchar('status', {length: 20}).notNull().default('open'),
+		createdBy: varchar('created_by', {length: 255}).notNull(),
+		createdByNameSnapshot: varchar('created_by_name_snapshot', {
+			length: 255
+		}).notNull(),
+		createdAt: timestamp('created_at').notNull().defaultNow(),
+		updatedAt: timestamp('updated_at'),
+		updatedBy: varchar('updated_by', {length: 255}),
+		completedAt: timestamp('completed_at'),
+		completedBy: varchar('completed_by', {length: 255}),
+		completedByNameSnapshot: varchar('completed_by_name_snapshot', {
+			length: 255
+		}),
+		completionNote: text('completion_note'),
+		cancelledAt: timestamp('cancelled_at'),
+		cancelledBy: varchar('cancelled_by', {length: 255}),
+		cancelledByNameSnapshot: varchar('cancelled_by_name_snapshot', {
+			length: 255
+		})
+	},
+	(table) => ({
+		locationStatusDueIdx: index('tasks_location_status_due_idx').on(
+			table.location,
+			table.status,
+			table.dueDate
+		),
+		assigneeStatusIdx: index('tasks_assignee_status_idx').on(
+			table.assignedStaffId,
+			table.status
+		),
+		residentIdx: index('tasks_resident_idx').on(table.residentId),
+		visibilityCheck: check(
+			'tasks_visibility_check',
+			sql`${table.visibility} in ('home', 'assignee', 'supervisors')`
+		),
+		statusCheck: check(
+			'tasks_status_check',
+			sql`${table.status} in ('open', 'done', 'cancelled')`
+		),
+		// "Only the named person" needs a named person.
+		assigneeVisibilityCheck: check(
+			'tasks_assignee_visibility_check',
+			sql`${table.visibility} <> 'assignee' or ${table.assignedStaffId} is not null`
+		)
+	})
+);
+
 export const residentsRelations = relations(residents, ({many}) => ({
 	logs: many(residentLogs),
 	ispFiles: many(ispFiles),
