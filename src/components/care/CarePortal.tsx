@@ -40,6 +40,8 @@ import AdminCareLogsWorkspace from '../admin/CareLogsWorkspace';
 import CarbLogsOverview from '../admin/CarbLogsOverview';
 import BloodGlucoseOverview from '../admin/BloodGlucoseOverview';
 import StaffDirectoryWorkspace from '../shared/StaffDirectoryWorkspace';
+import TasksWorkspace from '../shared/TasksWorkspace';
+import OverdueTasksBanner from '../shared/OverdueTasksBanner';
 
 type AdminPrivilege =
 	| 'manage_employees'
@@ -342,6 +344,12 @@ export default function CarePortal() {
 			description: 'Location-scoped list',
 		},
 		{
+			id: 'tasks',
+			label: 'Tasks',
+			icon: '📝',
+			description: 'One-off jobs for the home',
+		},
+		{
 			id: 'memos',
 			label: 'Memos',
 			icon: '✉️',
@@ -459,6 +467,9 @@ export default function CarePortal() {
 				return (
 					<CareResidentsWorkspace onResidentSelect={handleResidentSelect} />
 				);
+			// What each person sees and may do is decided by the server.
+			case 'tasks':
+				return <TasksWorkspace />;
 			case 'memos':
 				return <MemosWorkspace />;
 			case 'vacation':
@@ -676,6 +687,19 @@ export default function CarePortal() {
 						<div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-800 text-center font-medium">
 							You must clock in to access the rest of the Care Portal.
 						</div>
+					)}
+					{/* Overdue tasks: first thing on the page after login, in every
+					    view, and not dismissible. The Tasks screen itself needs a
+					    shift, so before clock-in the banner says so instead. */}
+					{sessionInfo && (
+						<OverdueTasksBanner
+							onOpenTasks={
+								isClockedIn && activeView !== 'tasks'
+									? () => void handleNavigation('tasks')
+									: undefined
+							}
+							lockedHint={isClockedIn ? undefined : 'Clock in to open your tasks.'}
+						/>
 					)}
 					{/* Non-dismissible and above the portal content, so the
 					    obligation is present in every view (R8/KTD5). */}

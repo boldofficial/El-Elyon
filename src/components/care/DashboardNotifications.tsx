@@ -16,6 +16,7 @@ import {
 	type GlucoseStatus,
 	type GlucoseUnit,
 } from '@/lib/blood-glucose';
+import type {TaskDto} from '@/db/queries/tasks';
 
 interface PendingIspAck {
 	ispFileId: string;
@@ -108,6 +109,9 @@ export default function DashboardNotifications() {
 	const [reminders, setReminders] = useState<ComplianceReminder[]>([]);
 	const [carbReminders, setCarbReminders] = useState<CarbLogReminder[]>([]);
 	const [glucose, setGlucose] = useState<GlucoseReminders>(EMPTY_GLUCOSE);
+	// Overdue tasks are not listed here: they have their own banner at the top
+	// of the portal (OverdueTasksBanner).
+	const [tasksDueToday, setTasksDueToday] = useState<TaskDto[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [acking, setAcking] = useState<string | null>(null);
 	const [viewingIsp, setViewingIsp] = useState<PendingIspAck | null>(null);
@@ -122,6 +126,7 @@ export default function DashboardNotifications() {
 			setReminders(data.complianceReminders || []);
 			setCarbReminders(data.carbLogReminders || []);
 			setGlucose({...EMPTY_GLUCOSE, ...(data.glucoseReminders || {})});
+			setTasksDueToday(data.tasksDueToday || []);
 		} catch (error) {
 			console.error('Error loading dashboard notifications:', error);
 		} finally {
@@ -172,6 +177,7 @@ export default function DashboardNotifications() {
 		unreadMemos.length === 0 &&
 		reminders.length === 0 &&
 		carbReminders.length === 0 &&
+		tasksDueToday.length === 0 &&
 		glucose.scheduled.length === 0 &&
 		glucose.rechecks.length === 0 &&
 		glucose.unreviewed.length === 0
@@ -185,6 +191,36 @@ export default function DashboardNotifications() {
 
 	return (
 		<div className="space-y-4">
+			{/* Tasks due today (overdue ones are on the banner at the top) */}
+			{tasksDueToday.length > 0 && (
+				<div className="bg-white rounded-lg shadow-sm border">
+					<div className="px-4 py-3 border-b bg-gray-50 rounded-t-lg flex items-center gap-2">
+						<span className="text-lg">📝</span>
+						<h3 className="font-semibold text-gray-900">Tasks due today</h3>
+						<span className="ml-auto text-xs font-medium bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full">
+							{tasksDueToday.length}
+						</span>
+					</div>
+					<ul className="divide-y">
+						{tasksDueToday.map((task) => (
+							<li key={task.id} className="px-4 py-3 border-l-4 border-amber-400">
+								<p className="text-sm font-medium text-gray-900">
+									{task.title}
+									<span className="text-gray-400 font-normal"> · {task.location}</span>
+								</p>
+								<p className="text-sm text-gray-600 mt-0.5">
+									{task.kindLabel}
+									{task.dueTime ? ` · at ${formatTime(`2000-01-01T${task.dueTime}:00`)}` : ''}
+									{task.residentName ? ` · ${task.residentName}` : ''}
+									{task.assignedName ? ` · for ${task.assignedName}` : ' · anyone on shift'}
+									<span className="text-gray-400"> · see Tasks in the menu</span>
+								</p>
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+
 			{/* Blood sugar: rechecks owed, scheduled checks due/missed, readings to review */}
 			{glucoseCount > 0 && (
 				<div className="bg-white rounded-lg shadow-sm border">

@@ -10,6 +10,7 @@ import IncidentReportsList from './IncidentReportsList';
 import ResidentDocuments from './ResidentDocuments';
 import CarbLogWorkspace from './CarbLogWorkspace';
 import GlucoseLogWorkspace from './GlucoseLogWorkspace';
+import TasksWorkspace from '../shared/TasksWorkspace';
 import {formatResidentDate} from '@/lib/resident-status';
 
 interface Resident {
@@ -56,6 +57,7 @@ type TabType =
 	| 'log'
 	| 'carb-log'
 	| 'blood-sugar'
+	| 'tasks'
 	| 'incidents'
 	| 'history'
 	| 'documents'
@@ -129,6 +131,7 @@ export default function CarePortalResidentDetails({
 		...(resident.glucoseTrackingEnabled
 			? [{id: 'blood-sugar' as TabType, label: 'Blood Sugar', icon: '🩸'}]
 			: []),
+		{id: 'tasks' as TabType, label: 'Tasks', icon: '📝'},
 		{id: 'incidents' as TabType, label: 'Incident Reports', icon: '⚠️'},
 		{id: 'history' as TabType, label: 'Log History', icon: '📜'},
 		{id: 'documents' as TabType, label: 'Documents', icon: '📁'},
@@ -289,6 +292,16 @@ export default function CarePortalResidentDetails({
 						<GlucoseLogWorkspace
 							residentId={resident.id}
 							residentName={resident.name}
+						/>
+					)}
+
+					{activeTab === 'tasks' && (
+						<TasksWorkspace
+							resident={{
+								id: resident.id,
+								name: resident.name,
+								location: resident.location,
+							}}
 						/>
 					)}
 

@@ -10,6 +10,9 @@
 //   - glucoseReminders: blood sugar checks due or missed today, rechecks still
 //                       owed, and (supervisors/admins) out-of-range readings
 //                       not yet reviewed
+//   - overdueTasks:   open tasks past their due date that this user owns or
+//                     oversees (drives the non-dismissible home-page banner)
+//   - tasksDueToday:  open tasks due today that this user can act on
 
 import {auth} from '@clerk/nextjs/server';
 import {NextResponse} from 'next/server';
@@ -18,6 +21,23 @@ import {getMemos} from '@/db/queries/memos';
 import {getComplianceRemindersForUser} from '@/db/queries/compliance';
 import {getCarbLogRemindersForUser} from '@/db/queries/carb-logs';
 import {getGlucoseRemindersForUser} from '@/db/queries/blood-glucose-logs';
+import {getTaskAlertsForUser, type TaskAlerts} from '@/db/queries/tasks';
+
+// Tasks are the newest part of the feed. If reading them fails (most likely
+// the `tasks` table has not been migrated in this environment yet), log it
+// loudly and still serve ISP acknowledgments, memos and care reminders rather
+// than taking the whole dashboard down.
+async function taskAlertsOrEmpty(userId: string): Promise<TaskAlerts> {
+	try {
+		return await getTaskAlertsForUser(userId);
+	} catch (error) {
+		console.error(
+			'Error loading task alerts for dashboard:',
+			error instanceof Error ? error.message : error
+		);
+		return {overdueTasks: [], tasksDueToday: []};
+	}
+}
 
 export async function GET() {
 	try {
@@ -32,12 +52,14 @@ export async function GET() {
 			complianceReminders,
 			carbLogReminders,
 			glucoseReminders,
+			taskAlerts,
 		] = await Promise.all([
 			getPendingISPFileAcknowledgments(userId),
 			getMemos({clerkUserId: userId, unreadOnly: true, limit: 20}),
 			getComplianceRemindersForUser(userId),
 			getCarbLogRemindersForUser(userId),
 			getGlucoseRemindersForUser(userId),
+			taskAlertsOrEmpty(userId),
 		]);
 
 		const unreadMemos = memoRows.map((r) => r.memo);
@@ -48,6 +70,8 @@ export async function GET() {
 			complianceReminders,
 			carbLogReminders,
 			glucoseReminders,
+			overdueTasks: taskAlerts.overdueTasks,
+			tasksDueToday: taskAlerts.tasksDueToday,
 		});
 	} catch (error: any) {
 		console.error('Error building dashboard notifications:', error);
