@@ -7,12 +7,16 @@ import {SHIFT_SLOTS, type ShiftSlot} from '@/lib/water-temperature';
 import type {WaterTemperatureStatus} from '@/db/queries/water-temperature';
 import {resolveClockOutDecision} from './waterTemperatureEntryModel';
 import DashboardNotifications from './DashboardNotifications';
+import TaskCalendar from './TaskCalendar';
 
 interface CareShiftWorkspaceProps {
 	onShiftChange?: () => void;
 	/** Current water-temperature obligation status, supplied by CarePortal.
 	 * Used only to warn before clock-out (R10) -- it never blocks it. */
 	waterTemperatureStatus?: WaterTemperatureStatus;
+	/** Opens the Tasks screen from the calendar. Omitted until clocked in,
+	 * because the rest of the portal is locked before then. */
+	onOpenTasks?: () => void;
 }
 
 const SHIFT_SLOT_LABELS: Record<ShiftSlot, string> = {
@@ -67,6 +71,7 @@ export function canSubmitClassification(args: {
 export default function CareShiftWorkspace({
 	onShiftChange,
 	waterTemperatureStatus = 'no_shift',
+	onOpenTasks,
 }: CareShiftWorkspaceProps) {
 	const [sessionInfo, setSessionInfo] = useState<any>(null);
 	const [currentShift, setCurrentShift] = useState<any>(null);
@@ -359,43 +364,44 @@ export default function CareShiftWorkspace({
 	}
 
 	return (
-		<div className="max-w-2xl mx-auto space-y-6">
-			<div className="text-center">
-				<h2 className="text-2xl font-bold text-gray-900 mb-2">
-					Shift Management
-				</h2>
-				<p className="text-gray-600">Clock in and out of your shifts</p>
-			</div>
+		<div className="max-w-6xl mx-auto">
+			<h2 className="text-2xl font-bold text-gray-900 mb-4">Your shift</h2>
 
+			{/* Left: the clock card, then everything that needs doing in order
+			    of urgency. Right: the task calendar. On a narrow screen the
+			    calendar drops below, so the page reads as one list. */}
+			<div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,24rem)] lg:items-start">
+			<div className="space-y-6 min-w-0">
 			{/* Current Status */}
-			<div className="bg-white rounded-lg shadow-sm border p-6">
-				<div className="text-center">
+			<div className="bg-white rounded-lg shadow-sm border p-5">
+				<div className={currentShift ? '' : 'text-center'}>
 					{currentShift ? (
 						<div className="space-y-4">
-							<div className="inline-flex items-center px-4 py-2 rounded-full bg-green-100 text-green-800">
-								<div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-								Currently Clocked In
-							</div>
-
-							<div className="space-y-2">
-								<p className="text-sm text-gray-600">
-									Started: {new Date(currentShift.clockInTime).toLocaleString()}
-								</p>
-								<p className="text-sm text-gray-600">
-									Location: {currentShift.location}
-								</p>
-								{currentShift.shiftSlot ? (
-									<p className="text-sm text-gray-600">
-										Shift: {SHIFT_SLOT_LABELS[currentShift.shiftSlot as ShiftSlot]}
-									</p>
-								) : null}
-								<p className="text-lg font-semibold text-gray-900">
-									Duration: {formatDuration(currentShift.clockInTime)}
+							<div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+								<div className="inline-flex items-center px-3 py-1.5 rounded-full bg-green-100 text-green-800 text-sm font-medium">
+									<div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+									Clocked in
+								</div>
+								<p className="text-xl font-semibold text-gray-900 tabular-nums">
+									{formatDuration(currentShift.clockInTime)}
 								</p>
 							</div>
+							<p className="text-sm text-gray-600">
+								{currentShift.location}
+								{currentShift.shiftSlot
+									? ` · ${SHIFT_SLOT_LABELS[currentShift.shiftSlot as ShiftSlot]}`
+									: ''}
+								{' · since '}
+								{new Date(currentShift.clockInTime).toLocaleString(undefined, {
+									month: 'short',
+									day: 'numeric',
+									hour: 'numeric',
+									minute: '2-digit',
+								})}
+							</p>
 
 							{currentShift.needsClassification ? (
-								<div className="max-w-xs mx-auto text-left bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+								<div className="max-w-sm text-left bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
 									<p className="text-sm text-amber-800">
 										This shift was started before shift tracking was required.
 										Select which shift you are working to continue.
@@ -446,7 +452,7 @@ export default function CareShiftWorkspace({
 									tabIndex={-1}
 									role="alert"
 									aria-live="assertive"
-									className="max-w-xs mx-auto text-left bg-amber-50 border-2 border-amber-400 rounded-lg p-4 space-y-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
+									className="max-w-sm text-left bg-amber-50 border-2 border-amber-400 rounded-lg p-4 space-y-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
 									<p className="text-sm font-semibold text-amber-900">
 										<span aria-hidden="true">⚠ </span>
 										Water temperature check outstanding
@@ -463,7 +469,7 @@ export default function CareShiftWorkspace({
 							<button
 								onClick={handleClockOut}
 								disabled={isProcessing}
-								className="w-full max-w-xs mx-auto min-h-[44px] bg-red-600 text-white py-3 px-6 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500">
+								className="w-full sm:w-auto min-h-[44px] bg-red-600 text-white py-2.5 px-6 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500">
 								{isProcessing
 									? 'Clocking Out...'
 									: clockOutWarning
@@ -555,13 +561,18 @@ export default function CareShiftWorkspace({
 				</div>
 			</div>
 
-			{/* Notifications: pending ISP acknowledgments & unread memos */}
+			{/* What needs doing, sorted by urgency */}
 			<DashboardNotifications />
 
-			{/* Shift Guidelines */}
-			<div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
-				<h3 className="font-semibold text-blue-900 mb-3">Shift Guidelines</h3>
-				<ul className="space-y-2 text-sm text-blue-800">
+			{/* Shift guidelines never change, so they stay folded away. */}
+			<details className="group bg-white rounded-lg border">
+				<summary className="px-4 py-3 flex items-center cursor-pointer list-none text-sm font-medium text-gray-700 [&::-webkit-details-marker]:hidden">
+					Shift guidelines
+					<span aria-hidden="true" className="ml-auto transition-transform group-open:rotate-180">
+						▾
+					</span>
+				</summary>
+				<ul className="space-y-2 text-sm text-gray-700 px-4 pb-4">
 					<li className="flex items-start">
 						<span className="mr-2">•</span>
 						<span>Clock in at the start of your scheduled shift</span>
@@ -583,6 +594,10 @@ export default function CareShiftWorkspace({
 						</span>
 					</li>
 				</ul>
+			</details>
+			</div>
+
+			<TaskCalendar onOpenTasks={onOpenTasks} />
 			</div>
 		</div>
 	);
