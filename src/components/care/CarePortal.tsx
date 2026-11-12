@@ -462,7 +462,13 @@ export default function CarePortal() {
 
 		switch (activeView) {
 			case 'shift':
-				return <CareShiftWorkspace onShiftChange={refetchShift} waterTemperatureStatus={waterStatus} />;
+				return (
+					<CareShiftWorkspace
+						onShiftChange={refetchShift}
+						waterTemperatureStatus={waterStatus}
+						onOpenTasks={() => void handleNavigation('tasks')}
+					/>
+				);
 			case 'residents':
 				return (
 					<CareResidentsWorkspace onResidentSelect={handleResidentSelect} />
@@ -549,6 +555,7 @@ export default function CarePortal() {
 					<CareShiftWorkspace
 						onShiftChange={refetchShift}
 						waterTemperatureStatus={waterStatus}
+						onOpenTasks={() => void handleNavigation('tasks')}
 					/>
 				);
 		}
