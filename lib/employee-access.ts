@@ -68,3 +68,21 @@ export function checkEmployeeUpdate(
 
 	return allowed;
 }
+
+// Deleting cascades through the person's role, shifts, care logs and audit
+// trail, so it gets the same admin-only boundary as editing, plus no deleting
+// yourself: a delegated manager must not be able to erase their own record.
+export function checkEmployeeDelete(
+	actor: EmployeeActor,
+	current: {clerkUserId: string | null; role: string | null}
+): EmployeeAccessDecision {
+	if (actor.isAdmin) return allowed;
+
+	if (isAdminRole(current.role)) {
+		return {ok: false, reason: 'Only an admin can delete an admin'};
+	}
+	if (current.clerkUserId !== null && current.clerkUserId === actor.clerkUserId) {
+		return {ok: false, reason: 'You cannot delete your own record'};
+	}
+	return allowed;
+}

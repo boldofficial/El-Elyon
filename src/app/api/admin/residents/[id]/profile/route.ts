@@ -3,7 +3,12 @@
 // ==========================================
 import {NextResponse} from 'next/server';
 import {auth} from '@clerk/nextjs/server';
-import {requireAdminOrSupervisorAccess, logAudit} from '@/lib/db-helpers';
+import {
+	AccessDeniedError,
+	logAudit,
+	requireAdminOrPrivilege,
+	residentInScope,
+} from '@/lib/db-helpers';
 import {
 	updateResident,
 	retireResidentNotices,
@@ -23,6 +28,23 @@ import {
 	resolveGlucoseThresholds,
 	validateGlucoseThresholds,
 } from '@/lib/blood-glucose';
+
+/**
+ * Admins, or holders of the delegated "Manage Residents" privilege at the
+ * resident's home. This replaced a bare supervisor check that let any
+ * supervisor read or rewrite any resident in any house.
+ */
+async function requireResidentManager(clerkUserId: string, residentId: string) {
+	const userRole = await requireAdminOrPrivilege(clerkUserId, 'manage_residents');
+	const allowed = await residentInScope({
+		clerkUserId,
+		userRole: {role: userRole?.role ?? null, locations: userRole?.locations},
+		residentId,
+		auditDetail: 'resident_profile_out_of_scope',
+	});
+	if (!allowed) throw new AccessDeniedError('Resident is outside your homes');
+	return userRole;
+}
 
 const GLUCOSE_LIMIT_FIELDS = ['glucoseCriticalLowMgDl', 'glucoseCriticalHighMgDl'] as const;
 
@@ -80,9 +102,9 @@ export async function GET(request: Request, {params}: {params: Promise<{id: stri
 	}
 
 	try {
-		await requireAdminOrSupervisorAccess(userId);
-
 		const {id: residentId} = await params;
+		await requireResidentManager(userId, residentId);
+
 		const resident = await db.query.residents.findFirst({
 			where: eq(residents.id, residentId),
 		});
@@ -93,6 +115,9 @@ export async function GET(request: Request, {params}: {params: Promise<{id: stri
 
 		return NextResponse.json(resident);
 	} catch (error: any) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: error.message}, {status: 403});
+		}
 		console.error('Error fetching resident profile:', error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}
@@ -109,10 +134,23 @@ export async function PATCH(
 	}
 
 	try {
-		await requireAdminOrSupervisorAccess(userId);
-
 		const {id: residentId} = await params;
+		const userRole = await requireResidentManager(userId, residentId);
+
 		const body = await request.json();
+		// A delegated manager may not move a resident into a home they do not
+		// cover -- that would hand the record to a house outside their scope.
+		if (
+			userRole?.role !== 'admin' &&
+			typeof body.location === 'string' &&
+			body.location &&
+			!(userRole?.locations || []).includes(body.location)
+		) {
+			return NextResponse.json(
+				{error: 'You can only assign residents to your own homes'},
+				{status: 403}
+			);
+		}
 		const glucose = glucoseSettingsFromBody(body);
 		if ('error' in glucose) {
 			return NextResponse.json({error: glucose.error}, {status: 400});
@@ -253,6 +291,9 @@ export async function PATCH(
 
 		return NextResponse.json(updated);
 	} catch (error: any) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: error.message}, {status: 403});
+		}
 		console.error('Error updating resident profile:', error);
 		return NextResponse.json({error: error.message}, {status: 500});
 	}

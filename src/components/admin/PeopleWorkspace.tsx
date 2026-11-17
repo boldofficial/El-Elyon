@@ -8,9 +8,15 @@ import GuardiansWorkspace from '../guardian/GuardiansWorkspace';
 interface PeopleWorkspaceProps {
 	onNavigate?: (view: string, entityId: string) => void;
 	allowedTabs?: Array<'residents' | 'guardians' | 'employees'>;
+	/** When false, the employee list hides its HR profile button. */
+	allowEmployeeProfiles?: boolean;
 }
 
-export default function PeopleWorkspace({onNavigate, allowedTabs}: PeopleWorkspaceProps) {
+export default function PeopleWorkspace({
+	onNavigate,
+	allowedTabs,
+	allowEmployeeProfiles = true,
+}: PeopleWorkspaceProps) {
 	const [activeTab, setActiveTab] = useState('residents');
 
 	const tabs = [
@@ -30,7 +36,11 @@ export default function PeopleWorkspace({onNavigate, allowedTabs}: PeopleWorkspa
 			case 'guardians':
 				return <GuardiansWorkspace />;
 			case 'employees':
-				return <EmployeeWorkspace onNavigate={onNavigate} />;
+				return (
+					<EmployeeWorkspace
+						onNavigate={allowEmployeeProfiles ? onNavigate : undefined}
+					/>
+				);
 			default:
 				return <ResidentsWorkspace onNavigate={onNavigate} />;
 		}

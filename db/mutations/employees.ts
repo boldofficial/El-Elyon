@@ -31,7 +31,11 @@ import {
 import {auth} from '@clerk/nextjs/server';
 import {getUserRoleDoc, requireAdminAccess, requireAdminOrPrivilege, logAudit, AccessDeniedError} from '@/lib/db-helpers'; // Import from db-helpers
 import {checkForAdmins} from '../queries/roles';
-import {checkEmployeeCreate, checkEmployeeUpdate} from '@/lib/employee-access';
+import {
+	checkEmployeeCreate,
+	checkEmployeeDelete,
+	checkEmployeeUpdate,
+} from '@/lib/employee-access';
 
 /**
  * Set only by POST /api/admin/force-create after it has checked
@@ -551,12 +555,15 @@ export async function generateInviteLink(
 
 // Mutation: Delete employee with cascade (admin only)
 export async function deleteEmployee(employeeId: string, clerkUserId: string) {
-	await requireAdminOrPrivilege(clerkUserId, 'manage_employees');
+	const actor = await requireEmployeeManager(clerkUserId);
 
 	const employee = await db.query.employees.findFirst({
 		where: eq(employees.id, employeeId),
 	});
 	if (!employee) throw new Error('Employee not found');
+
+	const decision = checkEmployeeDelete(actor, employee);
+	if (!decision.ok) throw new AccessDeniedError(decision.reason);
 
 	let linkedClerkUserId: string | null = null;
 	if (employee.clerkUserId) {

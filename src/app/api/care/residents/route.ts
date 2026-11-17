@@ -50,6 +50,22 @@ export async function GET(request: Request) {
 			return NextResponse.json(residentList);
 		}
 
+		// Holders of the delegated "Manage Residents" privilege open a resident's
+		// case from People Management, not from a shift. Tying that lookup to an
+		// open shift at the resident's home made every profile they clicked come
+		// back "Resident not found" whenever they were off the clock or working
+		// another house. Their assigned homes are still the boundary.
+		if (residentId && userData.adminPrivileges.includes('manage_residents')) {
+			if (!userData.locations?.length) return NextResponse.json(null);
+			const resident = await db.query.residents.findFirst({
+				where: and(
+					eq(residents.id, residentId),
+					inArray(residents.location, userData.locations)
+				),
+			});
+			return NextResponse.json(resident || null);
+		}
+
 		const currentShift = await db.query.shifts.findFirst({
 			where: and(eq(shifts.clerkUserId, userId), isNull(shifts.clockOutTime)),
 			orderBy: [desc(shifts.clockInTime)],

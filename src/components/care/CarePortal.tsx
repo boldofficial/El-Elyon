@@ -30,6 +30,7 @@ import WaterTemperatureWorkspace from '../supervisor/WaterTemperatureWorkspace';
 import MemosWorkspace from '../shared/MemosWorkspace';
 import VacationRequests from '../shared/VacationRequests';
 import PeopleWorkspace from '../admin/PeopleWorkspace';
+import ResidentProfileManagement from '../admin/ResidentProfileManagement';
 import LocationsWorkspace from '../admin/LocationsWorkspace';
 import DeviceManagementWorkspace from '../admin/DeviceManagementWorkspace';
 import ComplianceWorkspace from '../compliance/ComplianceWorkspace';
@@ -129,6 +130,8 @@ export default function CarePortal() {
 	const [sessionInfo, setSessionInfo] = useState<any>(null);
 	const [currentShift, setCurrentShift] = useState<any>(null);
 	const [selectedResident, setSelectedResident] = useState<any>(null);
+	// Resident whose full (editable) profile is open inside People Management.
+	const [managedResidentId, setManagedResidentId] = useState<string | null>(null);
 	const [unreadMemoCount, setUnreadMemoCount] = useState(0);
 	const adminPrivileges = (sessionInfo?.adminPrivileges || []) as AdminPrivilege[];
 	const delegatedManagementViews = Array.from(
@@ -419,6 +422,7 @@ export default function CarePortal() {
 	const handleNavigation = async (viewId: string) => {
 		setActiveView(viewId);
 		setSelectedResident(null);
+		setManagedResidentId(null);
 		await fetch('/api/access/log', {
 			method: 'POST',
 			headers: {'Content-Type': 'application/json'},
@@ -497,8 +501,30 @@ export default function CarePortal() {
 			case 'profile':
 				return <CareProfileWorkspace />;
 			case 'manage-people':
+				if (managedResidentId) {
+					return (
+						<div>
+							<button
+								onClick={() => setManagedResidentId(null)}
+								className="mb-4 text-blue-600 hover:underline">
+								← Back to People
+							</button>
+							<ResidentProfileManagement residentId={managedResidentId} />
+						</div>
+					);
+				}
 				return (
 					<PeopleWorkspace
+						// Only resident profiles open from here: the employee HR page
+						// is admin-only on the server, so its button stays hidden.
+						onNavigate={
+							adminPrivileges.includes('manage_residents')
+								? (view, entityId) => {
+										if (view === 'resident-profile') setManagedResidentId(entityId);
+									}
+								: undefined
+						}
+						allowEmployeeProfiles={false}
 						allowedTabs={[
 							...(adminPrivileges.includes('manage_residents')
 								? (['residents', 'guardians'] as const)

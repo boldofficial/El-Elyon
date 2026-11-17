@@ -41,6 +41,10 @@ export default function EmployeeWorkspace({
 	const [availableLocations, setAvailableLocations] = useState<string[]>([]);
 	const [devices, setDevices] = useState<Device[]>([]);
 	const [loading, setLoading] = useState(true);
+	// Decided by the server, not by role: the employee list answers for admins
+	// and for anyone holding the delegated "Manage Employees" privilege.
+	const [canManage, setCanManage] = useState(false);
+	const isAdmin = userRole?.role === 'admin';
 
 	const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
 	const [showAddForm, setShowAddForm] = useState(false);
@@ -86,12 +90,16 @@ export default function EmployeeWorkspace({
 				]);
 
 			const userRoleData: UserRole = await userRoleRes.json();
-			const employeesData: Employee[] = await employeesRes.json();
-			const availableLocationsData: string[] =
-				await availableLocationsRes.json();
-			const devicesData: Device[] = await devicesRes.json();
-
 			setUserRole(userRoleData);
+			setCanManage(employeesRes.ok);
+			if (!employeesRes.ok) return;
+
+			const employeesData: Employee[] = await employeesRes.json();
+			const availableLocationsData: string[] = availableLocationsRes.ok
+				? await availableLocationsRes.json()
+				: [];
+			const devicesData: Device[] = devicesRes.ok ? await devicesRes.json() : [];
+
 			setEmployees(employeesData);
 			setAvailableLocations(availableLocationsData);
 			setDevices(devicesData);
@@ -284,12 +292,12 @@ export default function EmployeeWorkspace({
 		);
 	}
 
-	if (userRole?.role !== 'admin') {
+	if (!canManage) {
 		return (
 			<div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-800 text-center">
 				<p className="font-medium">Access Denied</p>
 				<p className="text-sm">
-					You must be an administrator to manage employees.
+					You need admin access or the Manage Employees privilege.
 				</p>
 			</div>
 		);
@@ -383,7 +391,7 @@ export default function EmployeeWorkspace({
 								className="w-full border border-gray-300 rounded-md px-3 py-2">
 								<option value="staff">Staff</option>
 								<option value="supervisor">Supervisor</option>
-								<option value="admin">Admin</option>
+								{isAdmin && <option value="admin">Admin</option>}
 							</select>
 						</div>
 						<div>
@@ -525,7 +533,7 @@ export default function EmployeeWorkspace({
 								className="w-full border border-gray-300 rounded-md px-3 py-2">
 								<option value="staff">Staff</option>
 								<option value="supervisor">Supervisor</option>
-								<option value="admin">Admin</option>
+								{isAdmin && <option value="admin">Admin</option>}
 							</select>
 						</div>
 						<div>
@@ -647,6 +655,8 @@ export default function EmployeeWorkspace({
 												📄 HR Documents
 											</button>
 										)}
+										{(isAdmin || emp.role !== 'admin') && (
+										<>
 										<button
 											onClick={() => handleEditEmployee(emp)}
 											className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800 border border-blue-300 rounded hover:bg-blue-50 whitespace-nowrap">
@@ -658,6 +668,8 @@ export default function EmployeeWorkspace({
 											className="px-3 py-1 text-sm text-red-600 hover:text-red-800 border border-red-300 rounded hover:bg-red-50 disabled:opacity-50 whitespace-nowrap">
 											{deletingId === emp.id ? 'Deleting...' : 'Delete'}
 										</button>
+										</>
+										)}
 									</div>
 								</div>
 							</div>
