@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {checkEmployeeCreate, checkEmployeeUpdate, type EmployeeActor} from './employee-access';
+import {
+	checkEmployeeCreate,
+	checkEmployeeDelete,
+	checkEmployeeUpdate,
+	type EmployeeActor,
+} from './employee-access';
 
 const admin: EmployeeActor = {clerkUserId: 'admin-1', isAdmin: true};
 // A supervisor delegated "Manage Employees" (manage_employees).
@@ -86,4 +91,16 @@ test('location order and duplicates do not count as a change', () => {
 test('a record with no linked Clerk user is never treated as the caller', () => {
 	const unlinked = {clerkUserId: null, role: 'staff', locations: []};
 	assert.ok(checkEmployeeUpdate(manager, unlinked, {role: 'supervisor', locations: ['Oak']}).ok);
+});
+
+test('admins may delete anyone', () => {
+	assert.ok(checkEmployeeDelete(admin, adminRecord).ok);
+	assert.ok(checkEmployeeDelete(admin, staffRecord).ok);
+});
+
+test('a manage_employees supervisor may delete staff but not admins or themselves', () => {
+	assert.ok(checkEmployeeDelete(manager, staffRecord).ok);
+	assert.equal(checkEmployeeDelete(manager, adminRecord).ok, false);
+	assert.equal(checkEmployeeDelete(manager, managerOwnRecord).ok, false);
+	assert.ok(checkEmployeeDelete(manager, {clerkUserId: null, role: 'staff'}).ok);
 });

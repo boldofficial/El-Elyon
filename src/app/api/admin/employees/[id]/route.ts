@@ -66,6 +66,9 @@ export async function DELETE(
 		await deleteEmployee(employeeId, userId);
 		return NextResponse.json({success: true});
 	} catch (error: any) {
+		if (error instanceof AccessDeniedError) {
+			return NextResponse.json({error: error.message}, {status: 403});
+		}
 		console.error('Error deleting employee:', error);
 		await logAudit({
 			clerkUserId: (await auth()).userId,
