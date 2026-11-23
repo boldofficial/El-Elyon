@@ -3,11 +3,11 @@
 // src/components/care/GlucoseLogWorkspace.tsx
 //
 // Blood sugar log for one resident: their limits and physician instructions,
-// rechecks still owed, today's scheduled checks, the entry form, the last 14
-// days of history (with edit, edit history and supervisor review) and a
-// printable monthly log.
+// rechecks still owed, today's scheduled checks, the entry form, history for
+// the last 14 days or any past month (with edit, edit history and supervisor
+// review) and a printable log for the month chosen.
 
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {toast} from 'sonner';
 import type {SlotState} from '@/lib/custom-log-schedule';
 import {
@@ -39,7 +39,15 @@ import {
 	formatDay,
 	toLocalInputValue,
 } from './glucosePresentation';
+import {
+	RECENT_PERIOD,
+	monthLabel,
+	monthRange,
+	printMonthFor,
+	type LogPeriod,
+} from '@/lib/log-period';
 import {printGlucoseLogSheet} from './printGlucoseLogSheet';
+import LogPeriodBar from './LogPeriodBar';
 
 export interface GlucoseLogEntry {
 	id: string;
@@ -388,6 +396,53 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 		load();
 	}, [load]);
 
+	// History period. The recent window reuses `view.entries`; a chosen month is
+	// loaded separately so today's slots and rechecks keep the default load.
+	const [period, setPeriod] = useState<LogPeriod>(RECENT_PERIOD);
+	const [monthView, setMonthView] = useState<ResidentView | null>(null);
+	const [monthLoading, setMonthLoading] = useState(false);
+	const monthRequest = useRef(0);
+
+	const fetchMonth = useCallback(
+		async (key: string): Promise<ResidentView> => {
+			const {from, to} = monthRange(key);
+			const res = await fetch(
+				`/api/care/blood-glucose-logs?residentId=${residentId}&from=${from}&to=${to}`
+			);
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) throw new Error(data.error || `Failed to load ${monthLabel(key)}`);
+			return data;
+		},
+		[residentId]
+	);
+
+	const loadMonth = useCallback(async () => {
+		if (period === RECENT_PERIOD) {
+			setMonthView(null);
+			return;
+		}
+		// Switching months quickly must not let a slow earlier reply win.
+		const request = ++monthRequest.current;
+		setMonthLoading(true);
+		try {
+			const result = await fetchMonth(period);
+			if (request === monthRequest.current) setMonthView(result);
+		} catch (error) {
+			if (request !== monthRequest.current) return;
+			// Fall back to the recent window rather than show it under a month label.
+			setPeriod(RECENT_PERIOD);
+			toast.error(error instanceof Error ? error.message : 'Failed to load history');
+		} finally {
+			if (request === monthRequest.current) setMonthLoading(false);
+		}
+	}, [period, fetchMonth]);
+
+	useEffect(() => {
+		loadMonth();
+	}, [loadMonth]);
+
+	const reload = useCallback(() => Promise.all([load(), loadMonth()]), [load, loadMonth]);
+
 	const loggedToday = useMemo(
 		() =>
 			new Set(
@@ -442,7 +497,7 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 	const handleCreate = async (values: GlucoseFormValues) => {
 		if (await post(values)) {
 			resetForm();
-			await load();
+			await reload();
 		}
 	};
 
@@ -450,7 +505,7 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 		if (!rechecking) return;
 		if (await post(values, rechecking.id)) {
 			setRechecking(null);
-			await load();
+			await reload();
 		}
 	};
 
@@ -467,7 +522,7 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 			if (!res.ok) throw new Error(data.error || 'Failed to update');
 			toast.success('Entry updated');
 			setEditing(null);
-			await load();
+			await reload();
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to update');
 		} finally {
@@ -479,21 +534,14 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 		if (!view) return;
 		setPrinting(true);
 		try {
-			const [y, m] = view.today.operationalDate.split('-').map(Number);
-			const from = `${y}-${String(m).padStart(2, '0')}-01`;
-			const lastDay = new Date(y, m, 0).getDate();
-			const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-			const res = await fetch(
-				`/api/care/blood-glucose-logs?residentId=${residentId}&from=${from}&to=${to}`
-			);
-			if (!res.ok) throw new Error('Failed to load month');
-			const data: ResidentView = await res.json();
+			// Sheet covers the month shown in the history picker (this month
+			// while the picker is on the last 14 days). Always re-fetched so the
+			// print reflects any edit or review made since the month was opened.
+			const key = printMonthFor(period, view.today.operationalDate);
+			const data = await fetchMonth(key);
 			await printGlucoseLogSheet({
 				residentName,
-				monthLabel: new Date(y, m - 1, 1).toLocaleDateString(undefined, {
-					month: 'long',
-					year: 'numeric',
-				}),
+				monthLabel: monthLabel(key),
 				thresholds: data.settings.thresholds,
 				entries: data.entries,
 			});
@@ -526,6 +574,7 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 
 	const {settings, today, pendingRechecks, entries, viewer} = view;
 	const t = settings.thresholds;
+	const historyEntries = monthView?.entries ?? entries;
 
 	return (
 		<div className="space-y-6">
@@ -544,13 +593,6 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 							</p>
 						)}
 					</div>
-					<button
-						type="button"
-						onClick={handlePrint}
-						disabled={printing}
-						className="px-3 py-1.5 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50">
-						{printing ? 'Preparing…' : '🖨 Print month'}
-					</button>
 				</div>
 				{settings.careInstructions && (
 					<div className="mt-3 rounded border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900 whitespace-pre-line">
@@ -656,9 +698,22 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 
 			{/* History */}
 			<section>
-				<h4 className="font-semibold text-gray-900 mb-2">Last 14 days</h4>
-				{entries.length === 0 ? (
-					<p className="text-sm text-gray-500">No checks logged yet.</p>
+				<LogPeriodBar
+					idPrefix="glucose-history"
+					today={today.operationalDate}
+					period={period}
+					onPeriodChange={setPeriod}
+					printing={printing}
+					onPrint={handlePrint}
+				/>
+				{monthLoading ? (
+					<p className="text-sm text-gray-500">Loading…</p>
+				) : historyEntries.length === 0 ? (
+					<p className="text-sm text-gray-500">
+						{period === RECENT_PERIOD
+							? 'No checks in the last 14 days.'
+							: `No checks in ${monthLabel(period)}.`}
+					</p>
 				) : (
 					<div className="overflow-x-auto rounded-lg border">
 						<table className="min-w-full text-sm">
@@ -674,7 +729,7 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 								</tr>
 							</thead>
 							<tbody className="divide-y">
-								{entries.map((entry) => (
+								{historyEntries.map((entry) => (
 									<tr
 										key={entry.id}
 										className={isCritical(entry.status) ? 'bg-red-50/40' : ''}>
@@ -806,7 +861,7 @@ export default function GlucoseLogWorkspace({residentId, residentName}: Props) {
 					onClose={() => setReviewing(null)}
 					onReviewed={() => {
 						setReviewing(null);
-						load();
+						reload();
 					}}
 				/>
 			)}

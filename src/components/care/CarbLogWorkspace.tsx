@@ -6,7 +6,7 @@
 // their server-derived status (logged / open / missed / upcoming), an entry
 // form, the recent history, and a printable sheet for a date range.
 
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {toast} from 'sonner';
 import type {SlotState} from '@/lib/custom-log-schedule';
 import {
@@ -16,7 +16,15 @@ import {
 	MEAL_SLOT_LABELS,
 	type MealSlot,
 } from '@/lib/carb-log';
+import {
+	RECENT_PERIOD,
+	monthLabel,
+	monthRange,
+	printMonthFor,
+	type LogPeriod,
+} from '@/lib/log-period';
 import {printCarbLogSheet} from './printCarbLogSheet';
+import LogPeriodBar from './LogPeriodBar';
 
 export interface CarbLogEntry {
 	id: string;
@@ -96,6 +104,50 @@ export default function CarbLogWorkspace({residentId, residentName}: Props) {
 	const [saving, setSaving] = useState(false);
 	const [editing, setEditing] = useState<CarbLogEntry | null>(null);
 	const [printing, setPrinting] = useState(false);
+	// History period. The recent window reuses `entries`; a chosen month is
+	// loaded separately so today's slot cards keep working off the default load.
+	const [period, setPeriod] = useState<LogPeriod>(RECENT_PERIOD);
+	const [monthEntries, setMonthEntries] = useState<CarbLogEntry[] | null>(null);
+	const [monthLoading, setMonthLoading] = useState(false);
+	const monthRequest = useRef(0);
+
+	const fetchMonth = useCallback(
+		async (key: string): Promise<CarbLogEntry[]> => {
+			const {from, to} = monthRange(key);
+			const res = await fetch(
+				`/api/care/carb-logs?residentId=${residentId}&from=${from}&to=${to}`
+			);
+			const data = await res.json().catch(() => ({}));
+			if (!res.ok) throw new Error(data.error || `Failed to load ${monthLabel(key)}`);
+			return data.entries || [];
+		},
+		[residentId]
+	);
+
+	const loadMonth = useCallback(async () => {
+		if (period === RECENT_PERIOD) {
+			setMonthEntries(null);
+			return;
+		}
+		// Switching months quickly must not let a slow earlier reply win.
+		const request = ++monthRequest.current;
+		setMonthLoading(true);
+		try {
+			const rows = await fetchMonth(period);
+			if (request === monthRequest.current) setMonthEntries(rows);
+		} catch (error) {
+			if (request !== monthRequest.current) return;
+			// Fall back to the recent window rather than show it under a month label.
+			setPeriod(RECENT_PERIOD);
+			toast.error(error instanceof Error ? error.message : 'Failed to load history');
+		} finally {
+			if (request === monthRequest.current) setMonthLoading(false);
+		}
+	}, [period, fetchMonth]);
+
+	useEffect(() => {
+		loadMonth();
+	}, [loadMonth]);
 
 	const load = useCallback(async () => {
 		try {
@@ -123,6 +175,8 @@ export default function CarbLogWorkspace({residentId, residentName}: Props) {
 		() => entries.filter((e) => e.operationalDate === today?.operationalDate),
 		[entries, today]
 	);
+
+	const historyEntries = monthEntries ?? entries;
 
 	const loggedMainMeals = useMemo(
 		() => new Set(todayEntries.map((e) => e.mealSlot)),
@@ -158,7 +212,7 @@ export default function CarbLogWorkspace({residentId, residentName}: Props) {
 			if (!res.ok) throw new Error(data.error || 'Failed to save');
 			toast.success(`${MEAL_SLOT_LABELS[form.mealSlot]} logged`);
 			setForm(EMPTY_FORM);
-			await load();
+			await Promise.all([load(), loadMonth()]);
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to save');
 		} finally {
@@ -189,7 +243,7 @@ export default function CarbLogWorkspace({residentId, residentName}: Props) {
 			if (!res.ok) throw new Error(data.error || 'Failed to update');
 			toast.success('Entry updated');
 			setEditing(null);
-			await load();
+			await Promise.all([load(), loadMonth()]);
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to update');
 		} finally {
@@ -201,25 +255,17 @@ export default function CarbLogWorkspace({residentId, residentName}: Props) {
 		if (!today) return;
 		setPrinting(true);
 		try {
-			// Sheet covers the calendar month of today's operational date.
-			const [y, m] = today.operationalDate.split('-').map(Number);
-			const from = `${y}-${String(m).padStart(2, '0')}-01`;
-			const lastDay = new Date(y, m, 0).getDate();
-			const to = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-			const res = await fetch(
-				`/api/care/carb-logs?residentId=${residentId}&from=${from}&to=${to}`
-			);
-			if (!res.ok) throw new Error('Failed to load month');
-			const data = await res.json();
+			// Sheet covers the month shown in the history picker (this month
+			// while the picker is on the last 14 days). Always re-fetched so the
+			// print reflects any edit made since the month was opened.
+			const key = printMonthFor(period, today.operationalDate);
+			const {from, to} = monthRange(key);
 			await printCarbLogSheet({
 				residentName,
-				monthLabel: new Date(y, m - 1, 1).toLocaleDateString(undefined, {
-					month: 'long',
-					year: 'numeric',
-				}),
+				monthLabel: monthLabel(key),
 				from,
 				to,
-				entries: data.entries || [],
+				entries: await fetchMonth(key),
 			});
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'Failed to print');
@@ -252,18 +298,9 @@ export default function CarbLogWorkspace({residentId, residentName}: Props) {
 		<div className="space-y-6">
 			{/* Today */}
 			<section>
-				<div className="flex items-center justify-between mb-3">
-					<h3 className="text-lg font-semibold text-gray-900">
-						Today · {today ? formatDate(today.operationalDate) : ''}
-					</h3>
-					<button
-						type="button"
-						onClick={handlePrint}
-						disabled={printing}
-						className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-50">
-						{printing ? 'Preparing…' : '🖨 Print month'}
-					</button>
-				</div>
+				<h3 className="text-lg font-semibold text-gray-900 mb-3">
+					Today · {today ? formatDate(today.operationalDate) : ''}
+				</h3>
 				<div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 					{today?.slots.map(({slot, status}) => {
 						const style = STATUS_STYLES[status];
@@ -391,9 +428,24 @@ export default function CarbLogWorkspace({residentId, residentName}: Props) {
 
 			{/* History */}
 			<section>
-				<h4 className="font-semibold text-gray-900 mb-2">Last 14 days</h4>
-				{entries.length === 0 ? (
-					<p className="text-sm text-gray-500">No entries yet.</p>
+				{today && (
+					<LogPeriodBar
+						idPrefix="carb-history"
+						today={today.operationalDate}
+						period={period}
+						onPeriodChange={setPeriod}
+						printing={printing}
+						onPrint={handlePrint}
+					/>
+				)}
+				{monthLoading ? (
+					<p className="text-sm text-gray-500">Loading…</p>
+				) : historyEntries.length === 0 ? (
+					<p className="text-sm text-gray-500">
+						{period === RECENT_PERIOD
+							? 'No entries in the last 14 days.'
+							: `No entries in ${monthLabel(period)}.`}
+					</p>
 				) : (
 					<div className="overflow-x-auto rounded-lg border">
 						<table className="min-w-full text-sm">
@@ -408,7 +460,7 @@ export default function CarbLogWorkspace({residentId, residentName}: Props) {
 								</tr>
 							</thead>
 							<tbody className="divide-y">
-								{entries.map((entry) => (
+								{historyEntries.map((entry) => (
 									<tr key={entry.id}>
 										<td className="px-3 py-2 whitespace-nowrap">
 											{formatDate(entry.operationalDate)}
